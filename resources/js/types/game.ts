@@ -1,5 +1,7 @@
 export type RoleKey = 'wanderer_a' | 'wanderer_b' | 'wanderer_c' | 'emperor' | 'golem';
 
+export type EquipSlot = 'body' | 'mind' | 'hand_left' | 'hand_right' | 'bag';
+
 export interface RoleSummary {
     role_key: RoleKey;
     is_ready: boolean;
@@ -10,12 +12,15 @@ export interface RoleSummary {
 export interface BoardCell {
     location_key: string;
     placed_round: number;
+    relics: string[];
 }
 
 export interface WandererState {
     cell: [number, number] | null;
     hp: number;
     actions_remaining: number;
+    equipped: Record<EquipSlot, string | null>;
+    holding: string[];
 }
 
 export interface GameStateDto {
@@ -41,6 +46,14 @@ export interface LocationCatalogEntry {
     costs: string[];
 }
 
+export interface RelicCatalogEntry {
+    name: string;
+    effect: string;
+    slot: 'Body' | 'Mind' | 'Hand' | 'Bag' | '';
+    slot_emoji: string;
+    symbol: string;
+}
+
 export interface GameLogEntry {
     id: number;
     type: string;
@@ -60,6 +73,7 @@ export interface GameSummary {
     roles: RoleSummary[];
     state: GameStateDto | null;
     location_catalog: Record<string, LocationCatalogEntry>;
+    relic_catalog: Record<string, RelicCatalogEntry>;
     events: GameLogEntry[];
 }
 
@@ -72,5 +86,6 @@ export interface GamePollResponse {
     roles: RoleSummary[];
     state: GameStateDto | null;
     location_catalog: Record<string, LocationCatalogEntry>;
+    relic_catalog: Record<string, RelicCatalogEntry>;
     events: GameLogEntry[];
 }

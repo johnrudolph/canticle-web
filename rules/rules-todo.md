@@ -62,6 +62,20 @@ they're resolved and fold the resolution into my own understanding instead
    already has a Bound Relic" — if an exception applies, what happens to
    the Relic instead (trashed? held unequipped)?
 
+10. **Is equipping a Relic action-gated?** Built Phase B assuming "you may
+    immediately equip Relics on this mat" is a free, always-available
+    action (like drop/pickup), separate from the costed 🔎 search that
+    finds it — but unlike drop/pickup, rules.md never says "at any time"
+    for equipping specifically. If equipping is meant to cost an action
+    too, or can only happen on your own turn, let me know and I'll gate it
+    the same way search_location is gated.
+
+11. **"1 of each type already produced by the city" (Bazaar) isn't a
+    number.** Most Locations' Relic count is a plain integer ("6 🎨"), but
+    Bazaar's is a dynamic rule tied to city state. Not modeled yet —
+    currently just deals 0 Relics there. Low priority, flagging so it
+    doesn't look like a silent data bug later.
+
 ## Resolved (for my own reference, not standing asks)
 
 - Solo/duo/trio play: Wanderer count is always exactly 2 or 3 — there's no

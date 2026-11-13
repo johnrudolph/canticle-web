@@ -79,6 +79,11 @@ export function HexBoard({
                         <span className="text-xs leading-tight font-medium">
                             {location?.name ?? cellData.location_key}
                         </span>
+                        {cellData.relics.length > 0 && (
+                            <span className="text-[10px] text-muted-foreground">
+                                🎴 {cellData.relics.length}
+                            </span>
+                        )}
                         <div className="flex gap-1">
                             {(wandererByCell.get(key) ?? []).map((role) => (
                                 <span

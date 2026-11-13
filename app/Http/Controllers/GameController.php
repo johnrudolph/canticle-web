@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Game\Catalog\Location;
 use App\Game\Catalog\LocationCatalog;
+use App\Game\Catalog\Relic;
+use App\Game\Catalog\RelicCatalog;
 use App\Game\EventLog;
 use App\Game\GameEngine;
 use App\Game\GameStateRepository;
@@ -101,6 +103,7 @@ class GameController extends Controller
                 ? GameStateRepository::load($game)->toArray()
                 : null,
             'location_catalog' => $this->locationCatalog(),
+            'relic_catalog' => $this->relicCatalog(),
             'events' => $this->eventLog($game),
         ];
     }
@@ -117,6 +120,22 @@ class GameController extends Controller
                 'produces' => $location->produces,
                 'produces_emoji' => $location->producesEmoji,
                 'costs' => $location->costs,
+            ])
+            ->all();
+    }
+
+    /**
+     * @return array<string, array{name: string, effect: string, slot: string, slot_emoji: string, symbol: string}>
+     */
+    private function relicCatalog(): array
+    {
+        return collect(RelicCatalog::all())
+            ->map(fn (Relic $relic) => [
+                'name' => $relic->name,
+                'effect' => $relic->effect,
+                'slot' => $relic->slot,
+                'slot_emoji' => $relic->slotEmoji,
+                'symbol' => $relic->symbol,
             ])
             ->all();
     }

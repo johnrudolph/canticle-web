@@ -3,15 +3,18 @@
 namespace App\Game;
 
 use App\Game\Catalog\LocationCatalog;
+use App\Game\Catalog\RelicCatalog;
 
 /**
  * Pure state transition function: (state, actor role, move) -> (new state,
  * events). Never touches the database — GameStateRepository and EventLog
  * handle persistence, the controller handles auth.
  *
- * Phase A scope: setup (choose starting cell), Emperor phase (play a
- * Location, discard, redraw), Wanderer phase (move). The Golem phase is a
- * deliberate no-op pass-through — see endWandererPhase().
+ * Phase A+B scope: setup (choose starting cell), Emperor phase (play a
+ * Location — dealing its Relics automatically — discard, redraw), Wanderer
+ * phase (move, search, equip/drop/pickup Relics). The Golem phase is a
+ * deliberate no-op pass-through — see endRound(). Relic *effects* are not
+ * executed, only dealing/searching/equipping them.
  */
 final class GameEngine
 {
@@ -27,6 +30,10 @@ final class GameEngine
             'play_location' => self::playLocation($state, $actorRole, $move),
             'end_emperor_phase' => self::endEmperorPhase($state, $actorRole, $move),
             'move_wanderer' => self::moveWanderer($state, $actorRole, $move),
+            'search_location' => self::searchLocation($state, $actorRole),
+            'equip_relic' => self::equipRelic($state, $actorRole, $move),
+            'drop_relic' => self::dropRelic($state, $actorRole, $move),
+            'pickup_relic' => self::pickupRelic($state, $actorRole, $move),
             'end_wanderer_turn' => self::endWandererTurn($state, $actorRole),
             default => throw new InvalidMoveException('Unknown move type.'),
         };
@@ -102,10 +109,16 @@ final class GameEngine
             }
         }
 
-        $hand = array_values(array_diff($state->locationHand, [$locationKey]));
-        $board = $state->boardWith($cellKey, ['location_key' => $locationKey, 'placed_round' => $state->round]);
+        [$relics, $relicDecks] = RelicDealer::deal($state->relicDecks, $location);
 
-        $state = $state->with(['board' => $board, 'locationHand' => $hand]);
+        $hand = array_values(array_diff($state->locationHand, [$locationKey]));
+        $board = $state->boardWith($cellKey, [
+            'location_key' => $locationKey,
+            'placed_round' => $state->round,
+            'relics' => $relics,
+        ]);
+
+        $state = $state->with(['board' => $board, 'locationHand' => $hand, 'relicDecks' => $relicDecks]);
 
         return [$state, [
             ['type' => 'location_played', 'role_key' => $actorRole, 'payload' => ['location_key' => $locationKey, 'cell' => $cell]],
@@ -113,9 +126,172 @@ final class GameEngine
     }
 
     /**
+     * 🔎 — draws a random Relic from the current space's face-down pile
+     * into the Wanderer's hand ("holding"). Costs 1 action; an empty pile
+     * still costs the action, same as a physical search coming up short.
+     *
+     * Event-type Relics have no equip slot — rules.md: "If you discover
+     * an Event, resolve immediately and trash." Resolving the effect
+     * isn't modeled, but trashing it is: it's never added to `holding`,
+     * since there'd be no way to ever do anything with it there.
+     */
+    private static function searchLocation(GameState $state, string $actorRole): array
+    {
+        self::requireRole($state, $actorRole, $state->activeWandererRole(), 'wanderer');
+
+        $wanderer = $state->wanderers[$actorRole];
+
+        if ($wanderer['actions_remaining'] <= 0) {
+            throw new InvalidMoveException('No actions remaining this turn.');
+        }
+
+        $cellKey = Board::key($wanderer['cell']);
+        $pile = $state->board[$cellKey]['relics'];
+
+        $found = null;
+        if ($pile !== []) {
+            $index = array_rand($pile);
+            $found = $pile[$index];
+            unset($pile[$index]);
+            $pile = array_values($pile);
+        }
+
+        $isEvent = $found !== null && (RelicCatalog::find($found)?->isEvent ?? false);
+
+        $board = $state->board;
+        $board[$cellKey] = [...$board[$cellKey], 'relics' => $pile];
+
+        $wanderers = $state->wanderersWith($actorRole, [
+            'actions_remaining' => $wanderer['actions_remaining'] - 1,
+            'holding' => $found !== null && ! $isEvent ? [...$wanderer['holding'], $found] : $wanderer['holding'],
+        ]);
+
+        $state = $state->with(['board' => $board, 'wanderers' => $wanderers]);
+
+        return [$state, [
+            ['type' => 'location_searched', 'role_key' => $actorRole, 'payload' => ['found' => $found, 'trashed_as_event' => $isEvent]],
+        ]];
+    }
+
+    /**
+     * Not action-gated — "you may immediately equip Relics on this mat"
+     * reads as an always-available administrative move, distinct from the
+     * costed 🔎 action that finds one. Flagged in rules-todo.md to confirm.
+     * Bumps whatever was already in that slot onto the ground.
+     */
+    private static function equipRelic(GameState $state, string $actorRole, array $move): array
+    {
+        self::requireWandererWithCell($state, $actorRole);
+
+        $wanderer = $state->wanderers[$actorRole];
+        $relicKey = (string) ($move['relic_key'] ?? '');
+        $slot = (string) ($move['slot'] ?? '');
+
+        if (! in_array($relicKey, $wanderer['holding'], true)) {
+            throw new InvalidMoveException('You are not holding that Relic.');
+        }
+
+        $relic = RelicCatalog::find($relicKey);
+
+        if ($relic === null || ! self::relicFitsSlot($relic->slot, $slot)) {
+            throw new InvalidMoveException('That Relic does not fit that slot.');
+        }
+
+        $displaced = $wanderer['equipped'][$slot];
+        $cellKey = Board::key($wanderer['cell']);
+        $board = $state->board;
+
+        if ($displaced !== null) {
+            $board[$cellKey] = [...$board[$cellKey], 'relics' => [...$board[$cellKey]['relics'], $displaced]];
+        }
+
+        $equipped = $wanderer['equipped'];
+        $equipped[$slot] = $relicKey;
+
+        $wanderers = $state->wanderersWith($actorRole, [
+            'equipped' => $equipped,
+            'holding' => array_values(array_diff($wanderer['holding'], [$relicKey])),
+        ]);
+
+        $state = $state->with(['board' => $board, 'wanderers' => $wanderers]);
+
+        return [$state, [
+            ['type' => 'relic_equipped', 'role_key' => $actorRole, 'payload' => ['relic_key' => $relicKey, 'slot' => $slot]],
+        ]];
+    }
+
+    /**
+     * Free at any time, per rules.md: "You may pick up and drop Relics in
+     * your space at any time. This does not cost an action."
+     */
+    private static function dropRelic(GameState $state, string $actorRole, array $move): array
+    {
+        self::requireWandererWithCell($state, $actorRole);
+
+        $wanderer = $state->wanderers[$actorRole];
+        $relicKey = (string) ($move['relic_key'] ?? '');
+
+        $equipped = $wanderer['equipped'];
+        $fromSlot = array_search($relicKey, $equipped, true);
+
+        if ($fromSlot !== false) {
+            $equipped[$fromSlot] = null;
+        } elseif (in_array($relicKey, $wanderer['holding'], true)) {
+            // handled below via holding diff
+        } else {
+            throw new InvalidMoveException('You do not have that Relic.');
+        }
+
+        $cellKey = Board::key($wanderer['cell']);
+        $board = $state->board;
+        $board[$cellKey] = [...$board[$cellKey], 'relics' => [...$board[$cellKey]['relics'], $relicKey]];
+
+        $wanderers = $state->wanderersWith($actorRole, [
+            'equipped' => $equipped,
+            'holding' => array_values(array_diff($wanderer['holding'], [$relicKey])),
+        ]);
+
+        $state = $state->with(['board' => $board, 'wanderers' => $wanderers]);
+
+        return [$state, [
+            ['type' => 'relic_dropped', 'role_key' => $actorRole, 'payload' => ['relic_key' => $relicKey]],
+        ]];
+    }
+
+    /**
+     * Free at any time — the other half of the drop rule above. Unlike
+     * search, this takes a specific, known (already face-up) Relic.
+     */
+    private static function pickupRelic(GameState $state, string $actorRole, array $move): array
+    {
+        self::requireWandererWithCell($state, $actorRole);
+
+        $wanderer = $state->wanderers[$actorRole];
+        $relicKey = (string) ($move['relic_key'] ?? '');
+        $cellKey = Board::key($wanderer['cell']);
+        $pile = $state->board[$cellKey]['relics'];
+
+        if (! in_array($relicKey, $pile, true)) {
+            throw new InvalidMoveException('That Relic is not here.');
+        }
+
+        $board = $state->board;
+        $board[$cellKey] = [...$board[$cellKey], 'relics' => array_values(array_diff($pile, [$relicKey]))];
+
+        $wanderers = $state->wanderersWith($actorRole, ['holding' => [...$wanderer['holding'], $relicKey]]);
+
+        $state = $state->with(['board' => $board, 'wanderers' => $wanderers]);
+
+        return [$state, [
+            ['type' => 'relic_picked_up', 'role_key' => $actorRole, 'payload' => ['relic_key' => $relicKey]],
+        ]];
+    }
+
+    /**
      * Covers Emperor-phase steps 4 (discard) and 5 (draw back to 6) in one
-     * action, then hands off to the Wanderer phase. Infrastructure and
-     * Relic drawing (steps 2-3) aren't modeled yet.
+     * action, then hands off to the Wanderer phase. Infrastructure (step
+     * 3) isn't modeled yet; Relic dealing (step 2) happens automatically
+     * in playLocation() rather than as a separate step here.
      */
     private static function endEmperorPhase(GameState $state, string $actorRole, array $move): array
     {
@@ -259,6 +435,35 @@ final class GameEngine
         if ($actorRole !== $expectedRole) {
             throw new InvalidMoveException("It isn't your turn.");
         }
+    }
+
+    /**
+     * Relic pickup/drop/equip aren't turn-gated, but still require the
+     * actor to actually be a seated Wanderer with a cell (i.e. setup is
+     * done).
+     */
+    private static function requireWandererWithCell(GameState $state, string $actorRole): void
+    {
+        if ($state->phase === 'setup') {
+            throw new InvalidMoveException('Setup is not finished yet.');
+        }
+
+        $wanderer = $state->wanderers[$actorRole] ?? null;
+
+        if ($wanderer === null || $wanderer['cell'] === null) {
+            throw new InvalidMoveException('You are not a seated Wanderer.');
+        }
+    }
+
+    private static function relicFitsSlot(string $relicSlot, string $slot): bool
+    {
+        return match ($slot) {
+            'body' => $relicSlot === 'Body',
+            'mind' => $relicSlot === 'Mind',
+            'bag' => $relicSlot === 'Bag',
+            'hand_left', 'hand_right' => $relicSlot === 'Hand',
+            default => false,
+        };
     }
 
     /**

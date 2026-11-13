@@ -52,6 +52,7 @@ final class LocationCatalog
                 produces: self::nullableText($row['produces'] ?? null),
                 producesEmoji: self::nullableText($row['produces_emoji'] ?? null),
                 costs: $costs,
+                relicCount: self::leadingInt($row['Relics'] ?? null),
             );
         }
 
@@ -68,5 +69,17 @@ final class LocationCatalog
         $text = trim((string) $value);
 
         return $text === '' ? null : $text;
+    }
+
+    /**
+     * Parses the leading integer off strings like "6 🎨" or "1 of each
+     * type already produced by the city" (0 for the latter — free-text
+     * relic grants aren't modeled yet, see rules-todo.md).
+     */
+    private static function leadingInt(mixed $value): int
+    {
+        $text = trim((string) $value);
+
+        return preg_match('/^(\d+)/', $text, $m) === 1 ? (int) $m[1] : 0;
     }
 }

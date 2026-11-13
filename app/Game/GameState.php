@@ -6,27 +6,44 @@ namespace App\Game;
  * Immutable snapshot of a game in progress. Pure data — all behavior lives
  * in GameEngine. Mutate via with(), which returns a new instance.
  *
- * Phase A scope only: the hex city, Location placement, and Wanderer
- * movement. Relics, Infrastructure, Golem combat, and scoring are not
- * modeled yet — the Golem phase is a no-op pass-through (see GameEngine)
- * and `phase` never becomes 'golem' as a result.
+ * Phase A+B scope: the hex city, Location placement, Wanderer movement,
+ * and the Relic search/equip/drop loop. Infrastructure, Road networks,
+ * Golem combat, and scoring are not modeled yet — the Golem phase is a
+ * no-op pass-through (see GameEngine) and `phase` never becomes 'golem'.
+ * Relic *effects* (the free-text `effect` field) are not executed — only
+ * dealing, searching, equipping, and dropping them.
  *
- * board["col,row"] = ['location_key' => string, 'placed_round' => int]
+ * board["col,row"] = [
+ *     'location_key' => string,
+ *     'placed_round' => int,
+ *     'relics' => list<string>,  // face-down pile still on this space
+ * ]
  *
  * wanderers[roleKey] = [
- *     'cell' => [col, row]|null,   // null only before setup picks a start
- *     'hp' => int,                  // 1-15, 0 = exhausted (not dead)
- *     'actions_remaining' => int,   // only meaningful on that Wanderer's own turn
+ *     'cell' => [col, row]|null,      // null only before setup picks a start
+ *     'hp' => int,                     // 1-15, 0 = exhausted (not dead)
+ *     'actions_remaining' => int,      // only meaningful on that Wanderer's own turn
+ *     'equipped' => [
+ *         'body' => ?string, 'mind' => ?string,
+ *         'hand_left' => ?string, 'hand_right' => ?string,
+ *         'bag' => ?string,
+ *     ],
+ *     'holding' => list<string>,       // searched but not yet equipped or dropped
  * ]
+ *
+ * relicDecks[branchEmoji] = list<string> — shuffled, shared across every
+ * Location of that branch for the whole game; consumed as Locations are
+ * built (see GameEngine::dealRelics).
  */
 final readonly class GameState
 {
     /**
-     * @param  array<string, array{location_key: string, placed_round: int}>  $board
+     * @param  array<string, array{location_key: string, placed_round: int, relics: list<string>}>  $board
      * @param  list<string>  $locationDeck
      * @param  list<string>  $locationHand
      * @param  list<string>  $locationDiscard
-     * @param  array<string, array{cell: ?array{0: int, 1: int}, hp: int, actions_remaining: int}>  $wanderers
+     * @param  array<string, list<string>>  $relicDecks
+     * @param  array<string, array<string, mixed>>  $wanderers
      * @param  list<string>  $pendingSetupWanderers
      * @param  list<string>  $wandererOrder
      */
@@ -38,6 +55,7 @@ final readonly class GameState
         public array $locationDeck,
         public array $locationHand,
         public array $locationDiscard,
+        public array $relicDecks,
         public array $wanderers,
         public array $pendingSetupWanderers = [],
         public array $wandererOrder = [],
@@ -67,7 +85,7 @@ final readonly class GameState
     }
 
     /**
-     * @return array<string, array{location_key: string, placed_round: int}>
+     * @return array<string, array{location_key: string, placed_round: int, relics: list<string>}>
      */
     public function boardWith(string $cellKey, array $entry): array
     {
@@ -86,6 +104,17 @@ final readonly class GameState
         $wanderers[$role] = [...$wanderers[$role], ...$overrides];
 
         return $wanderers;
+    }
+
+    /**
+     * @return array<string, list<string>>
+     */
+    public function relicDecksWith(string $branchEmoji, array $deck): array
+    {
+        $decks = $this->relicDecks;
+        $decks[$branchEmoji] = $deck;
+
+        return $decks;
     }
 
     /**
@@ -117,7 +146,11 @@ final readonly class GameState
      */
     public function toDebugArray(): array
     {
-        return [...$this->toArray(), 'location_deck' => $this->locationDeck];
+        return [
+            ...$this->toArray(),
+            'location_deck' => $this->locationDeck,
+            'relic_decks' => $this->relicDecks,
+        ];
     }
 
     public function with(array $overrides): self

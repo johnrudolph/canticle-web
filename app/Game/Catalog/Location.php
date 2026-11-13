@@ -21,6 +21,7 @@ final class Location
         public readonly ?string $produces,
         public readonly ?string $producesEmoji,
         public readonly array $costs,
+        public readonly int $relicCount,
     ) {}
 
     /**
@@ -36,6 +37,7 @@ final class Location
             'produces' => $this->produces,
             'produces_emoji' => $this->producesEmoji,
             'costs' => $this->costs,
+            'relic_count' => $this->relicCount,
         ];
     }
 }

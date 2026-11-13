@@ -7,7 +7,11 @@ function roleLabel(role: RoleKey | null): string {
     return `Wanderer ${role.replace('wanderer_', '').toUpperCase()}`;
 }
 
-function describe(event: GameLogEntry, locationNames: Record<string, string>): string {
+function describe(
+    event: GameLogEntry,
+    locationNames: Record<string, string>,
+    relicNames: Record<string, string>,
+): string {
     const role = roleLabel(event.role_key);
 
     switch (event.type) {
@@ -25,6 +29,20 @@ function describe(event: GameLogEntry, locationNames: Record<string, string>): s
             return `${role}'s turn (${event.payload.actions} actions).`;
         case 'wanderer_moved':
             return `${role} moved.`;
+        case 'location_searched': {
+            const found = event.payload.found as string | null;
+            if (!found) return `${role} searched and found nothing.`;
+            if (event.payload.trashed_as_event) {
+                return `${role} found ${relicNames[found] ?? found} — an Event, resolved and trashed.`;
+            }
+            return `${role} found ${relicNames[found] ?? found}.`;
+        }
+        case 'relic_equipped':
+            return `${role} equipped ${relicNames[event.payload.relic_key as string] ?? event.payload.relic_key}.`;
+        case 'relic_dropped':
+            return `${role} dropped ${relicNames[event.payload.relic_key as string] ?? event.payload.relic_key}.`;
+        case 'relic_picked_up':
+            return `${role} picked up ${relicNames[event.payload.relic_key as string] ?? event.payload.relic_key}.`;
         case 'golem_phase_skipped':
             return `Golem phase skipped (not yet implemented).`;
         case 'game_finished':
@@ -37,9 +55,11 @@ function describe(event: GameLogEntry, locationNames: Record<string, string>): s
 export function ActivityLog({
     events,
     locationNames,
+    relicNames,
 }: {
     events: GameLogEntry[];
     locationNames: Record<string, string>;
+    relicNames: Record<string, string>;
 }) {
     return (
         <div className="flex max-h-48 flex-col-reverse overflow-y-auto rounded-md border bg-card p-2 text-xs">
@@ -49,7 +69,7 @@ export function ActivityLog({
                 )}
                 {events.map((event) => (
                     <p key={event.id} className="text-muted-foreground">
-                        {describe(event, locationNames)}
+                        {describe(event, locationNames, relicNames)}
                     </p>
                 ))}
             </div>

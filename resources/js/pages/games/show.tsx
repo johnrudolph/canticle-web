@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { ActivityLog } from '@/components/game/activity-log';
 import { HexBoard } from '@/components/game/hex-board';
+import { WandererRelicPanel } from '@/components/game/wanderer-relic-panel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -361,27 +362,62 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                 left
                             </p>
                             {myRoles.includes(state.active_wanderer_role) && (
-                                <Button
-                                    className="mt-2"
-                                    size="sm"
-                                    variant="outline"
-                                    disabled={processing}
-                                    onClick={() =>
-                                        submitMove(state.active_wanderer_role as RoleKey, {
-                                            type: 'end_wanderer_turn',
-                                        })
-                                    }
-                                >
-                                    End turn
-                                </Button>
+                                <div className="mt-2 flex gap-2">
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={
+                                            processing ||
+                                            state.wanderers[state.active_wanderer_role].actions_remaining <= 0
+                                        }
+                                        onClick={() =>
+                                            submitMove(state.active_wanderer_role as RoleKey, {
+                                                type: 'search_location',
+                                            })
+                                        }
+                                    >
+                                        🔎 Search
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={processing}
+                                        onClick={() =>
+                                            submitMove(state.active_wanderer_role as RoleKey, {
+                                                type: 'end_wanderer_turn',
+                                            })
+                                        }
+                                    >
+                                        End turn
+                                    </Button>
+                                </div>
                             )}
                         </div>
                     )}
+
+                    {state.phase !== 'setup' &&
+                        myRoles
+                            .filter((role): role is 'wanderer_a' | 'wanderer_b' | 'wanderer_c' =>
+                                role.startsWith('wanderer_'),
+                            )
+                            .map((role) => (
+                                <WandererRelicPanel
+                                    key={role}
+                                    role={role}
+                                    wanderer={state.wanderers[role]}
+                                    relicCatalog={game.relic_catalog}
+                                    processing={processing}
+                                    onSubmit={(move) => submitMove(role, move)}
+                                />
+                            ))}
 
                     <ActivityLog
                         events={events}
                         locationNames={Object.fromEntries(
                             Object.entries(locationCatalog).map(([k, v]) => [k, v.name]),
+                        )}
+                        relicNames={Object.fromEntries(
+                            Object.entries(game.relic_catalog).map(([k, v]) => [k, v.name]),
                         )}
                     />
 
