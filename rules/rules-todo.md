@@ -7,55 +7,42 @@ they're resolved and fold the resolution into my own understanding instead
 
 ## Open
 
-1. **Silent hunting cloak's effect text looks truncated in the sheet.**
-   Printed as: "When on a space that produces 🐾, with the Golem, its
-   next 2 untapped cards." That's missing a verb — I'm guessing it
-   should read something like "tap its next 2 untapped cards," possibly
-   also requiring the Golem to share your space (like every other tap
-   Relic), but I don't want to guess which. Can you check the card and
-   give me the real text?
-
-2. **Poof's threshold ("13 Monolith shards within 2 spaces of you")
-   can never actually trigger.** The Infrastructure pool only has 12
-   Monolith Shards total (confirmed earlier as the fixed supply), so
-   13 within any radius is impossible no matter how the game goes.
-   Is 13 a typo for a smaller number, or does Poof mean something else
-   by "Monolith shards" (e.g. counting something that isn't limited by
-   the pool)? Left unimplemented until I hear back, rather than guess
-   at a number.
-
-3. **Jericho inscription's "opposite side of that wall" assumes Walls
-   are an edge between two cells, not a whole-cell fixture.** Every
-   other Wall-related rule I've built (placement, the Golem's pathing
-   exclusion) treats a Wall as sitting on one hex space, the same as
-   Monolith Shards or Roads — there's no "side" to be on, since a
-   single hex has 6 neighbors, not 2. Is a Wall actually meant to be a
-   Carcassonne-style edge/river segment between two specific adjacent
-   spaces (which would mean reworking how Walls are stored — right now
-   they're just a string in that cell's infrastructure list, same as
-   any other Infrastructure type)? Left unimplemented pending that
-   answer, rather than guessing a hex-geometry interpretation of
-   "opposite side."
-
-4. **Past troubles doesn't match how Glyphs are currently modeled.**
-   Printed as: "Shuffle Glyphs on the Golem's mat, including face-up
-   and face-down Glyphs. Randomly re-fill the 4 active slots with the
-   shuffled cards, and return the rest to the Glyph discard pile."
-   Today the Golem only ever has up to 4 _face-up_ Glyphs "on its mat"
-   (`golem['glyphs']`) — there's no separate face-down Glyph zone
-   attached to the mat itself, only the main face-down Glyph deck
-   (`glyphDeck`), which isn't "on the mat." If "face-down Glyphs on the
-   mat" refers to something else (a hidden reserve I haven't modeled?),
-   I'd want to know what before building a shuffle-and-refill for it.
-
-5. **Scapegoat's catharsis needs "all 5 Relics with 'Dark ...' names
-   equipped," but only 4 exist in the synced sheet** (Dark chains, Dark
-   limitations, Dark sacrifice, Dark sigil). Is there a 5th Dark Relic
-   missing from the data, or is the printed "5" stale/wrong? Left
-   unimplemented rather than building toward a count that can never be
-   reached.
+None right now.
 
 ## Resolved (for my own reference, not standing asks)
+
+- Silent hunting cloak: sheet fixed to "tap its next 2 untapped cards."
+  Implemented as on-a-🐾-space + sharing the Golem's space, same shape
+  as every other tap Relic.
+- Poof: sheet fixed 13 → 12 Monolith Shards (the exact size of the
+  fixed pool), so "all of them within 2 spaces" is now reachable.
+  Implemented, including a new `golemSkipped` flag on GameState since
+  nothing previously modeled "skip the Golem phase for the rest of the
+  game."
+- Jericho inscription: sheet reworded to define "opposite side" as the
+  space continuing in the same direction from the caster through the
+  Wall — confirms Walls stay a whole-cell fixture, no rework needed.
+  Implemented.
+- Past troubles: sheet fixed "face-down" → "discarded" Glyphs. Added a
+  new `glyphDiscardPile` on GameState (Glyphs bumped off the 4 active
+  slots were previously just lost — this was a real, if harmless-so-far,
+  data-loss gap, not only a wording fix) and wired Past troubles to
+  shuffle it together with the active Glyphs.
+- Scapegoat's catharsis: sheet fixed 5 → 4 Dark Relics, matching the
+  data. Implemented.
+- Time Paradox: sheet clarified "play 2 additional cards" → "draw and
+  resolve 2 additional Golem cards from the bottom of the Golem deck."
+  This is mechanically different from the generic "extra cards this
+  round" counter it was using (which just extended the normal
+  top-down revealed-row loop) — added a dedicated bottom-of-deck draw
+  path (`golemPlayFromBottom`) instead.
+- A few other balance numbers landed in the same sync and were updated
+  to match: Divine aura heals 3 (was 2), Blinding explosion/Immolation
+  rags/Whip of Justice had their "gain 📜" thresholds reworded but
+  unchanged in effect (those clauses are skipped anyway, per the
+  honesty pattern). Rejuvenation gown, Invigoration, and Divine Poison
+  Inversion also changed text but remain unimplemented — no behavior
+  to fix since there wasn't any yet.
 
 - Solo/duo/trio play: Wanderer count is always exactly 2 or 3 — there's no
   such thing as a solo Wanderer or 4+ Wanderers. Human player count is

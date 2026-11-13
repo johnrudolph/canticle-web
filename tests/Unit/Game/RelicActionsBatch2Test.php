@@ -81,7 +81,7 @@ test('Pointed finger adds Shame to the Golem and the caster, then trashes itself
         ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
 });
 
-test('Divine aura heals everyone on/adjacent to a Monolith Shard space by 2', function () {
+test('Divine aura heals everyone on/adjacent to a Monolith Shard space by 3', function () {
     $state = startedGame();
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'bag' => 'divine-aura'];
     $wanderers = $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 10]);
@@ -94,8 +94,8 @@ test('Divine aura heals everyone on/adjacent to a Monolith Shard space by 2', fu
 
     [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'divine-aura']);
 
-    expect($state->wanderers['wanderer_a']['hp'])->toBe(12)
-        ->and($state->wanderers['wanderer_b']['hp'])->toBe(12);
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(13)
+        ->and($state->wanderers['wanderer_b']['hp'])->toBe(13);
 });
 
 test('Divine aura does nothing off a Monolith Shard space', function () {

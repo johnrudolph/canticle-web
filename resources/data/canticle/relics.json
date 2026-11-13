@@ -52,7 +52,7 @@
         "is_event": "Hide"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Emperor's Timepiece",
         "location": "Enchanted clocktower",
         "slot": "Bag",
@@ -65,7 +65,7 @@
         "is_event": "Hide"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Inscribe",
         "location": "",
         "slot": "Hand",
@@ -78,7 +78,7 @@
         "is_event": "Hide"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Inscribe",
         "location": "",
         "slot": "Mind",
@@ -91,7 +91,7 @@
         "is_event": "Hide"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Inscribe",
         "location": "",
         "slot": "Mind",
@@ -110,7 +110,7 @@
         "slot": "Hand",
         "type": "Action",
         "symbol": "⏳",
-        "effect": "Shuffle Glyphs on the Golems mat, including face-up and face-down Glyphs. Randomly re-fill the 4 active slots with the shuffled cards, and return the rest to the Glyph discard pile.",
+        "effect": "Shuffle Glyphs on the Golems mat, including face-up and discarded Glyphs. Randomly re-fill the 4 active slots with the shuffled cards, and return the rest to the Glyph discard pile.",
         "slot_emoji": "🖐️",
         "is_action": "Show",
         "is_passive": "Hide",
@@ -156,7 +156,7 @@
         "is_event": "Show"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Time spasm",
         "location": "",
         "slot": "",
@@ -182,7 +182,7 @@
         "is_event": "Hide"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Guilty by association",
         "location": "",
         "slot": "",
@@ -195,7 +195,7 @@
         "is_event": "Show"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Incarceration",
         "location": "",
         "slot": "",
@@ -208,7 +208,7 @@
         "is_event": "Show"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Inscribe",
         "location": "",
         "slot": "Hand",
@@ -221,7 +221,7 @@
         "is_event": "Hide"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Inscribe",
         "location": "",
         "slot": "Hand",
@@ -273,13 +273,13 @@
         "is_event": "Hide"
     },
     {
-        "print": false,
+        "print": true,
         "name": "Whip of Justice",
         "location": "",
         "slot": "Hand",
         "type": "Action",
         "symbol": "⚖️",
-        "effect": "If you are on the Golem's space: For each Shame token the Golem has, tap (flip face-down) the next un-tapped card from the top of its draw pile, and trash this. If you flipped 4 cards doing this, gain 📜.",
+        "effect": "If you are on the Golem's space: For each Shame token the Golem has, tap (flip face-down) the next un-tapped card, and trash this. If you flipped 4 cards doing this, gain 📜.",
         "slot_emoji": "🖐️",
         "is_action": "Show",
         "is_passive": "Hide",
@@ -299,7 +299,7 @@
         "is_event": "Hide"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Emperor's Knowledge",
         "location": "Sundial",
         "slot": "Mind",
@@ -312,7 +312,7 @@
         "is_event": "Hide"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Emperor's Staff",
         "location": "Monolith",
         "slot": "Hand",
@@ -338,20 +338,20 @@
         "is_event": "Hide"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Divine aura",
         "location": "",
         "slot": "Bag",
         "type": "Action",
         "symbol": "✨",
-        "effect": "If you are on a space with a Monolith Shard, 🌿 2 for all Wanderers on or adjacent to your space.",
+        "effect": "If you are on a space with a Monolith Shard, 🌿 3 for all Wanderers on or adjacent to your space.",
         "slot_emoji": "👝",
         "is_action": "Show",
         "is_passive": "Hide",
         "is_event": "Hide"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Inscribe",
         "location": "",
         "slot": "Hand",
@@ -377,7 +377,7 @@
         "is_event": "Show"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Magnetic mail",
         "location": "",
         "slot": "Body",
@@ -390,13 +390,13 @@
         "is_event": "Hide"
     },
     {
-        "print": false,
+        "print": true,
         "name": "Poof",
         "location": "",
         "slot": "Bag",
         "type": "Action",
         "symbol": "✨",
-        "effect": "If there are 13 Monolith shards within 2 spaces of you: remove the Golem from the board, trash this, and gain 📜📜📜. Skip the Golem phase for the rest of the game.",
+        "effect": "If there are 12 Monolith shards within 2 spaces of you: remove the Golem from the board, trash this, and gain 📜📜📜. Skip the Golem phase for the rest of the game.",
         "slot_emoji": "👝",
         "is_action": "Show",
         "is_passive": "Hide",
@@ -409,14 +409,14 @@
         "slot": "Body",
         "type": "Passive",
         "symbol": "✨",
-        "effect": "When moving, 🌿2 for each Monolith Shard you passed through (including your current space).",
+        "effect": "When entering a space that contains a Monolith Shard, 🌿2.",
         "slot_emoji": "🥋",
         "is_action": "Hide",
         "is_passive": "Show",
         "is_event": "Hide"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Telekenesis",
         "location": "",
         "slot": "Mind",
@@ -468,20 +468,20 @@
         "is_event": "Hide"
     },
     {
-        "print": false,
+        "print": true,
         "name": "Blinding explosion",
         "location": "",
         "slot": "Hand",
         "type": "Action",
         "symbol": "🌑",
-        "effect": "All Wanderers on or adjacent to your space lose 5 Health. If the Golem is in your space, tap (flip face-down) the next un-tapped 4 cards from their draw pile. Then, trash this, and gain 📜.",
+        "effect": "All Wanderers on or adjacent to your space lose 5 Health. If the Golem is in your space, tap (flip face-down) the next un-tapped 4 cards. Then, trash this, and gain 📜.",
         "slot_emoji": "🖐️",
         "is_action": "Show",
         "is_passive": "Hide",
         "is_event": "Hide"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Cabalist brand",
         "location": "",
         "slot": "Hand",
@@ -507,7 +507,7 @@
         "is_event": "Hide"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Divine Cabalist pyre",
         "location": "",
         "slot": "Bag",
@@ -604,14 +604,14 @@
         "slot": "Body",
         "type": "Action",
         "symbol": "🌑",
-        "effect": "Trash all Relics on your mat (including this, and any Bound Relics). For each Relic you trashed: You lose 1 Health. If you trashed 6 Relics doing this, gain 📜.",
+        "effect": "Trash all Relics on your mat (including this, and any Bound Relics). For each Relic you trashed: You lose 1 Health. If you trashed 5 Relics doing this, gain 📜.",
         "slot_emoji": "🥋",
         "is_action": "Show",
         "is_passive": "Hide",
         "is_event": "Hide"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Inscribe",
         "location": "Beds of poison",
         "slot": "Hand",
@@ -624,13 +624,13 @@
         "is_event": "Hide"
     },
     {
-        "print": false,
+        "print": true,
         "name": "Invigoration",
         "location": "",
         "slot": "",
         "type": "Event",
         "symbol": "🌑",
-        "effect": "You may lose 7 Health in exchange for 2 extra actions and 1 extra move this turn.",
+        "effect": "You may lose 7 Health in exchange for 2 extra actions this round.",
         "slot_emoji": "",
         "is_action": "Hide",
         "is_passive": "Hide",
@@ -669,20 +669,20 @@
         "slot": "Bag",
         "type": "Passive",
         "symbol": "🌑",
-        "effect": "After the Golem 👊 you, 🌿1.",
+        "effect": "After the Golem 👊 you, 🌿2.",
         "slot_emoji": "👝",
         "is_action": "Hide",
         "is_passive": "Show",
         "is_event": "Hide"
     },
     {
-        "print": false,
+        "print": true,
         "name": "Scapegoat's catharsis",
         "location": "Scapegoat's sty",
         "slot": "Bag",
         "type": "Action",
         "symbol": "🌑",
-        "effect": "If you have all 5 Relics with \"Dark ...\" names equipped: Allies lose 10 Health. Then, trash this, and all Dark Relics. Gain 📜📜.",
+        "effect": "If you have all 4 Relics with \"Dark ...\" names equipped: Allies lose 10 Health. Then, trash this, and all Dark Relics. Gain 📜📜.",
         "slot_emoji": "👝",
         "is_action": "Show",
         "is_passive": "Hide",
@@ -728,7 +728,7 @@
         "is_event": "Hide"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Aural inscription",
         "location": "Music academy",
         "slot": "Hand",
@@ -819,7 +819,7 @@
         "is_event": "Show"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Farmer's insight",
         "location": "",
         "slot": "Mind",
@@ -832,7 +832,7 @@
         "is_event": "Hide"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Inscribe",
         "location": "",
         "slot": "Bag",
@@ -851,7 +851,7 @@
         "slot": "Hand",
         "type": "Action",
         "symbol": "🎨",
-        "effect": "If you are adjacent to a Wall, all 3 🎶 Relics are equipped by Wanderers adjacent to that Wall, and the Golem is on the opposite side of that wall: destroy the Wall, gain 📜, and add a 🎨 Glyph to the Golem's mat. Then trash this.",
+        "effect": "If you are adjacent to a Wall, the space beyond the Wall's space contains the Golem, and all 3 🎶 Relics are equipped by Wanderers adjacent to that Wall: destroy the Wall, gain 📜, and add a 🎨 Glyph to the Golem's mat. Then trash this.",
         "slot_emoji": "🖐️",
         "is_action": "Show",
         "is_passive": "Hide",
@@ -1066,7 +1066,7 @@
         "is_event": "Hide"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Inscribe",
         "location": "",
         "slot": "Bag",
@@ -1092,13 +1092,13 @@
         "is_event": "Show"
     },
     {
-        "print": false,
+        "print": true,
         "name": "Silent hunting cloak",
         "location": "",
         "slot": "Body",
         "type": "Action",
         "symbol": "🐾",
-        "effect": "When on a space that produces 🐾, with the Golem, its next 2 untapped cards.",
+        "effect": "When on a space that produces 🐾, with the Golem, tap its next 2 untapped cards.",
         "slot_emoji": "🥋",
         "is_action": "Show",
         "is_passive": "Hide",
@@ -1144,7 +1144,7 @@
         "is_event": "Hide"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Divine sack cloth of sacrifice",
         "location": "",
         "slot": "Body",
@@ -1196,7 +1196,7 @@
         "is_event": "Hide"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Divine healing oil",
         "location": "",
         "slot": "Bag",
@@ -1235,17 +1235,17 @@
         "is_event": "Hide"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Inscribe",
         "location": "",
         "slot": "Hand",
         "type": "Action",
         "symbol": "📖",
         "effect": "If on the Golem's space, add a 📖 Glyph to its mat. Then, gain 📜 and trash this.",
-        "slot_emoji": "",
-        "is_action": "",
-        "is_passive": "",
-        "is_event": ""
+        "slot_emoji": "🖐️",
+        "is_action": "Show",
+        "is_passive": "Hide",
+        "is_event": "Hide"
     },
     {
         "print": false,
@@ -1274,7 +1274,7 @@
         "is_event": "Hide"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Pray",
         "location": "",
         "slot": "Hand",
@@ -1313,7 +1313,7 @@
         "is_event": "Show"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Guide rope",
         "location": "",
         "slot": "Hand",
@@ -1326,7 +1326,7 @@
         "is_event": "Hide"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Inscribe",
         "location": "",
         "slot": "Hand",
@@ -1339,7 +1339,7 @@
         "is_event": "Hide"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Inscribe",
         "location": "",
         "slot": "Hand",
@@ -1365,7 +1365,7 @@
         "is_event": "Hide"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Rally",
         "location": "",
         "slot": "Mind",
@@ -1391,7 +1391,7 @@
         "is_event": "Hide"
     },
     {
-        "print": true,
+        "print": false,
         "name": "Divine solidarity",
         "location": "",
         "slot": "Mind",

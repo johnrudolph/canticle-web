@@ -5,12 +5,12 @@
         "action": "🦶2. 👊3."
     },
     {
-        "print": true,
+        "print": false,
         "name": "Death's Door",
         "action": "All Wanderers on or adjacent to the Golem go to 1 Health."
     },
     {
-        "print": true,
+        "print": false,
         "name": "Deface",
         "action": "The Emperor trashes the next face-down Relic from the Golem's space."
     },
@@ -20,14 +20,14 @@
         "action": "Each Wanderer on a Location with another Wanderer loses 3 Health."
     },
     {
-        "print": true,
+        "print": false,
         "name": "Double Down",
         "action": "Play another action. Perform the next golem card twice."
     },
     {
-        "print": false,
+        "print": true,
         "name": "Fire storm",
-        "action": "👊3 to Wanderers on or adjacent to the Golem's space. Each Wanderer who lost health as a result must trash one Relic they have equipped."
+        "action": "👊3 to Wanderers on or adjacent to the Golem's space. Each Wanderer who lost health as a result must trash one Relic they have equipped. They may trash a Bound relic this way."
     },
     {
         "print": false,
@@ -45,7 +45,7 @@
         "action": "Wanderers on spaces with Monolith Shards lose 1 Health for each Monolith Shard on or adjacent to their Location."
     },
     {
-        "print": true,
+        "print": false,
         "name": "Penitence",
         "action": "Remove 1 Shame token."
     },
@@ -90,17 +90,17 @@
         "action": "🦶1 to the nearest Wanderer. Place a Scar token on their mat (see Wanderer mat for details on scars)."
     },
     {
-        "print": true,
+        "print": false,
         "name": "Self inscription",
         "action": "Add a 👺 Glyph to the Golem's mat."
     },
     {
-        "print": true,
+        "print": false,
         "name": "Self inscription",
         "action": "Add a 👺 Glyph to the Golem's mat."
     },
     {
-        "print": true,
+        "print": false,
         "name": "Self inscription",
         "action": "Add a 👺 Glyph to the Golem's mat."
     },
@@ -142,6 +142,6 @@
     {
         "print": false,
         "name": "Time Paradox",
-        "action": "Play 2 additional Golem cards after this."
+        "action": "Draw and resolve 2 additional Golem cards from the bottom of the Golem deck after this. "
     }
 ]

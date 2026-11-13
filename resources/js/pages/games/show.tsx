@@ -470,6 +470,12 @@ export default function GameShow({ game }: { game: GameSummary }) {
                         {status === 'abandoned' && (
                             <p className="text-destructive">Abandoned.</p>
                         )}
+                        {state.golem_skipped && (
+                            <p className="mt-1 font-medium">
+                                💨 The Golem is gone — Poof! No more Golem
+                                phases this game.
+                            </p>
+                        )}
                     </div>
 
                     {state.phase === 'setup' && (

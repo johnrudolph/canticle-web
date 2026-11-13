@@ -53,11 +53,16 @@ namespace App\Game;
  * golem = [
  *     'cell' => [col, row]|null,  // null only before setup places it
  *     'shame' => int,
- *     'glyphs' => list<string>,   // up to 4, FIFO — see GameEngine::addGlyph
+ *     'glyphs' => list<string>,   // up to 4 active, face up, FIFO — see GameEngine::addGlyphOfType
  *     'draw_pile' => list<array{key: string, tapped: bool}>,
  *     'revealed' => list<array{key: string, tapped: bool}>, // up to 3, face up, resolved right-to-left
  *     'discard_pile' => list<string>, // tapped state doesn't matter once discarded
  * ]
+ *
+ * glyphDiscardPile = list<string> — Glyphs bumped off the 4 active slots
+ * (FIFO overflow) land here rather than vanishing; Past troubles is the
+ * only thing that currently reads it (shuffles it back in with the deck
+ * and the active Glyphs).
  *
  * A tapped card (confirmed via chat 2026-11-13: flipped face-down; when
  * resolution reaches it, it does nothing) is set by specific Relics that
@@ -77,6 +82,7 @@ final readonly class GameState
      * @param  array<string, int>  $infrastructurePool
      * @param  list<string>  $pendingSetupWanderers
      * @param  list<string>  $wandererOrder
+     * @param  list<string>  $glyphDiscardPile
      */
     public function __construct(
         public int $wandererCount,
@@ -97,6 +103,8 @@ final readonly class GameState
         public bool $pendingGolemPlacement = true,
         public array $wandererOrder = [],
         public ?int $activeWandererIndex = null,
+        public array $glyphDiscardPile = [],
+        public bool $golemSkipped = false, // Poof: "Skip the Golem phase for the rest of the game."
     ) {}
 
     /**
@@ -228,6 +236,7 @@ final readonly class GameState
             'infrastructure_pool' => $this->infrastructurePool,
             'infrastructure_placed_this_turn' => $this->infrastructurePlacedThisTurn,
             'prophecy' => $this->prophecy,
+            'golem_skipped' => $this->golemSkipped,
             'outcome' => $this->phase === 'finished' ? $this->outcome() : null,
         ];
     }
@@ -247,6 +256,7 @@ final readonly class GameState
             'golem_draw_pile' => $this->golem['draw_pile'],
             'golem_discard_pile' => $this->golem['discard_pile'],
             'glyph_deck' => $this->glyphDeck,
+            'glyph_discard_pile' => $this->glyphDiscardPile,
         ];
     }
 

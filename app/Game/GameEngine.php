@@ -556,6 +556,11 @@ final class GameEngine
             'divine-cabalist-pyre' => self::relicDivineCabalistPyre($state, $actorRole, $move),
             'show-solidarity' => self::relicShowSolidarity($state, $actorRole, $move),
             'cabalist-brand' => self::relicCabalistBrand($state, $actorRole, $move),
+            'poof' => self::relicPoof($state, $actorRole),
+            'scapegoats-catharsis' => self::relicScapegoatsCatharsis($state, $actorRole),
+            'silent-hunting-cloak' => [...self::relicSilentHuntingCloak($state, $actorRole), false],
+            'jericho-inscription' => self::relicJerichoInscription($state, $actorRole),
+            'past-troubles' => self::relicPastTroubles($state),
             default => [$state, [], false],
         };
     }
@@ -1032,7 +1037,7 @@ final class GameEngine
     }
 
     /**
-     * Divine aura: "If you are on a space with a Monolith Shard, 🌿2 for
+     * Divine aura: "If you are on a space with a Monolith Shard, 🌿3 for
      * all Wanderers on or adjacent to your space."
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
@@ -1053,7 +1058,7 @@ final class GameEngine
                 continue;
             }
 
-            $hp = min(15, $state->wanderers[$role]['hp'] + 2);
+            $hp = min(15, $state->wanderers[$role]['hp'] + 3);
             $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
             $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
         }
@@ -1858,6 +1863,181 @@ final class GameEngine
     }
 
     /**
+     * Poof: "If there are 12 Monolith shards within 2 spaces of you:
+     * remove the Golem from the board, trash this, and gain 📜📜📜. Skip
+     * the Golem phase for the rest of the game." 12 is the entire fixed
+     * Infrastructure pool (confirmed with the designer), so this
+     * requires every single Monolith Shard in the game to be within
+     * range at once.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function relicPoof(GameState $state, string $actorRole): array
+    {
+        $casterCell = $state->wanderers[$actorRole]['cell'];
+        $nearbyKeys = array_map(Board::key(...), Board::cellsWithinDistance($casterCell, 2, $state->board));
+
+        $count = 0;
+        foreach ($nearbyKeys as $key) {
+            $count += count(array_filter($state->board[$key]['infrastructure'], fn (string $i) => $i === 'monolith_shard'));
+        }
+
+        if ($count < 12) {
+            return [$state, [], false];
+        }
+
+        $state = $state->with(['golem' => $state->golemWith(['cell' => null]), 'golemSkipped' => true]);
+
+        return [$state, [['type' => 'golem_removed', 'role_key' => null, 'payload' => []]], true];
+    }
+
+    /**
+     * Scapegoat's catharsis: "If you have all 4 Relics with 'Dark ...'
+     * names equipped: Allies lose 10 Health. Then, trash this, and all
+     * Dark Relics. Gain 📜📜." There are exactly 4 Dark Relics in the
+     * data (Dark chains, Dark limitations, Dark sacrifice, Dark sigil).
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function relicScapegoatsCatharsis(GameState $state, string $actorRole): array
+    {
+        $darkKeys = ['dark-chains', 'dark-limitations', 'dark-sacrifice', 'dark-sigil'];
+        $equipped = array_values($state->wanderers[$actorRole]['equipped']);
+
+        if (count(array_intersect($darkKeys, $equipped)) !== count($darkKeys)) {
+            return [$state, [], false];
+        }
+
+        $events = [];
+        $casterCell = $state->wanderers[$actorRole]['cell'];
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            if ($role === $actorRole || Board::key($cell) !== Board::key($casterCell)) {
+                continue;
+            }
+
+            $state = self::applyDamage($state, $role, 10);
+            $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => 10]];
+        }
+
+        foreach ($darkKeys as $darkKey) {
+            $state = self::trashEquippedRelic($state, $actorRole, $darkKey);
+            $events[] = ['type' => 'relic_trashed', 'role_key' => $actorRole, 'payload' => ['relic_key' => $darkKey]];
+        }
+
+        return [$state, $events, true];
+    }
+
+    /**
+     * Silent hunting cloak: "When on a space that produces 🐾, with the
+     * Golem, tap its next 2 untapped cards."
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicSilentHuntingCloak(GameState $state, string $actorRole): array
+    {
+        $casterCell = $state->wanderers[$actorRole]['cell'];
+        $location = LocationCatalog::find($state->board[Board::key($casterCell)]['location_key']);
+
+        if ($location === null || $location->producesEmoji !== '🐾' || ! self::golemSharesCellWith($state, $actorRole)) {
+            return [$state, []];
+        }
+
+        [$state, $events] = self::tapGolemDrawPile($state, 2);
+
+        return [$state, $events];
+    }
+
+    /**
+     * Jericho inscription: "If you are adjacent to a Wall, the space
+     * beyond the Wall's space contains the Golem, and all 3 🎶 Relics
+     * are equipped by Wanderers adjacent to that Wall: destroy the
+     * Wall, gain 📜, and add a 🎨 Glyph to the Golem's mat. Then trash
+     * this." "The space beyond" is the next cell continuing in the same
+     * direction from the caster, through the Wall.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function relicJerichoInscription(GameState $state, string $actorRole): array
+    {
+        $casterCell = $state->wanderers[$actorRole]['cell'];
+        $instruments = ['lute', 'pipe', 'tabor-drum'];
+        $golemCell = $state->golem['cell'];
+
+        foreach (Board::neighbors($casterCell) as $direction => $wallCell) {
+            $wallKey = Board::key($wallCell);
+
+            if (! array_key_exists($wallKey, $state->board)) {
+                continue;
+            }
+
+            if (! in_array('walls', $state->board[$wallKey]['infrastructure'], true)) {
+                continue;
+            }
+
+            $beyondKey = Board::key(Board::neighbor($wallCell, $direction));
+
+            if ($golemCell === null || Board::key($golemCell) !== $beyondKey) {
+                continue;
+            }
+
+            $wallNeighborKeys = array_map(Board::key(...), Board::occupiedNeighbors($wallCell, $state->board));
+            $equippedNearWall = [];
+
+            foreach (self::activeWanderers($state) as $role => $cell) {
+                if (in_array(Board::key($cell), $wallNeighborKeys, true)) {
+                    $equippedNearWall = [...$equippedNearWall, ...array_values($state->wanderers[$role]['equipped'])];
+                }
+            }
+
+            if (count(array_intersect($instruments, $equippedNearWall)) !== count($instruments)) {
+                continue;
+            }
+
+            $infrastructure = $state->board[$wallKey]['infrastructure'];
+            $index = array_search('walls', $infrastructure, true);
+            unset($infrastructure[$index]);
+            $board = $state->board;
+            $board[$wallKey] = [...$board[$wallKey], 'infrastructure' => array_values($infrastructure)];
+            $pool = $state->infrastructurePool;
+            $pool['walls']++;
+            $state = $state->with(['board' => $board, 'infrastructurePool' => $pool]);
+
+            [$state, $events] = self::addGlyphOfType($state, '🎨');
+            $events[] = ['type' => 'infrastructure_returned', 'role_key' => null, 'payload' => ['cell' => $wallCell]];
+
+            return [$state, $events, true];
+        }
+
+        return [$state, [], false];
+    }
+
+    /**
+     * Past troubles: "Shuffle Glyphs on the Golem's mat, including
+     * face-up and discarded Glyphs. Randomly re-fill the 4 active slots
+     * with the shuffled cards, and return the rest to the Glyph discard
+     * pile." Only the active Glyphs and the discard pile are shuffled —
+     * the main face-down Glyph deck is untouched.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function relicPastTroubles(GameState $state): array
+    {
+        $pool = [...$state->golem['glyphs'], ...$state->glyphDiscardPile];
+        shuffle($pool);
+
+        $newActive = array_slice($pool, 0, self::GOLEM_MAX_GLYPHS);
+        $newDiscard = array_slice($pool, self::GOLEM_MAX_GLYPHS);
+
+        $state = $state->with([
+            'golem' => $state->golemWith(['glyphs' => $newActive]),
+            'glyphDiscardPile' => $newDiscard,
+        ]);
+
+        return [$state, [['type' => 'glyphs_reshuffled', 'role_key' => null, 'payload' => []]], false];
+    }
+
+    /**
      * Dispatches each "Inscribe" card on its full disambiguated key —
      * see resolveRelicAction's docblock for why. All 12 add a specific
      * Glyph type under a specific condition; all but inscribe-12 then
@@ -2186,7 +2366,9 @@ final class GameEngine
      */
     private static function endRound(GameState $state): array
     {
-        [$state, $events] = self::resolveGolemPhase($state);
+        [$state, $events] = $state->golemSkipped
+            ? [$state, []]
+            : self::resolveGolemPhase($state);
 
         if ($state->round >= self::ROUND_LIMIT) {
             $state = $state->with(['phase' => 'finished', 'activeWandererIndex' => null]);
@@ -2255,7 +2437,10 @@ final class GameEngine
                 }
             }
 
-            $count += $effects['extra_cards'];
+            if ($effects['extra_from_bottom'] > 0) {
+                [$state, $bottomEvents] = self::golemPlayFromBottom($state, $effects['extra_from_bottom']);
+                $events = [...$events, ...$bottomEvents];
+            }
 
             $state = self::refillGolemRevealed($state);
         }
@@ -2264,8 +2449,48 @@ final class GameEngine
     }
 
     /**
+     * Time Paradox: "Draw and resolve 2 additional Golem cards from the
+     * bottom of the Golem deck after this." Unlike every other "extra
+     * cards" effect, these come straight from the bottom of draw_pile
+     * (array_pop, not the normal top-down array_shift refill) and never
+     * touch the revealed row at all.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemPlayFromBottom(GameState $state, int $count): array
+    {
+        $events = [];
+
+        for ($i = 0; $i < $count; $i++) {
+            $golem = $state->golem;
+
+            if ($golem['draw_pile'] === []) {
+                if ($golem['discard_pile'] === []) {
+                    break; // deck + discard both exhausted — nothing left to resolve
+                }
+
+                $golem['draw_pile'] = array_map(
+                    fn (string $key) => ['key' => $key, 'tapped' => false],
+                    $golem['discard_pile']
+                );
+                shuffle($golem['draw_pile']);
+                $golem['discard_pile'] = [];
+            }
+
+            $cardEntry = array_pop($golem['draw_pile']);
+            $golem['discard_pile'][] = $cardEntry['key'];
+            $state = $state->with(['golem' => $golem]);
+
+            [$state, $cardEvents] = self::resolveOrSkipTappedCard($state, $cardEntry);
+            $events = [...$events, ...$cardEvents];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
      * @param  array{key: string, tapped: bool}  $cardEntry
-     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: array{double_next: bool, extra_cards: int}}
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: array{double_next: bool, extra_from_bottom: int}}
      */
     private static function resolveOrSkipTappedCard(GameState $state, array $cardEntry): array
     {
@@ -2274,7 +2499,7 @@ final class GameEngine
 
             return [$state, [
                 ['type' => 'golem_card_tapped', 'role_key' => null, 'payload' => ['card_key' => $cardEntry['key'], 'name' => $card?->name]],
-            ], ['double_next' => false, 'extra_cards' => 0]];
+            ], ['double_next' => false, 'extra_from_bottom' => 0]];
         }
 
         return self::resolveGolemCard($state, $cardEntry['key']);
@@ -2324,13 +2549,13 @@ final class GameEngine
      * chooses) — there's no mid-phase interactive decision point built
      * yet. Exhausted (0 HP) Wanderers are never targeted or damaged.
      *
-     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: array{double_next: bool, extra_cards: int}}
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: array{double_next: bool, extra_from_bottom: int}}
      */
     private static function resolveGolemCard(GameState $state, string $cardKey): array
     {
         $card = GolemCardCatalog::find($cardKey);
         $baseKey = (string) preg_replace('/-\d+$/', '', $cardKey);
-        $effects = ['double_next' => false, 'extra_cards' => 0];
+        $effects = ['double_next' => false, 'extra_from_bottom' => 0];
 
         $events = [
             ['type' => 'golem_card_resolved', 'role_key' => null, 'payload' => [
@@ -2445,7 +2670,7 @@ final class GameEngine
                 break;
 
             case 'time-paradox':
-                $effects['extra_cards'] = 2;
+                $effects['extra_from_bottom'] = 2;
                 break;
 
             case 'deface':
@@ -3309,7 +3534,17 @@ final class GameEngine
             $discardedGlyph = array_pop($glyphs);
         }
 
-        $state = $state->with(['golem' => $state->golemWith(['glyphs' => $glyphs]), 'glyphDeck' => $deck]);
+        $glyphDiscardPile = $state->glyphDiscardPile;
+
+        if ($discardedGlyph !== null) {
+            $glyphDiscardPile[] = $discardedGlyph;
+        }
+
+        $state = $state->with([
+            'golem' => $state->golemWith(['glyphs' => $glyphs]),
+            'glyphDeck' => $deck,
+            'glyphDiscardPile' => $glyphDiscardPile,
+        ]);
 
         $events = [['type' => 'glyph_added', 'role_key' => null, 'payload' => ['glyph_key' => $glyphKey]]];
 
