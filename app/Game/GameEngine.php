@@ -530,6 +530,11 @@ final class GameEngine
             'writ-of-solitude' => [...self::relicWritOfSolitude($state), true],
             'teleportation-stone' => [...self::relicTeleportationStone($state, $actorRole, $move), false],
             'hands-of-deliverance' => [...self::relicHandsOfDeliverance($state, $move), false],
+            'divine-robes' => [...self::relicDivineRobes($state, $actorRole), false],
+            'divine-solidarity' => [...self::relicDivineSolidarity($state, $actorRole), false],
+            'warlocks-robes' => [...self::relicWarlocksRobes($state, $actorRole, $move), false],
+            'emperors-diary' => [...self::relicEmperorsDiary($state, $actorRole), false],
+            'emperors-robes' => [...self::relicEmperorsRobes($state, $actorRole, $move), false],
             default => [$state, [], false],
         };
     }
@@ -1230,6 +1235,190 @@ final class GameEngine
         $state = $state->with(['board' => $board]);
 
         return [$state, [['type' => 'relic_moved', 'role_key' => null, 'payload' => ['relic_key' => $relicKey, 'from' => $fromKey, 'to' => $toKey]]]];
+    }
+
+    /**
+     * Divine robes: "When on a space that produces 📖, 🌿5 for yourself
+     * and all Allies, regardless of distance." "Regardless of distance"
+     * means every active Wanderer, not just those sharing the caster's
+     * space.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicDivineRobes(GameState $state, string $actorRole): array
+    {
+        $casterCell = $state->wanderers[$actorRole]['cell'];
+        $location = LocationCatalog::find($state->board[Board::key($casterCell)]['location_key']);
+
+        if ($location === null || $location->producesEmoji !== '📖') {
+            return [$state, []];
+        }
+
+        $events = [];
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            $hp = min(15, $state->wanderers[$role]['hp'] + 5);
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
+            $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Divine solidarity: "If you are on a space with an Ally, 🌿4 for
+     * you and your Ally." Heals every Wanderer sharing the caster's
+     * space (including the caster) rather than requiring a single
+     * chosen target, since the printed text doesn't single one out when
+     * more than one Ally is present.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicDivineSolidarity(GameState $state, string $actorRole): array
+    {
+        $casterCell = $state->wanderers[$actorRole]['cell'];
+        $casterCellKey = Board::key($casterCell);
+
+        $hasAlly = false;
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            if ($role !== $actorRole && Board::key($cell) === $casterCellKey) {
+                $hasAlly = true;
+                break;
+            }
+        }
+
+        if (! $hasAlly) {
+            return [$state, []];
+        }
+
+        $events = [];
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            if (Board::key($cell) !== $casterCellKey) {
+                continue;
+            }
+
+            $hp = min(15, $state->wanderers[$role]['hp'] + 4);
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
+            $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Warlock's robes: "Choose an Ally, and do one of the following.
+     * Either: They perform the action from one of your other Relics, or
+     * you perform the actions from one of their Relics." Borrows
+     * resolveRelicAction for the chosen Relic, run as if the performer
+     * used it normally (including its own trash clause, applied to
+     * whichever of the two actually owns/equips it) — but without
+     * spending an extra action, since that was already paid for
+     * Warlock's robes itself. $move['mode'] is 'ally_uses_mine' or
+     * 'i_use_theirs'; $move['other_relic_key'] is which of the owner's
+     * equipped Relics to borrow. Chaining into another Warlock's robes
+     * is blocked to avoid recursion.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicWarlocksRobes(GameState $state, string $actorRole, array $move): array
+    {
+        $targetRole = self::resolveAllyTarget($state, $actorRole, $move);
+
+        if ($targetRole === null) {
+            return [$state, []];
+        }
+
+        $mode = (string) ($move['mode'] ?? '');
+        $otherRelicKey = (string) ($move['other_relic_key'] ?? '');
+
+        [$ownerRole, $performerRole] = match ($mode) {
+            'ally_uses_mine' => [$actorRole, $targetRole],
+            'i_use_theirs' => [$targetRole, $actorRole],
+            default => [null, null],
+        };
+
+        if ($ownerRole === null || ! in_array($otherRelicKey, $state->wanderers[$ownerRole]['equipped'], true)) {
+            return [$state, []];
+        }
+
+        $otherBaseKey = (string) preg_replace('/-\d+$/', '', $otherRelicKey);
+
+        if ($otherBaseKey === 'warlocks-robes') {
+            return [$state, []];
+        }
+
+        [$state, $events, $trash] = self::resolveRelicAction($state, $performerRole, $otherBaseKey, $otherRelicKey, $move);
+
+        if ($trash) {
+            $state = self::trashEquippedRelic($state, $ownerRole, $otherRelicKey);
+            $events[] = ['type' => 'relic_trashed', 'role_key' => $ownerRole, 'payload' => ['relic_key' => $otherRelicKey]];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Relics named "Emperor's __" — counted for Emperor's Diary/Robes.
+     *
+     * @param  array<mixed>  $relicKeys
+     */
+    private static function countEmperorsRelics(array $relicKeys): int
+    {
+        $count = 0;
+
+        foreach ($relicKeys as $relicKey) {
+            if (! is_string($relicKey)) {
+                continue;
+            }
+
+            $relic = RelicCatalog::find($relicKey);
+
+            if ($relic !== null && str_starts_with($relic->name, "Emperor's")) {
+                $count++;
+            }
+        }
+
+        return $count;
+    }
+
+    /**
+     * Emperor's Diary: "🔎1. Find +1 Relic for every 3 Relics you have
+     * that start with 'Emperor's __'." Counts both equipped and held
+     * Relics as "Relics you have."
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicEmperorsDiary(GameState $state, string $actorRole): array
+    {
+        $wanderer = $state->wanderers[$actorRole];
+        $haveCount = self::countEmperorsRelics([...array_values($wanderer['equipped']), ...$wanderer['holding']]);
+
+        return self::relicSearchN($state, $actorRole, 1 + intdiv($haveCount, 3));
+    }
+
+    /**
+     * Emperor's Robes: "🌿1 yourself or an Ally on your space, for each
+     * Relic you have equipped that starts with 'Emperor's __.'" Only
+     * equipped Relics count here (unlike Emperor's Diary, which also
+     * counts held ones) — that's what the card actually says.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicEmperorsRobes(GameState $state, string $actorRole, array $move): array
+    {
+        $amount = self::countEmperorsRelics(array_values($state->wanderers[$actorRole]['equipped']));
+
+        if ($amount === 0) {
+            return [$state, []];
+        }
+
+        $targetRole = self::resolveAllyTarget($state, $actorRole, $move) ?? $actorRole;
+        $hp = min(15, $state->wanderers[$targetRole]['hp'] + $amount);
+        $state = $state->with(['wanderers' => $state->wanderersWith($targetRole, ['hp' => $hp])]);
+
+        return [$state, [['type' => 'wanderer_healed', 'role_key' => $targetRole, 'payload' => ['hp' => $hp]]]];
     }
 
     /**

@@ -15,6 +15,15 @@ they're resolved and fold the resolution into my own understanding instead
    Relic), but I don't want to guess which. Can you check the card and
    give me the real text?
 
+2. **Poof's threshold ("13 Monolith shards within 2 spaces of you")
+   can never actually trigger.** The Infrastructure pool only has 12
+   Monolith Shards total (confirmed earlier as the fixed supply), so
+   13 within any radius is impossible no matter how the game goes.
+   Is 13 a typo for a smaller number, or does Poof mean something else
+   by "Monolith shards" (e.g. counting something that isn't limited by
+   the pool)? Left unimplemented until I hear back, rather than guess
+   at a number.
+
 ## Resolved (for my own reference, not standing asks)
 
 - Solo/duo/trio play: Wanderer count is always exactly 2 or 3 — there's no

@@ -142,7 +142,7 @@ test('an unimplemented Relic action still costs an action but has no mechanical 
     $state = startedGame();
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
-    $unimplemented = 'emperors-diary'; // real Relic, not in the hand-picked batch
+    $unimplemented = 'poof'; // real Relic, not in the hand-picked batch
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => $unimplemented];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
 
