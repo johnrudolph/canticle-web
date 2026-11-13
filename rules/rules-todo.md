@@ -7,14 +7,7 @@ they're resolved and fold the resolution into my own understanding instead
 
 ## Open
 
-1. **Golem card tapping needs real engine support.** Confirmed via chat
-   (2026-11-13): "tapped" means flipped face-down; when resolution reaches
-   a tapped card it does nothing and gets discarded. What's still an
-   engine task (not a rules question anymore): several Relics tap cards
-   in the Golem's draw pile directly (Blinding explosion, Whip of
-   Justice, Defanging tool, Golem log, Silent hunting cloak, Peacemaker's
-   spirit, Soothing Lullaby) — the draw pile currently has no per-card
-   tapped state to flip.
+None right now.
 
 ## Resolved (for my own reference, not standing asks)
 
@@ -71,3 +64,11 @@ they're resolved and fold the resolution into my own understanding instead
   conversation, not yet built: a "here's what you found, here's where it
   could go, keep or drop?" prompt at the moment of discovery rather than
   leaving it to sit in `holding` indefinitely.
+- Golem card tapping: "tapped" means flipped face-down; when resolution
+  reaches a tapped card it does nothing and gets discarded. Engine support
+  now exists (`draw_pile`/`revealed` carry `{key, tapped}`, see
+  GameEngine::resolveOrSkipTappedCard/tapGolemDrawPile), proven via Whip of
+  Justice. Not a rules question anymore — wiring up the remaining tap
+  Relics (Blinding explosion, Defanging tool, Golem log, Silent hunting
+  cloak, Peacemaker's spirit, Soothing Lullaby) is my own implementation
+  backlog, not tracked here.
