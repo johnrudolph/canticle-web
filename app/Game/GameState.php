@@ -55,10 +55,14 @@ namespace App\Game;
  *     'cell' => [col, row]|null,  // null only before setup places it
  *     'shame' => int,
  *     'glyphs' => list<string>,   // up to 4, FIFO — see GameEngine::addGlyph
- *     'draw_pile' => list<string>,
- *     'revealed' => list<string>, // up to 3, face up, resolved right-to-left
- *     'discard_pile' => list<string>,
+ *     'draw_pile' => list<array{key: string, tapped: bool}>,
+ *     'revealed' => list<array{key: string, tapped: bool}>, // up to 3, face up, resolved right-to-left
+ *     'discard_pile' => list<string>, // tapped state doesn't matter once discarded
  * ]
+ *
+ * A tapped card (confirmed via chat 2026-11-13: flipped face-down; when
+ * resolution reaches it, it does nothing) is set by specific Relics that
+ * reach into the Golem's own draw pile — see GameEngine::tapGolemDrawPile.
  */
 final readonly class GameState
 {

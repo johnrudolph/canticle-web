@@ -505,6 +505,7 @@ final class GameEngine
             'last-rites' => [...self::relicHealAllyToMax($state, $actorRole, $move), true],
             'holy-water' => [...self::relicRemoveStatus($state, $actorRole, $move), false],
             'hands-of-forgiveness' => [...self::relicRemoveAllStatus($state, $actorRole, $move), false],
+            'whip-of-justice' => self::relicTapForGolemShame($state, $actorRole),
             default => [$state, [], false],
         };
     }
@@ -762,10 +763,66 @@ final class GameEngine
         }
 
         $discarded = array_shift($golem['draw_pile']);
-        $golem['discard_pile'][] = $discarded;
+        $golem['discard_pile'][] = $discarded['key'];
         $state = $state->with(['golem' => $golem]);
 
-        return [$state, [['type' => 'golem_card_discarded', 'role_key' => null, 'payload' => ['card_key' => $discarded]]]];
+        return [$state, [['type' => 'golem_card_discarded', 'role_key' => null, 'payload' => ['card_key' => $discarded['key']]]]];
+    }
+
+    /**
+     * Flips the next $count untapped cards from the top of the Golem's
+     * draw pile face-down, in place — several Relics do this (Blinding
+     * explosion, Whip of Justice, Defanging tool, Golem log, Silent
+     * hunting cloak, Peacemaker's spirit, Soothing Lullaby), only Whip of
+     * Justice is wired up to call this today.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: int} 2 = how many were actually tapped
+     */
+    private static function tapGolemDrawPile(GameState $state, int $count): array
+    {
+        $golem = $state->golem;
+        $tapped = 0;
+        $events = [];
+
+        foreach ($golem['draw_pile'] as $i => $entry) {
+            if ($tapped >= $count) {
+                break;
+            }
+
+            if ($entry['tapped']) {
+                continue;
+            }
+
+            $golem['draw_pile'][$i]['tapped'] = true;
+            $tapped++;
+            $events[] = ['type' => 'golem_card_flipped_tapped', 'role_key' => null, 'payload' => ['card_key' => $entry['key']]];
+        }
+
+        $state = $state->with(['golem' => $golem]);
+
+        return [$state, $events, $tapped];
+    }
+
+    /**
+     * Whip of Justice: "If you are on the Golem's space: for each Shame
+     * token the Golem has, tap the next un-tapped card from the top of
+     * its draw pile, and trash this." The trashing is part of the
+     * conditional clause — if the Wanderer isn't on the Golem's space,
+     * nothing happens at all, including the trash. The "if you flipped 4
+     * cards, gain 📜" clause is skipped, same as every other Relic's
+     * scoring clause.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function relicTapForGolemShame(GameState $state, string $actorRole): array
+    {
+        if (! self::golemSharesCellWith($state, $actorRole)) {
+            return [$state, [], false];
+        }
+
+        [$state, $events] = self::tapGolemDrawPile($state, $state->golem['shame']);
+
+        return [$state, $events, true];
     }
 
     /**
@@ -1011,11 +1068,11 @@ final class GameEngine
                 break; // deck + discard both exhausted — nothing left to resolve
             }
 
-            $cardKey = array_pop($golem['revealed']);
-            $golem['discard_pile'][] = $cardKey;
+            $cardEntry = array_pop($golem['revealed']);
+            $golem['discard_pile'][] = $cardEntry['key'];
             $state = $state->with(['golem' => $golem]);
 
-            [$state, $cardEvents, $effects] = self::resolveGolemCard($state, $cardKey);
+            [$state, $cardEvents, $effects] = self::resolveOrSkipTappedCard($state, $cardEntry);
             $events = [...$events, ...$cardEvents];
 
             if ($effects['double_next'] && $i + 1 < $toPlay) {
@@ -1025,8 +1082,8 @@ final class GameEngine
                 // onto it normally afterward.
                 $golem = $state->golem;
                 if ($golem['revealed'] !== []) {
-                    $nextKey = $golem['revealed'][array_key_last($golem['revealed'])];
-                    [$state, $extraEvents] = self::resolveGolemCard($state, $nextKey);
+                    $nextEntry = $golem['revealed'][array_key_last($golem['revealed'])];
+                    [$state, $extraEvents] = self::resolveOrSkipTappedCard($state, $nextEntry);
                     $events = [...$events, ...$extraEvents];
                 }
             }
@@ -1040,9 +1097,28 @@ final class GameEngine
     }
 
     /**
+     * @param  array{key: string, tapped: bool}  $cardEntry
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: array{double_next: bool, extra_cards: int}}
+     */
+    private static function resolveOrSkipTappedCard(GameState $state, array $cardEntry): array
+    {
+        if ($cardEntry['tapped']) {
+            $card = GolemCardCatalog::find($cardEntry['key']);
+
+            return [$state, [
+                ['type' => 'golem_card_tapped', 'role_key' => null, 'payload' => ['card_key' => $cardEntry['key'], 'name' => $card?->name]],
+            ], ['double_next' => false, 'extra_cards' => 0]];
+        }
+
+        return self::resolveGolemCard($state, $cardEntry['key']);
+    }
+
+    /**
      * Keeps the revealed row topped up to 3 after each resolution,
      * reshuffling the discard pile back into the draw pile if it runs dry
-     * — same rule as the Location deck.
+     * — same rule as the Location deck. Cards reshuffled back in are
+     * always untapped; being tapped only ever applies within the current
+     * draw pile.
      */
     private static function refillGolemRevealed(GameState $state): GameState
     {
@@ -1054,7 +1130,10 @@ final class GameEngine
                     break;
                 }
 
-                $golem['draw_pile'] = $golem['discard_pile'];
+                $golem['draw_pile'] = array_map(
+                    fn (string $key) => ['key' => $key, 'tapped' => false],
+                    $golem['discard_pile']
+                );
                 shuffle($golem['draw_pile']);
                 $golem['discard_pile'] = [];
             }

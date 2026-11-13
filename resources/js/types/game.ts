@@ -26,11 +26,16 @@ export interface WandererState {
     holding: string[];
 }
 
+export interface GolemCardEntry {
+    key: string;
+    tapped: boolean;
+}
+
 export interface GolemState {
     cell: [number, number] | null;
     shame: number;
     glyphs: string[];
-    revealed: string[];
+    revealed: GolemCardEntry[];
     draw_pile_count: number;
 }
 

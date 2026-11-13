@@ -58,7 +58,11 @@ final class GameSetup
 
         $golemDeck = array_keys(GolemCardCatalog::all());
         shuffle($golemDeck);
-        $revealed = array_splice($golemDeck, 0, self::GOLEM_REVEALED_SIZE);
+        $revealed = array_map(
+            fn (string $key) => ['key' => $key, 'tapped' => false],
+            array_splice($golemDeck, 0, self::GOLEM_REVEALED_SIZE)
+        );
+        $golemDeck = array_map(fn (string $key) => ['key' => $key, 'tapped' => false], $golemDeck);
 
         $glyphDeck = array_keys(GlyphCatalog::all());
         shuffle($glyphDeck);

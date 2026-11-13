@@ -25,9 +25,10 @@ export function GolemPanel({
                 {golem.revealed.length === 0 && (
                     <span className="text-muted-foreground/60">none</span>
                 )}
-                {golem.revealed.map((key, i) => (
-                    <span key={`${key}-${i}`} className="rounded border px-1.5 py-0.5">
-                        {golemCardCatalog[key]?.name ?? key}
+                {golem.revealed.map((entry, i) => (
+                    <span key={`${entry.key}-${i}`} className="rounded border px-1.5 py-0.5">
+                        {entry.tapped ? '🂠 ' : ''}
+                        {golemCardCatalog[entry.key]?.name ?? entry.key}
                     </span>
                 ))}
             </div>

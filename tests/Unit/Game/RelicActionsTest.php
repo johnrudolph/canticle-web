@@ -128,14 +128,14 @@ test('Golem disguise discards the top card of the Golem draw pile', function () 
     $state = startedGame();
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
-    $topCard = $state->golem['draw_pile'][0];
+    $topCardKey = $state->golem['draw_pile'][0]['key'];
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'golem-disguise'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
 
     [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'golem-disguise']);
 
-    expect($state->golem['discard_pile'])->toContain($topCard)
-        ->and($state->golem['draw_pile'][0] ?? null)->not->toBe($topCard);
+    expect($state->golem['discard_pile'])->toContain($topCardKey)
+        ->and($state->golem['draw_pile'][0]['key'] ?? null)->not->toBe($topCardKey);
 });
 
 test('an unimplemented Relic action still costs an action but has no mechanical effect', function () {
