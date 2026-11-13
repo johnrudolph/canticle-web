@@ -1365,6 +1365,61 @@ final class GameEngine
             case 'time-paradox':
                 $effects['extra_cards'] = 2;
                 break;
+
+            case 'deface':
+                [$state, $e] = self::golemDeface($state);
+                $events = [...$events, ...$e];
+                break;
+
+            case 'fire-storm':
+                [$state, $e] = self::golemFireStorm($state);
+                $events = [...$events, ...$e];
+                break;
+
+            case 'great-sweeping-scythe':
+                [$state, $e] = self::golemGreatSweepingScythe($state);
+                $events = [...$events, ...$e];
+                break;
+
+            case 'overcharge':
+                [$state, $e] = self::golemOvercharge($state);
+                $events = [...$events, ...$e];
+                break;
+
+            case 'quake':
+                [$state, $e] = self::golemQuake($state);
+                $events = [...$events, ...$e];
+                break;
+
+            case 'roar':
+                [$state, $e] = self::golemRoar($state);
+                $events = [...$events, ...$e];
+                break;
+
+            case 'sacrifice-of-possessions':
+                [$state, $e] = self::golemSacrificeOfPossessions($state);
+                $events = [...$events, ...$e];
+                break;
+
+            case 'shard-devourer':
+                [$state, $e] = self::golemShardDevourer($state);
+                $events = [...$events, ...$e];
+                break;
+
+            case 'siege':
+                [$state, $e] = self::golemSiege($state);
+                $events = [...$events, ...$e];
+                break;
+
+            case 'summoning-roar':
+                [$state, $e] = self::golemSummoningRoar($state);
+                $events = [...$events, ...$e];
+                break;
+
+            case 'targeted-attack':
+                [$state, $e] = self::golemTargetedAttack($state);
+                $events = [...$events, ...$e];
+                break;
         }
 
         return [$state, $events, $effects];
@@ -1383,13 +1438,26 @@ final class GameEngine
      */
     private static function golemMoveToward(GameState $state, ?string $targetRole, int $maxSteps): array
     {
-        $golemCell = $state->golem['cell'];
-
-        if ($targetRole === null || $golemCell === null) {
+        if ($targetRole === null) {
             return [$state, []];
         }
 
-        $path = Board::shortestPath($golemCell, $state->wanderers[$targetRole]['cell'], $state->board, $state->wallKeys());
+        return self::golemMoveTowardCell($state, $state->wanderers[$targetRole]['cell'], $maxSteps);
+    }
+
+    /**
+     * @param  array{0: int, 1: int}|null  $targetCell
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemMoveTowardCell(GameState $state, ?array $targetCell, int $maxSteps): array
+    {
+        $golemCell = $state->golem['cell'];
+
+        if ($targetCell === null || $golemCell === null) {
+            return [$state, []];
+        }
+
+        $path = Board::shortestPath($golemCell, $targetCell, $state->board, $state->wallKeys());
 
         if ($path === null || $path === []) {
             return [$state, []];
@@ -1406,6 +1474,498 @@ final class GameEngine
         $state = $state->with(['golem' => $state->golemWith(['cell' => $destination])]);
 
         return [$state, [['type' => 'golem_moved', 'role_key' => null, 'payload' => ['to' => $destination]]]];
+    }
+
+    /**
+     * Nearest board cell (by Golem pathing distance) that has at least
+     * one piece of $type Infrastructure on it.
+     *
+     * @return array{0: int, 1: int}|null
+     */
+    private static function nearestCellWithInfrastructure(GameState $state, string $type): ?array
+    {
+        $golemCell = $state->golem['cell'];
+
+        if ($golemCell === null) {
+            return null;
+        }
+
+        $best = null;
+        $bestDistance = null;
+
+        foreach ($state->board as $key => $entry) {
+            if (! in_array($type, $entry['infrastructure'], true)) {
+                continue;
+            }
+
+            $cell = Board::fromKey($key);
+            $distance = Board::distance($golemCell, $cell, $state->board, $state->wallKeys());
+
+            if ($distance === null) {
+                continue;
+            }
+
+            if ($bestDistance === null || $distance < $bestDistance) {
+                $best = $cell;
+                $bestDistance = $distance;
+            }
+        }
+
+        return $best;
+    }
+
+    /**
+     * @return list<array{0: int, 1: int}>
+     */
+    private static function golemCellsOnAndAdjacent(GameState $state): array
+    {
+        $golemCell = $state->golem['cell'];
+
+        if ($golemCell === null) {
+            return [];
+        }
+
+        return [$golemCell, ...Board::occupiedNeighbors($golemCell, $state->board)];
+    }
+
+    /**
+     * Trashes the first (any) equipped Relic found on a Wanderer — used
+     * by Golem cards that make every affected Wanderer trash a Relic
+     * without specifying which. Real rules.md text leaves that choice to
+     * the Wanderer; auto-picking the first slot is the same kind of
+     * simplification as applyStatusToken's slot auto-pick, for the same
+     * reason (no mid-phase interactive-pause system exists yet).
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function trashFirstEquippedRelic(GameState $state, string $role): array
+    {
+        $equipped = $state->wanderers[$role]['equipped'];
+
+        foreach ($equipped as $slot => $value) {
+            if ($value !== null && ! self::isStatusToken($value)) {
+                $equipped[$slot] = null;
+                $state = $state->with(['wanderers' => $state->wanderersWith($role, ['equipped' => $equipped])]);
+
+                return [$state, [['type' => 'relic_trashed', 'role_key' => $role, 'payload' => ['relic_key' => $value]]]];
+            }
+        }
+
+        return [$state, []];
+    }
+
+    /**
+     * Deface: "The Emperor trashes the next face-down Relic from the
+     * Golem's space." Picks the top (first) of the pile, since there's
+     * no interactive choice system for which one.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemDeface(GameState $state): array
+    {
+        $golemCell = $state->golem['cell'];
+
+        if ($golemCell === null) {
+            return [$state, []];
+        }
+
+        $cellKey = Board::key($golemCell);
+        $boardEntry = $state->board[$cellKey] ?? null;
+
+        if ($boardEntry === null || $boardEntry['relics'] === []) {
+            return [$state, []];
+        }
+
+        $relics = $boardEntry['relics'];
+        $trashed = array_shift($relics);
+        $board = $state->board;
+        $board[$cellKey] = [...$boardEntry, 'relics' => $relics];
+        $state = $state->with(['board' => $board]);
+
+        return [$state, [['type' => 'relic_trashed_from_board', 'role_key' => 'emperor', 'payload' => ['relic_key' => $trashed, 'cell' => $golemCell]]]];
+    }
+
+    /**
+     * Fire storm: 👊3 to Wanderers on/adjacent to the Golem's space; each
+     * who lost Health as a result trashes one equipped Relic.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemFireStorm(GameState $state): array
+    {
+        $cellKeys = array_map(Board::key(...), self::golemCellsOnAndAdjacent($state));
+        $events = [];
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            if (! in_array(Board::key($cell), $cellKeys, true)) {
+                continue;
+            }
+
+            $hpBefore = $state->wanderers[$role]['hp'];
+            $state = self::applyDamage($state, $role, 3);
+            $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => 3]];
+
+            if ($hpBefore > 0) {
+                [$state, $e] = self::trashFirstEquippedRelic($state, $role);
+                $events = [...$events, ...$e];
+            }
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Great Sweeping Scythe: 👊5 to Wanderers on/adjacent to the Golem's
+     * space; give a Scar token to anyone who lost Health.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemGreatSweepingScythe(GameState $state): array
+    {
+        $cellKeys = array_map(Board::key(...), self::golemCellsOnAndAdjacent($state));
+        $events = [];
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            if (! in_array(Board::key($cell), $cellKeys, true)) {
+                continue;
+            }
+
+            $hpBefore = $state->wanderers[$role]['hp'];
+            $state = self::applyDamage($state, $role, 5);
+            $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => 5]];
+
+            if ($hpBefore > 0) {
+                [$state, $e] = self::applyStatusToken($state, $role, 'scar_token');
+                $events = [...$events, ...$e];
+            }
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Overcharge: Wanderers on a space with a Monolith Shard lose 1
+     * Health for each Monolith Shard on or adjacent to their Location.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemOvercharge(GameState $state): array
+    {
+        $events = [];
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            $entry = $state->board[Board::key($cell)];
+
+            if (! in_array('monolith_shard', $entry['infrastructure'], true)) {
+                continue;
+            }
+
+            $count = count(array_filter($entry['infrastructure'], fn (string $i) => $i === 'monolith_shard'));
+
+            foreach (Board::occupiedNeighbors($cell, $state->board) as $neighbor) {
+                $neighborEntry = $state->board[Board::key($neighbor)];
+                $count += count(array_filter($neighborEntry['infrastructure'], fn (string $i) => $i === 'monolith_shard'));
+            }
+
+            $state = self::applyDamage($state, $role, $count);
+            $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => $count]];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Quake: 🦶2 to the nearest Road. All Wanderers on any Road-bearing
+     * space lose 2 Health. Return all Infrastructure from the targeted
+     * Road's space to the Emperor's pool.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemQuake(GameState $state): array
+    {
+        $target = self::nearestCellWithInfrastructure($state, 'road');
+        $events = [];
+
+        [$state, $e] = self::golemMoveTowardCell($state, $target, 2);
+        $events = [...$events, ...$e];
+
+        foreach ($state->board as $key => $entry) {
+            if (! in_array('road', $entry['infrastructure'], true)) {
+                continue;
+            }
+
+            foreach (self::activeWanderers($state) as $role => $wandererCell) {
+                if (Board::key($wandererCell) !== $key) {
+                    continue;
+                }
+
+                $state = self::applyDamage($state, $role, 2);
+                $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => 2]];
+            }
+        }
+
+        if ($target !== null) {
+            $targetKey = Board::key($target);
+            $entry = $state->board[$targetKey];
+            $pool = $state->infrastructurePool;
+
+            foreach ($entry['infrastructure'] as $infrastructureType) {
+                $pool[$infrastructureType] = ($pool[$infrastructureType] ?? 0) + 1;
+            }
+
+            $board = $state->board;
+            $board[$targetKey] = [...$entry, 'infrastructure' => []];
+            $state = $state->with(['board' => $board, 'infrastructurePool' => $pool]);
+            $events[] = ['type' => 'infrastructure_returned', 'role_key' => null, 'payload' => ['cell' => $target]];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Roar: 👊3 to Wanderers on/adjacent to the Golem's space; each must
+     * then move 1 space away. "A direction they choose" is simplified to
+     * the neighboring space farthest from the Golem (ties broken by
+     * iteration order).
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemRoar(GameState $state): array
+    {
+        $golemCell = $state->golem['cell'];
+        $cellKeys = array_map(Board::key(...), self::golemCellsOnAndAdjacent($state));
+        $events = [];
+        $affectedRoles = [];
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            if (! in_array(Board::key($cell), $cellKeys, true)) {
+                continue;
+            }
+
+            $state = self::applyDamage($state, $role, 3);
+            $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => 3]];
+            $affectedRoles[] = $role;
+        }
+
+        foreach ($affectedRoles as $role) {
+            $cell = $state->wanderers[$role]['cell'];
+            $best = null;
+            $bestDistance = -1;
+
+            foreach (Board::occupiedNeighbors($cell, $state->board) as $option) {
+                $distance = $golemCell === null ? 0 : (Board::distance($golemCell, $option, $state->board) ?? 0);
+
+                if ($distance > $bestDistance) {
+                    $best = $option;
+                    $bestDistance = $distance;
+                }
+            }
+
+            if ($best === null) {
+                continue;
+            }
+
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['cell' => $best])]);
+            $events[] = ['type' => 'wanderer_moved', 'role_key' => $role, 'payload' => ['to' => $best, 'forced' => true]];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Sacrifice of Possessions: every Wanderer trashes one equipped
+     * Relic.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemSacrificeOfPossessions(GameState $state): array
+    {
+        $events = [];
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            [$state, $e] = self::trashFirstEquippedRelic($state, $role);
+            $events = [...$events, ...$e];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Shard Devourer: 🦶2 to the nearest Monolith Shard, remove it, and
+     * 👊2 all Wanderers on or adjacent to its space.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemShardDevourer(GameState $state): array
+    {
+        $target = self::nearestCellWithInfrastructure($state, 'monolith_shard');
+        $events = [];
+
+        [$state, $e] = self::golemMoveTowardCell($state, $target, 2);
+        $events = [...$events, ...$e];
+
+        if ($target === null) {
+            return [$state, $events];
+        }
+
+        $targetKey = Board::key($target);
+        $entry = $state->board[$targetKey];
+        $infrastructure = $entry['infrastructure'];
+        $index = array_search('monolith_shard', $infrastructure, true);
+
+        if ($index !== false) {
+            unset($infrastructure[$index]);
+            $board = $state->board;
+            $board[$targetKey] = [...$entry, 'infrastructure' => array_values($infrastructure)];
+            $state = $state->with(['board' => $board]);
+            $events[] = ['type' => 'infrastructure_removed', 'role_key' => null, 'payload' => ['cell' => $target, 'infrastructure_type' => 'monolith_shard']];
+        }
+
+        [$state, $damageEvents] = self::damageWanderersAt($state, [$target, ...Board::occupiedNeighbors($target, $state->board)], 2);
+        $events = [...$events, ...$damageEvents];
+
+        return [$state, $events];
+    }
+
+    /**
+     * Siege: 🦶2 to be adjacent to the nearest Wall; all Wanderers
+     * adjacent to that Wall lose 4 Health. The Golem can never stand on
+     * a Walled space, so "nearest Wall" is resolved as the nearest
+     * occupied, non-Walled neighbor of any Wall.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemSiege(GameState $state): array
+    {
+        $golemCell = $state->golem['cell'];
+
+        if ($golemCell === null) {
+            return [$state, []];
+        }
+
+        $bestWall = null;
+        $bestApproach = null;
+        $bestDistance = null;
+
+        foreach ($state->wallKeys() as $wallKey) {
+            $wallCell = Board::fromKey($wallKey);
+
+            foreach (Board::occupiedNeighbors($wallCell, $state->board, $state->wallKeys()) as $approach) {
+                $distance = Board::distance($golemCell, $approach, $state->board, $state->wallKeys());
+
+                if ($distance === null) {
+                    continue;
+                }
+
+                if ($bestDistance === null || $distance < $bestDistance) {
+                    $bestDistance = $distance;
+                    $bestWall = $wallCell;
+                    $bestApproach = $approach;
+                }
+            }
+        }
+
+        $events = [];
+
+        if ($bestApproach !== null) {
+            [$state, $e] = self::golemMoveTowardCell($state, $bestApproach, 2);
+            $events = [...$events, ...$e];
+        }
+
+        if ($bestWall !== null) {
+            [$state, $damageEvents] = self::damageWanderersAt($state, Board::occupiedNeighbors($bestWall, $state->board), 4);
+            $events = [...$events, ...$damageEvents];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Summoning Roar: all Wanderers 🦶2 toward the Golem's space, then
+     * 👊3 to whoever ends up sharing it.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemSummoningRoar(GameState $state): array
+    {
+        $golemCell = $state->golem['cell'];
+
+        if ($golemCell === null) {
+            return [$state, []];
+        }
+
+        $events = [];
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            $path = Board::shortestPath($cell, $golemCell, $state->board);
+
+            if ($path === null || $path === []) {
+                continue;
+            }
+
+            $steps = array_slice($path, 0, 2);
+            $destination = $steps[array_key_last($steps)];
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['cell' => $destination])]);
+            $events[] = ['type' => 'wanderer_moved', 'role_key' => $role, 'payload' => ['to' => $destination, 'forced' => true]];
+        }
+
+        [$state, $damageEvents] = self::damageWanderersAt($state, [$golemCell], 3);
+        $events = [...$events, ...$damageEvents];
+
+        return [$state, $events];
+    }
+
+    /**
+     * Targeted attack: 🦶2 to the nearest Wanderer. If they have an Ally
+     * on or adjacent to their space, 👊5 to each of them.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemTargetedAttack(GameState $state): array
+    {
+        $target = self::nearestWanderer($state);
+        $events = [];
+
+        [$state, $e] = self::golemMoveToward($state, $target, 2);
+        $events = [...$events, ...$e];
+
+        if ($target === null) {
+            return [$state, $events];
+        }
+
+        $targetCell = $state->wanderers[$target]['cell'];
+
+        if ($targetCell === null) {
+            return [$state, $events];
+        }
+
+        $allies = [];
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            if ($role === $target) {
+                continue;
+            }
+
+            $distance = Board::distance($targetCell, $cell, $state->board);
+
+            if ($distance !== null && $distance <= 1) {
+                $allies[] = $role;
+            }
+        }
+
+        if ($allies === []) {
+            return [$state, $events];
+        }
+
+        $state = self::applyDamage($state, $target, 5);
+        $events[] = ['type' => 'wanderer_damaged', 'role_key' => $target, 'payload' => ['amount' => 5]];
+
+        foreach ($allies as $role) {
+            $state = self::applyDamage($state, $role, 5);
+            $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => 5]];
+        }
+
+        return [$state, $events];
     }
 
     /**

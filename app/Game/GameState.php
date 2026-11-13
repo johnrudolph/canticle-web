@@ -11,11 +11,10 @@ namespace App\Game;
  * right-to-left each round, and the 4 Infrastructure types (Monolith
  * Shard, Road, Walls, Fruit tree). Win/loss threshold logic exists
  * (outcome()), but nothing grants Prophecy yet — that all lives in Relic
- * and Location effects, which aren't executed. Only a hand-picked subset
- * of the 29 Golem cards and the ~109 Relics have real, executed behavior
- * — see GameEngine::resolveGolemCard for exactly which cards do what;
- * everything else is logged but not mechanically applied, same as Relic
- * *effects* (never executed at all).
+ * and Location effects, which aren't executed. All 27 distinct Golem
+ * cards have real, executed behavior now (see GameEngine::resolveGolemCard);
+ * only a hand-picked subset of the ~109 Relics do — everything else is
+ * logged but not mechanically applied, same honesty pattern.
  *
  * board["col,row"] = [
  *     'location_key' => string,
