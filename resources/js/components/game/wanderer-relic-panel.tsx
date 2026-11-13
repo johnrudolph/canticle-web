@@ -1,6 +1,12 @@
 import { Button } from '@/components/ui/button';
 import type { EquipSlot, RelicCatalogEntry, WandererState } from '@/types/game';
 
+// "Use" always submits with no extra input. Relics whose engine behavior
+// needs more (e.g. Artist's insight's `directions` payload for its 🦶2)
+// aren't reachable from this UI yet — the server still executes them
+// correctly, there's just no board-click flow wired up to supply the
+// extra input.
+
 const SLOT_LABELS: Record<EquipSlot, string> = {
     body: '🥋 Body',
     mind: '🧠 Mind',
@@ -27,12 +33,18 @@ export function WandererRelicPanel({
     relicCatalog,
     processing,
     onSubmit,
+    canAct,
+    allies,
 }: {
     role: string;
     wanderer: WandererState;
     relicCatalog: Record<string, RelicCatalogEntry>;
     processing: boolean;
     onSubmit: (move: Record<string, unknown>) => void;
+    /** Whether this Wanderer can spend an action right now (their own active turn). */
+    canAct: boolean;
+    /** Other Wanderers sharing this one's space, for Relics that target an Ally. */
+    allies: { role: string; label: string }[];
 }) {
     const label = `Wanderer ${role.replace('wanderer_', '').toUpperCase()}`;
 
@@ -48,20 +60,55 @@ export function WandererRelicPanel({
                         <div key={slot} className="rounded border px-1.5 py-1">
                             <p className="text-muted-foreground">{SLOT_LABELS[slot]}</p>
                             {relicKey ? (
-                                <div className="flex items-center justify-between gap-1">
-                                    <span className="truncate">
-                                        {relicLabel(relicKey, relicCatalog)}
-                                    </span>
-                                    <button
-                                        type="button"
-                                        disabled={processing}
-                                        className="text-muted-foreground hover:text-destructive"
-                                        onClick={() =>
-                                            onSubmit({ type: 'drop_relic', relic_key: relicKey })
-                                        }
-                                    >
-                                        drop
-                                    </button>
+                                <div className="flex flex-col gap-1">
+                                    <div className="flex items-center justify-between gap-1">
+                                        <span className="truncate">
+                                            {relicLabel(relicKey, relicCatalog)}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            disabled={processing}
+                                            className="text-muted-foreground hover:text-destructive"
+                                            onClick={() =>
+                                                onSubmit({ type: 'drop_relic', relic_key: relicKey })
+                                            }
+                                        >
+                                            drop
+                                        </button>
+                                    </div>
+                                    {canAct && (
+                                        <div className="flex flex-wrap gap-1">
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="h-5 px-1.5 text-[10px]"
+                                                disabled={processing}
+                                                onClick={() =>
+                                                    onSubmit({ type: 'use_relic', relic_key: relicKey })
+                                                }
+                                            >
+                                                Use
+                                            </Button>
+                                            {allies.map((ally) => (
+                                                <Button
+                                                    key={ally.role}
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="h-5 px-1.5 text-[10px]"
+                                                    disabled={processing}
+                                                    onClick={() =>
+                                                        onSubmit({
+                                                            type: 'use_relic',
+                                                            relic_key: relicKey,
+                                                            target_role: ally.role,
+                                                        })
+                                                    }
+                                                >
+                                                    Use on {ally.label}
+                                                </Button>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             ) : (
                                 <span className="text-muted-foreground/60">empty</span>

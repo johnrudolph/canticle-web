@@ -50,6 +50,16 @@ function describe(
             return `${role} dropped ${relicNames[event.payload.relic_key as string] ?? event.payload.relic_key}.`;
         case 'relic_picked_up':
             return `${role} picked up ${relicNames[event.payload.relic_key as string] ?? event.payload.relic_key}.`;
+        case 'relic_used':
+            return `${role} uses ${(event.payload.name as string) ?? event.payload.relic_key}.`;
+        case 'relic_trashed':
+            return `${relicNames[event.payload.relic_key as string] ?? event.payload.relic_key} is trashed.`;
+        case 'wanderer_healed':
+            return `${role} heals to ${event.payload.hp} Health.`;
+        case 'wanderers_swapped':
+            return `${role} swaps places with ${roleLabel(event.payload.with as RoleKey)}.`;
+        case 'golem_card_discarded':
+            return `The top card of the Golem's draw pile is discarded.`;
         case 'golem_card_resolved':
             return `Golem plays ${(event.payload.name as string) ?? event.payload.card_key}.`;
         case 'golem_moved':

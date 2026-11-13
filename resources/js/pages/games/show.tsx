@@ -494,16 +494,38 @@ export default function GameShow({ game }: { game: GameSummary }) {
                             .filter((role): role is 'wanderer_a' | 'wanderer_b' | 'wanderer_c' =>
                                 role.startsWith('wanderer_'),
                             )
-                            .map((role) => (
-                                <WandererRelicPanel
-                                    key={role}
-                                    role={role}
-                                    wanderer={state.wanderers[role]}
-                                    relicCatalog={game.relic_catalog}
-                                    processing={processing}
-                                    onSubmit={(move) => submitMove(role, move)}
-                                />
-                            ))}
+                            .map((role) => {
+                                const wanderer = state.wanderers[role];
+                                const canAct =
+                                    state.phase === 'wanderer' &&
+                                    state.active_wanderer_role === role &&
+                                    wanderer.actions_remaining > 0;
+                                const allies = Object.entries(state.wanderers)
+                                    .filter(
+                                        ([otherRole, other]) =>
+                                            otherRole !== role &&
+                                            other.cell &&
+                                            wanderer.cell &&
+                                            cellKey(other.cell) === cellKey(wanderer.cell),
+                                    )
+                                    .map(([otherRole]) => ({
+                                        role: otherRole,
+                                        label: ROLE_LABELS[otherRole as RoleKey],
+                                    }));
+
+                                return (
+                                    <WandererRelicPanel
+                                        key={role}
+                                        role={role}
+                                        wanderer={wanderer}
+                                        relicCatalog={game.relic_catalog}
+                                        processing={processing}
+                                        onSubmit={(move) => submitMove(role, move)}
+                                        canAct={canAct}
+                                        allies={allies}
+                                    />
+                                );
+                            })}
 
                     <ActivityLog
                         events={events}

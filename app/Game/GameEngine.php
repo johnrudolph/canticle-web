@@ -44,6 +44,7 @@ final class GameEngine
             'equip_relic' => self::equipRelic($state, $actorRole, $move),
             'drop_relic' => self::dropRelic($state, $actorRole, $move),
             'pickup_relic' => self::pickupRelic($state, $actorRole, $move),
+            'use_relic' => self::useRelic($state, $actorRole, $move),
             'end_wanderer_turn' => self::endWandererTurn($state, $actorRole),
             default => throw new InvalidMoveException('Unknown move type.'),
         };
@@ -395,6 +396,301 @@ final class GameEngine
         return [$state, [
             ['type' => 'relic_picked_up', 'role_key' => $actorRole, 'payload' => ['relic_key' => $relicKey]],
         ]];
+    }
+
+    /**
+     * Wanderer action 4: "Perform the Action from one of your Relics
+     * equipped." Costs 1 action, same as Move/Search. Only a hand-picked
+     * batch of the 63 Action-type Relics have real, executed behavior —
+     * see the switch below; everything else is logged but not applied,
+     * same honesty pattern as Golem cards. "Gain 📜" clauses attached to
+     * the implemented ones are deliberately skipped too (not just the
+     * unimplemented Relics) — scoring sources are a separate pass.
+     */
+    private static function useRelic(GameState $state, string $actorRole, array $move): array
+    {
+        self::requireRole($state, $actorRole, $state->activeWandererRole(), 'wanderer');
+
+        $wanderer = $state->wanderers[$actorRole];
+
+        if ($wanderer['actions_remaining'] <= 0) {
+            throw new InvalidMoveException('No actions remaining this turn.');
+        }
+
+        $relicKey = (string) ($move['relic_key'] ?? '');
+
+        if (! in_array($relicKey, $wanderer['equipped'], true)) {
+            throw new InvalidMoveException('That Relic is not equipped.');
+        }
+
+        $relic = RelicCatalog::find($relicKey);
+        $baseKey = (string) preg_replace('/-\d+$/', '', $relicKey);
+
+        $wanderers = $state->wanderersWith($actorRole, ['actions_remaining' => $wanderer['actions_remaining'] - 1]);
+        $state = $state->with(['wanderers' => $wanderers]);
+
+        $events = [
+            ['type' => 'relic_used', 'role_key' => $actorRole, 'payload' => ['relic_key' => $relicKey, 'name' => $relic?->name]],
+        ];
+
+        [$state, $relicEvents, $trash] = self::resolveRelicAction($state, $actorRole, $baseKey, $move);
+        $events = [...$events, ...$relicEvents];
+
+        if ($trash) {
+            $state = self::trashEquippedRelic($state, $actorRole, $relicKey);
+            $events[] = ['type' => 'relic_trashed', 'role_key' => $actorRole, 'payload' => ['relic_key' => $relicKey]];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool} 2 = whether the Relic trashes itself after use
+     */
+    private static function resolveRelicAction(GameState $state, string $actorRole, string $baseKey, array $move): array
+    {
+        return match ($baseKey) {
+            'artists-insight' => [...self::relicMove($state, $actorRole, $move, 2), false],
+            'a-keen-eye' => [...self::relicSearchTwice($state, $actorRole), false],
+            'alms-for-the-poor' => [...self::relicHealBelowThreshold($state, 6), false],
+            'burial-robes' => [...self::relicHealSharedCell($state, $actorRole, 15), false],
+            'divine-healing-oil' => [...self::relicHealSelfOrAlly($state, $actorRole, $move, 3), false],
+            'golem-disguise' => [...self::relicDiscardGolemTopCard($state), false],
+            'golem-whistle' => [...self::relicSummonGolem($state, $actorRole), false],
+            'quantum-robes' => [...self::relicSwapWithAlly($state, $actorRole, $move), false],
+            'last-rites' => [...self::relicHealAllyToMax($state, $actorRole, $move), true],
+            default => [$state, [], false],
+        };
+    }
+
+    /**
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicMove(GameState $state, string $actorRole, array $move, int $maxSteps): array
+    {
+        $directions = array_slice((array) ($move['directions'] ?? []), 0, $maxSteps);
+        $events = [];
+
+        foreach ($directions as $direction) {
+            $wanderer = $state->wanderers[$actorRole];
+            $to = Board::neighbor($wanderer['cell'], (string) $direction);
+
+            if (! array_key_exists(Board::key($to), $state->board)) {
+                break;
+            }
+
+            $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['cell' => $to])]);
+            $events[] = ['type' => 'wanderer_moved', 'role_key' => $actorRole, 'payload' => ['to' => $to, 'free' => true]];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicSearchTwice(GameState $state, string $actorRole): array
+    {
+        $events = [];
+
+        for ($i = 0; $i < 2; $i++) {
+            $wanderer = $state->wanderers[$actorRole];
+            $cellKey = Board::key($wanderer['cell']);
+            $pile = $state->board[$cellKey]['relics'];
+
+            if ($pile === []) {
+                break;
+            }
+
+            $index = array_rand($pile);
+            $found = $pile[$index];
+            unset($pile[$index]);
+            $pile = array_values($pile);
+
+            $isEvent = RelicCatalog::find($found)?->isEvent ?? false;
+
+            $board = $state->board;
+            $board[$cellKey] = [...$board[$cellKey], 'relics' => $pile];
+
+            $wanderers = $state->wanderersWith($actorRole, [
+                'holding' => $isEvent ? $wanderer['holding'] : [...$wanderer['holding'], $found],
+            ]);
+
+            $state = $state->with(['board' => $board, 'wanderers' => $wanderers]);
+            $events[] = ['type' => 'location_searched', 'role_key' => $actorRole, 'payload' => ['found' => $found, 'trashed_as_event' => $isEvent]];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicHealBelowThreshold(GameState $state, int $threshold): array
+    {
+        $events = [];
+
+        foreach ($state->wanderers as $role => $wanderer) {
+            if ($wanderer['cell'] === null || $wanderer['hp'] >= $threshold) {
+                continue;
+            }
+
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $threshold])]);
+            $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $threshold]];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicHealSharedCell(GameState $state, string $actorRole, int $amount): array
+    {
+        $casterCell = $state->wanderers[$actorRole]['cell'];
+        $events = [];
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            if (Board::key($cell) !== Board::key($casterCell)) {
+                continue;
+            }
+
+            $hp = min(15, $state->wanderers[$role]['hp'] + $amount);
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
+            $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicHealSelfOrAlly(GameState $state, string $actorRole, array $move, int $amount): array
+    {
+        $targetRole = self::resolveAllyTarget($state, $actorRole, $move) ?? $actorRole;
+        $hp = min(15, $state->wanderers[$targetRole]['hp'] + $amount);
+        $state = $state->with(['wanderers' => $state->wanderersWith($targetRole, ['hp' => $hp])]);
+
+        return [$state, [['type' => 'wanderer_healed', 'role_key' => $targetRole, 'payload' => ['hp' => $hp]]]];
+    }
+
+    /**
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicHealAllyToMax(GameState $state, string $actorRole, array $move): array
+    {
+        $targetRole = self::resolveAllyTarget($state, $actorRole, $move);
+
+        if ($targetRole === null) {
+            return [$state, []];
+        }
+
+        $state = $state->with(['wanderers' => $state->wanderersWith($targetRole, ['hp' => 15])]);
+
+        return [$state, [['type' => 'wanderer_healed', 'role_key' => $targetRole, 'payload' => ['hp' => 15]]]];
+    }
+
+    /**
+     * $move['target_role'], if given, must be another Wanderer sharing
+     * the actor's current space — an "Ally" per rules.md.
+     */
+    private static function resolveAllyTarget(GameState $state, string $actorRole, array $move): ?string
+    {
+        $targetRole = $move['target_role'] ?? null;
+
+        if (! is_string($targetRole) || $targetRole === $actorRole || ! isset($state->wanderers[$targetRole])) {
+            return null;
+        }
+
+        $actorCell = $state->wanderers[$actorRole]['cell'];
+        $targetCell = $state->wanderers[$targetRole]['cell'];
+
+        if ($actorCell === null || $targetCell === null || Board::key($actorCell) !== Board::key($targetCell)) {
+            return null;
+        }
+
+        return $targetRole;
+    }
+
+    /**
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicDiscardGolemTopCard(GameState $state): array
+    {
+        $golem = $state->golem;
+
+        if ($golem['draw_pile'] === []) {
+            return [$state, []];
+        }
+
+        $discarded = array_shift($golem['draw_pile']);
+        $golem['discard_pile'][] = $discarded;
+        $state = $state->with(['golem' => $golem]);
+
+        return [$state, [['type' => 'golem_card_discarded', 'role_key' => null, 'payload' => ['card_key' => $discarded]]]];
+    }
+
+    /**
+     * Golem Whistle: moves the Golem onto the caster's own space, subject
+     * to the same Walls restriction as its normal movement.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicSummonGolem(GameState $state, string $actorRole): array
+    {
+        $casterCell = $state->wanderers[$actorRole]['cell'];
+
+        if (in_array(Board::key($casterCell), $state->wallKeys(), true)) {
+            return [$state, []];
+        }
+
+        $state = $state->with(['golem' => $state->golemWith(['cell' => $casterCell])]);
+
+        return [$state, [['type' => 'golem_moved', 'role_key' => null, 'payload' => ['to' => $casterCell]]]];
+    }
+
+    /**
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicSwapWithAlly(GameState $state, string $actorRole, array $move): array
+    {
+        $targetRole = $move['target_role'] ?? null;
+
+        if (! is_string($targetRole) || $targetRole === $actorRole || ! isset($state->wanderers[$targetRole])) {
+            return [$state, []];
+        }
+
+        $actorCell = $state->wanderers[$actorRole]['cell'];
+        $targetCell = $state->wanderers[$targetRole]['cell'];
+
+        if ($actorCell === null || $targetCell === null) {
+            return [$state, []];
+        }
+
+        $wanderers = $state->wanderersWith($actorRole, ['cell' => $targetCell]);
+        $state = $state->with(['wanderers' => $wanderers]);
+        $state = $state->with(['wanderers' => $state->wanderersWith($targetRole, ['cell' => $actorCell])]);
+
+        return [$state, [['type' => 'wanderers_swapped', 'role_key' => $actorRole, 'payload' => ['with' => $targetRole]]]];
+    }
+
+    /**
+     * Removes a Relic from an equipped slot permanently — unlike drop, it
+     * doesn't go back onto the board.
+     */
+    private static function trashEquippedRelic(GameState $state, string $actorRole, string $relicKey): GameState
+    {
+        $equipped = $state->wanderers[$actorRole]['equipped'];
+        $slot = array_search($relicKey, $equipped, true);
+
+        if ($slot === false) {
+            return $state;
+        }
+
+        $equipped[$slot] = null;
+
+        return $state->with(['wanderers' => $state->wanderersWith($actorRole, ['equipped' => $equipped])]);
     }
 
     /**
