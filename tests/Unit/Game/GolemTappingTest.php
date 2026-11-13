@@ -95,3 +95,65 @@ test('Whip of Justice does nothing (including no trash) off the Golem\'s space',
 
     expect($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBe('whip-of-justice');
 });
+
+test('Peacemaker\'s spirit taps the Golem\'s next 2 untapped cards without trashing itself', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'mind' => 'peacemakers-spirit'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'peacemakers-spirit']);
+
+    $tappedCount = count(array_filter($state->golem['draw_pile'], fn ($c) => $c['tapped']));
+
+    expect($tappedCount)->toBe(2)
+        ->and($state->wanderers['wanderer_a']['equipped']['mind'])->toBe('peacemakers-spirit');
+});
+
+test('Blinding explosion damages everyone on/adjacent to the caster, conditionally taps, and always trashes', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'blinding-explosion'];
+    $wanderers = $state->wanderersWith('wanderer_a', ['equipped' => $equipped]);
+    $state = $state->with(['wanderers' => $wanderers]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    $hpBeforeA = $state->wanderers['wanderer_a']['hp'];
+    $hpBeforeB = $state->wanderers['wanderer_b']['hp'];
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'blinding-explosion']);
+
+    $tappedCount = count(array_filter($state->golem['draw_pile'], fn ($c) => $c['tapped']));
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe($hpBeforeA - 5)
+        ->and($state->wanderers['wanderer_b']['hp'])->toBe($hpBeforeB - 5) // startedGame shares a cell
+        ->and($tappedCount)->toBe(4) // Golem shares the caster's cell by default
+        ->and($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBeNull()
+        ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
+});
+
+test('Soothing Lullaby requires the Golem\'s space and all 3 instruments equipped in it', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'soothing-lullaby'];
+    $wanderers = $state->wanderersWith('wanderer_a', ['equipped' => $equipped]);
+    $state = $state->with(['wanderers' => $wanderers]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    // No instruments equipped yet — no-op, no trash.
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'soothing-lullaby']);
+    expect($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBe('soothing-lullaby');
+
+    // Equip all 3 instruments across both Wanderers sharing the caster's space.
+    $wanderers = $state->wanderers;
+    $wanderers['wanderer_a']['equipped']['hand_right'] = 'lute';
+    $wanderers['wanderer_a']['equipped']['bag'] = 'pipe';
+    $wanderers['wanderer_b']['equipped']['body'] = 'tabor-drum';
+    $state = $state->with(['wanderers' => $wanderers]);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'soothing-lullaby']);
+
+    $tappedCount = count(array_filter($state->golem['draw_pile'], fn ($c) => $c['tapped']));
+
+    expect($tappedCount)->toBe(3)
+        ->and($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBeNull()
+        ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
+});

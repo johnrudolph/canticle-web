@@ -506,6 +506,9 @@ final class GameEngine
             'holy-water' => [...self::relicRemoveStatus($state, $actorRole, $move), false],
             'hands-of-forgiveness' => [...self::relicRemoveAllStatus($state, $actorRole, $move), false],
             'whip-of-justice' => self::relicTapForGolemShame($state, $actorRole),
+            'peacemakers-spirit' => [...self::relicTapGolemIfSharingCell($state, $actorRole, 2), false],
+            'blinding-explosion' => self::relicBlindingExplosion($state, $actorRole),
+            'soothing-lullaby' => self::relicSoothingLullaby($state, $actorRole),
             default => [$state, [], false],
         };
     }
@@ -773,8 +776,12 @@ final class GameEngine
      * Flips the next $count untapped cards from the top of the Golem's
      * draw pile face-down, in place — several Relics do this (Blinding
      * explosion, Whip of Justice, Defanging tool, Golem log, Silent
-     * hunting cloak, Peacemaker's spirit, Soothing Lullaby), only Whip of
-     * Justice is wired up to call this today.
+     * hunting cloak, Peacemaker's spirit, Soothing Lullaby). Defanging
+     * tool and Golem log additionally tuck the flipped cards into their
+     * own per-Relic progress state, which doesn't exist yet — those two
+     * remain unimplemented. Silent hunting cloak's printed text is
+     * missing its verb (data issue, not a design question — see
+     * rules-todo.md) and is also unimplemented pending a fix.
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: int} 2 = how many were actually tapped
      */
@@ -821,6 +828,84 @@ final class GameEngine
         }
 
         [$state, $events] = self::tapGolemDrawPile($state, $state->golem['shame']);
+
+        return [$state, $events, true];
+    }
+
+    /**
+     * Shared by any Relic whose text is "If you are in the Golem's space,
+     * tap its next N untapped cards" with no other condition and no
+     * trash (Peacemaker's spirit).
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicTapGolemIfSharingCell(GameState $state, string $actorRole, int $count): array
+    {
+        if (! self::golemSharesCellWith($state, $actorRole)) {
+            return [$state, []];
+        }
+
+        [$state, $events] = self::tapGolemDrawPile($state, $count);
+
+        return [$state, $events];
+    }
+
+    /**
+     * Blinding explosion: "All Wanderers on or adjacent to your space lose
+     * 5 Health. If the Golem is in your space, tap the next un-tapped 4
+     * cards from their draw pile. Then, trash this, and gain 📜." The
+     * damage always lands; the tap is conditional on the Golem sharing
+     * the caster's space; the trash (like every "gain 📜" clause) is
+     * unconditional, same as a normal one-shot Action Relic.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function relicBlindingExplosion(GameState $state, string $actorRole): array
+    {
+        $casterCell = $state->wanderers[$actorRole]['cell'];
+        $affected = [$casterCell, ...Board::occupiedNeighbors($casterCell, $state->board)];
+
+        [$state, $events] = self::damageWanderersAt($state, $affected, 5);
+
+        if (self::golemSharesCellWith($state, $actorRole)) {
+            [$state, $tapEvents] = self::tapGolemDrawPile($state, 4);
+            $events = [...$events, ...$tapEvents];
+        }
+
+        return [$state, $events, true];
+    }
+
+    /**
+     * Soothing Lullaby: "If you are in the Golem's space and all 3 🎶
+     * Relics [Lute, Pipe, Tabor drum] are equipped by Wanderers in your
+     * space: tap the next 3 un-tapped cards of its draw pile. Then trash
+     * this and gain 📜."
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function relicSoothingLullaby(GameState $state, string $actorRole): array
+    {
+        if (! self::golemSharesCellWith($state, $actorRole)) {
+            return [$state, [], false];
+        }
+
+        $casterCell = $state->wanderers[$actorRole]['cell'];
+        $equippedInCasterSpace = [];
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            if (Board::key($cell) === Board::key($casterCell)) {
+                $equippedInCasterSpace = [...$equippedInCasterSpace, ...array_values($state->wanderers[$role]['equipped'])];
+            }
+        }
+
+        $instruments = ['lute', 'pipe', 'tabor-drum'];
+        $hasAllInstruments = count(array_intersect($instruments, $equippedInCasterSpace)) === count($instruments);
+
+        if (! $hasAllInstruments) {
+            return [$state, [], false];
+        }
+
+        [$state, $events] = self::tapGolemDrawPile($state, 3);
 
         return [$state, $events, true];
     }

@@ -7,7 +7,13 @@ they're resolved and fold the resolution into my own understanding instead
 
 ## Open
 
-None right now.
+1. **Silent hunting cloak's effect text looks truncated in the sheet.**
+   Printed as: "When on a space that produces 🐾, with the Golem, its
+   next 2 untapped cards." That's missing a verb — I'm guessing it
+   should read something like "tap its next 2 untapped cards," possibly
+   also requiring the Golem to share your space (like every other tap
+   Relic), but I don't want to guess which. Can you check the card and
+   give me the real text?
 
 ## Resolved (for my own reference, not standing asks)
 
