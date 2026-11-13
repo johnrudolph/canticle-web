@@ -48,6 +48,13 @@ they're resolved and fold the resolution into my own understanding instead
    mat" refers to something else (a hidden reserve I haven't modeled?),
    I'd want to know what before building a shuffle-and-refill for it.
 
+5. **Scapegoat's catharsis needs "all 5 Relics with 'Dark ...' names
+   equipped," but only 4 exist in the synced sheet** (Dark chains, Dark
+   limitations, Dark sacrifice, Dark sigil). Is there a 5th Dark Relic
+   missing from the data, or is the printed "5" stale/wrong? Left
+   unimplemented rather than building toward a count that can never be
+   reached.
+
 ## Resolved (for my own reference, not standing asks)
 
 - Solo/duo/trio play: Wanderer count is always exactly 2 or 3 — there's no

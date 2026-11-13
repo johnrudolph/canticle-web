@@ -539,6 +539,9 @@ final class GameEngine
             'aural-inscription' => self::relicAuralInscription($state),
             'divine-chant' => self::relicDivineChant($state, $actorRole),
             'magistrates-robes' => [...self::relicMagistratesRobes($state, $actorRole, $move), false],
+            'immolation-rags' => self::relicImmolationRags($state, $actorRole),
+            'divine-cabalist-pyre' => self::relicDivineCabalistPyre($state, $actorRole, $move),
+            'show-solidarity' => self::relicShowSolidarity($state, $actorRole, $move),
             default => [$state, [], false],
         };
     }
@@ -1613,6 +1616,182 @@ final class GameEngine
         }
 
         return [$state, $events];
+    }
+
+    /**
+     * Immolation rags: "Trash all Relics on your mat (including this,
+     * and any Bound Relics). For each Relic you trashed: You lose 1
+     * Health." Handles its own full trash (including itself) rather
+     * than returning a trash flag, since useRelic's normal post-dispatch
+     * trash only clears the one Relic being used.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function relicImmolationRags(GameState $state, string $actorRole): array
+    {
+        $equipped = $state->wanderers[$actorRole]['equipped'];
+        $trashedKeys = [];
+
+        foreach ($equipped as $slot => $value) {
+            if ($value !== null && ! self::isStatusToken($value)) {
+                $trashedKeys[] = $value;
+                $equipped[$slot] = null;
+            }
+        }
+
+        $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['equipped' => $equipped])]);
+
+        $events = array_map(
+            fn (string $key) => ['type' => 'relic_trashed', 'role_key' => $actorRole, 'payload' => ['relic_key' => $key]],
+            $trashedKeys
+        );
+
+        $count = count($trashedKeys);
+        $hp = max(0, $state->wanderers[$actorRole]['hp'] - $count);
+        $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['hp' => $hp])]);
+        $events[] = ['type' => 'wanderer_damaged', 'role_key' => $actorRole, 'payload' => ['amount' => $count]];
+
+        return [$state, $events, false];
+    }
+
+    /**
+     * Divine Cabalist pyre: "Trash any number of face-up Relics on your
+     * space, and trash this. 🌿 yourself and Allies on your space 2 for
+     * each Relic you burned." $move['board_relic_keys'] picks which (any
+     * number, including zero) from the caster's own cell's face-down...
+     * actually face-up-once-found pile.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function relicDivineCabalistPyre(GameState $state, string $actorRole, array $move): array
+    {
+        $casterCell = $state->wanderers[$actorRole]['cell'];
+        $cellKey = Board::key($casterCell);
+        $chosen = $move['board_relic_keys'] ?? [];
+
+        if (! is_array($chosen)) {
+            return [$state, [], true];
+        }
+
+        $pile = $state->board[$cellKey]['relics'];
+        $burned = [];
+
+        foreach ($chosen as $relicKey) {
+            if (! is_string($relicKey)) {
+                continue;
+            }
+
+            $index = array_search($relicKey, $pile, true);
+
+            if ($index === false) {
+                continue;
+            }
+
+            unset($pile[$index]);
+            $pile = array_values($pile);
+            $burned[] = $relicKey;
+        }
+
+        $board = $state->board;
+        $board[$cellKey] = [...$board[$cellKey], 'relics' => $pile];
+        $state = $state->with(['board' => $board]);
+
+        $events = array_map(
+            fn (string $key) => ['type' => 'relic_burned', 'role_key' => null, 'payload' => ['relic_key' => $key, 'cell' => $casterCell]],
+            $burned
+        );
+
+        $healAmount = 2 * count($burned);
+
+        if ($healAmount > 0) {
+            foreach (self::activeWanderers($state) as $role => $cell) {
+                if (Board::key($cell) !== $cellKey) {
+                    continue;
+                }
+
+                $hp = min(15, $state->wanderers[$role]['hp'] + $healAmount);
+                $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
+                $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
+            }
+        }
+
+        return [$state, $events, true];
+    }
+
+    /**
+     * Show solidarity: "Wanderers on the Golem's space may trash Relics
+     * from their mats (you must trash this card as part of that). For
+     * every 5 Relics trashed, trash 1 card from the Golem discard pile,
+     * and gain 📜. Shuffle the Golem draw pile and discard pile."
+     * $move['trashed'] is a list of {role, relic_key} for every
+     * voluntary trash beyond Show solidarity's own mandatory one; each
+     * entry must name an active Wanderer sharing the Golem's space with
+     * that Relic actually equipped.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function relicShowSolidarity(GameState $state, string $actorRole, array $move): array
+    {
+        if (! self::golemSharesCellWith($state, $actorRole)) {
+            return [$state, [], false];
+        }
+
+        $golemCell = $state->golem['cell'];
+        $golemCellKey = $golemCell === null ? null : Board::key($golemCell);
+        $requested = $move['trashed'] ?? [];
+        $events = [];
+        $trashedCount = 1; // Show solidarity itself, trashed by the normal post-dispatch flow.
+
+        if (is_array($requested)) {
+            foreach ($requested as $entry) {
+                if (! is_array($entry)) {
+                    continue;
+                }
+
+                $role = $entry['role'] ?? null;
+                $relicKey = $entry['relic_key'] ?? null;
+
+                if (! is_string($role) || ! is_string($relicKey) || ! isset($state->wanderers[$role])) {
+                    continue;
+                }
+
+                $wandererCell = $state->wanderers[$role]['cell'];
+
+                if ($wandererCell === null || Board::key($wandererCell) !== $golemCellKey) {
+                    continue;
+                }
+
+                if (self::isStatusToken($relicKey) || ! in_array($relicKey, $state->wanderers[$role]['equipped'], true)) {
+                    continue;
+                }
+
+                $state = self::trashEquippedRelic($state, $role, $relicKey);
+                $events[] = ['type' => 'relic_trashed', 'role_key' => $role, 'payload' => ['relic_key' => $relicKey]];
+                $trashedCount++;
+            }
+        }
+
+        $groupsOf5 = intdiv($trashedCount, 5);
+
+        if ($groupsOf5 > 0) {
+            $discardPile = $state->golem['discard_pile'];
+            $removed = array_splice($discardPile, 0, min($groupsOf5, count($discardPile)));
+            $state = $state->with(['golem' => $state->golemWith(['discard_pile' => $discardPile])]);
+
+            foreach ($removed as $cardKey) {
+                $events[] = ['type' => 'golem_card_removed_from_discard', 'role_key' => null, 'payload' => ['card_key' => $cardKey]];
+            }
+        }
+
+        $drawPile = $state->golem['draw_pile'];
+        shuffle($drawPile);
+        $discardPile = $state->golem['discard_pile'];
+        shuffle($discardPile);
+        $state = $state->with(['golem' => $state->golemWith(['draw_pile' => $drawPile, 'discard_pile' => $discardPile])]);
+
+        return [$state, $events, true];
     }
 
     /**
