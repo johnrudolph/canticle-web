@@ -19,12 +19,14 @@ export function HexBoard({
     board,
     locationCatalog,
     wanderers,
+    golemCell,
     highlightedCells,
     onCellClick,
 }: {
     board: Record<string, BoardCell>;
     locationCatalog: Record<string, LocationCatalogEntry>;
     wanderers: Record<string, WandererState>;
+    golemCell?: Cell | null;
     highlightedCells?: Set<string>;
     onCellClick?: (cell: Cell) => void;
 }) {
@@ -85,6 +87,11 @@ export function HexBoard({
                             </span>
                         )}
                         <div className="flex gap-1">
+                            {golemCell && cellKey(golemCell) === key && (
+                                <span className="flex size-5 items-center justify-center rounded-full bg-black text-[10px] font-bold text-white dark:bg-white dark:text-black">
+                                    👺
+                                </span>
+                            )}
                             {(wandererByCell.get(key) ?? []).map((role) => (
                                 <span
                                     key={role}

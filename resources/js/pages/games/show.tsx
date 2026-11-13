@@ -2,6 +2,7 @@ import { Head, router } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { ActivityLog } from '@/components/game/activity-log';
+import { GolemPanel } from '@/components/game/golem-panel';
 import { HexBoard } from '@/components/game/hex-board';
 import { WandererRelicPanel } from '@/components/game/wanderer-relic-panel';
 import { Badge } from '@/components/ui/badge';
@@ -246,6 +247,9 @@ export default function GameShow({ game }: { game: GameSummary }) {
         if (myPendingRole) {
             highlightedCells = new Set(Object.keys(state.board));
             onCellClick = (cell) => submitMove(myPendingRole, { type: 'choose_starting_cell', cell });
+        } else if (state.pending_golem_placement && myRoles.includes('emperor')) {
+            highlightedCells = new Set(Object.keys(state.board));
+            onCellClick = (cell) => submitMove('emperor', { type: 'choose_golem_cell', cell });
         }
     } else if (state.phase === 'emperor' && myRoles.includes('emperor') && selectedLocationKey) {
         const location = locationCatalog[selectedLocationKey];
@@ -278,6 +282,7 @@ export default function GameShow({ game }: { game: GameSummary }) {
                         board={state.board}
                         locationCatalog={locationCatalog}
                         wanderers={state.wanderers}
+                        golemCell={state.golem.cell}
                         highlightedCells={highlightedCells}
                         onCellClick={onCellClick}
                     />
@@ -294,9 +299,19 @@ export default function GameShow({ game }: { game: GameSummary }) {
 
                     {state.phase === 'setup' && (
                         <div className="rounded-md border bg-card px-3 py-2 text-sm text-muted-foreground">
-                            Waiting for Wanderers to choose a starting space (
-                            {state.pending_setup_wanderers.length} left).
+                            {state.pending_setup_wanderers.length > 0
+                                ? `Waiting for Wanderers to choose a starting space (${state.pending_setup_wanderers.length} left).`
+                                : 'Waiting for the Emperor to place the Golem.'}
                         </div>
+                    )}
+
+                    {state.phase !== 'setup' && (
+                        <GolemPanel
+                            golem={state.golem}
+                            golemCardCatalog={game.golem_card_catalog}
+                            glyphCatalog={game.glyph_catalog}
+                            golemCardsThisRound={state.golem_cards_this_round}
+                        />
                     )}
 
                     {state.phase === 'emperor' && myRoles.includes('emperor') && (
@@ -418,6 +433,9 @@ export default function GameShow({ game }: { game: GameSummary }) {
                         )}
                         relicNames={Object.fromEntries(
                             Object.entries(game.relic_catalog).map(([k, v]) => [k, v.name]),
+                        )}
+                        glyphNames={Object.fromEntries(
+                            Object.entries(game.glyph_catalog).map(([k, v]) => [k, v.name]),
                         )}
                     />
 

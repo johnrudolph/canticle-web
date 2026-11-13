@@ -2,6 +2,8 @@
 
 namespace App\Game;
 
+use App\Game\Catalog\GlyphCatalog;
+use App\Game\Catalog\GolemCardCatalog;
 use App\Game\Catalog\LocationCatalog;
 use App\Game\Catalog\RelicCatalog;
 
@@ -10,15 +12,22 @@ use App\Game\Catalog\RelicCatalog;
  * events). Never touches the database — GameStateRepository and EventLog
  * handle persistence, the controller handles auth.
  *
- * Phase A+B scope: setup (choose starting cell), Emperor phase (play a
- * Location — dealing its Relics automatically — discard, redraw), Wanderer
- * phase (move, search, equip/drop/pickup Relics). The Golem phase is a
- * deliberate no-op pass-through — see endRound(). Relic *effects* are not
- * executed, only dealing/searching/equipping them.
+ * Phase A+B+C scope: setup (choose starting cells for Wanderers and the
+ * Golem), Emperor phase (play a Location — dealing its Relics automatically
+ * — discard, redraw), Wanderer phase (move, search, equip/drop/pickup
+ * Relics), and a Golem phase that actually resolves cards — see
+ * resolveGolemCard() for exactly which of the 29 cards have real behavior
+ * vs. are logged-but-not-executed. Relic *effects* are never executed,
+ * only dealing/searching/equipping them. Infrastructure and scoring aren't
+ * modeled yet.
  */
 final class GameEngine
 {
     private const ROUND_LIMIT = 8;
+
+    private const GOLEM_REVEALED_SIZE = 3;
+
+    private const GOLEM_MAX_GLYPHS = 4;
 
     /**
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
@@ -27,6 +36,7 @@ final class GameEngine
     {
         return match ($move['type'] ?? null) {
             'choose_starting_cell' => self::chooseStartingCell($state, $actorRole, $move),
+            'choose_golem_cell' => self::chooseGolemCell($state, $actorRole, $move),
             'play_location' => self::playLocation($state, $actorRole, $move),
             'end_emperor_phase' => self::endEmperorPhase($state, $actorRole, $move),
             'move_wanderer' => self::moveWanderer($state, $actorRole, $move),
@@ -59,22 +69,68 @@ final class GameEngine
         $wanderers = $state->wanderersWith($actorRole, ['cell' => $cell]);
         $pending = array_values(array_diff($state->pendingSetupWanderers, [$actorRole]));
 
+        $state = $state->with(['wanderers' => $wanderers, 'pendingSetupWanderers' => $pending]);
+
         $events = [
             ['type' => 'wanderer_started', 'role_key' => $actorRole, 'payload' => ['cell' => $cell]],
         ];
 
-        if ($pending === []) {
-            $state = $state->with([
-                'wanderers' => $wanderers,
-                'pendingSetupWanderers' => $pending,
-                'phase' => 'emperor',
-            ]);
-            $events[] = ['type' => 'round_started', 'role_key' => null, 'payload' => ['round' => $state->round]];
+        [$state, $finishEvents] = self::maybeFinishSetup($state);
 
-            return [$state, $events];
+        return [$state, [...$events, ...$finishEvents]];
+    }
+
+    /**
+     * The Emperor also places the Golem anywhere on setup — rules.md:
+     * "The Emperor places the Golem on any space."
+     */
+    private static function chooseGolemCell(GameState $state, string $actorRole, array $move): array
+    {
+        if ($state->phase !== 'setup') {
+            throw new InvalidMoveException('Setup is already finished.');
         }
 
-        return [$state->with(['wanderers' => $wanderers, 'pendingSetupWanderers' => $pending]), $events];
+        if ($actorRole !== RoleKeys::EMPEROR) {
+            throw new InvalidMoveException('Only the Emperor places the Golem.');
+        }
+
+        if (! $state->pendingGolemPlacement) {
+            throw new InvalidMoveException('The Golem has already been placed.');
+        }
+
+        $cell = self::requireCell($move, 'cell');
+        $cellKey = Board::key($cell);
+
+        if (! array_key_exists($cellKey, $state->board)) {
+            throw new InvalidMoveException('The Golem must start on a Location.');
+        }
+
+        $state = $state->with([
+            'golem' => $state->golemWith(['cell' => $cell]),
+            'pendingGolemPlacement' => false,
+        ]);
+
+        $events = [
+            ['type' => 'golem_placed', 'role_key' => $actorRole, 'payload' => ['cell' => $cell]],
+        ];
+
+        [$state, $finishEvents] = self::maybeFinishSetup($state);
+
+        return [$state, [...$events, ...$finishEvents]];
+    }
+
+    /**
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function maybeFinishSetup(GameState $state): array
+    {
+        if ($state->pendingSetupWanderers !== [] || $state->pendingGolemPlacement) {
+            return [$state, []];
+        }
+
+        $state = $state->with(['phase' => 'emperor']);
+
+        return [$state, [['type' => 'round_started', 'role_key' => null, 'payload' => ['round' => $state->round]]]];
     }
 
     private static function playLocation(GameState $state, string $actorRole, array $move): array
@@ -389,14 +445,15 @@ final class GameEngine
     }
 
     /**
-     * No Golem-phase combat yet — this just logs that it was skipped and
-     * advances the round, or finishes the game after round 8.
+     * Resolves the Golem phase (right to left, refilling the revealed row
+     * after each card — see Golem Mat), then advances the round or
+     * finishes the game after round 8.
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
     private static function endRound(GameState $state): array
     {
-        $events = [['type' => 'golem_phase_skipped', 'role_key' => null, 'payload' => ['round' => $state->round]]];
+        [$state, $events] = self::resolveGolemPhase($state);
 
         if ($state->round >= self::ROUND_LIMIT) {
             $state = $state->with(['phase' => 'finished', 'activeWandererIndex' => null]);
@@ -408,6 +465,455 @@ final class GameEngine
         $nextRound = $state->round + 1;
         $state = $state->with(['round' => $nextRound, 'phase' => 'emperor', 'activeWandererIndex' => null]);
         $events[] = ['type' => 'round_started', 'role_key' => null, 'payload' => ['round' => $nextRound]];
+
+        return [$state, $events];
+    }
+
+    /**
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function resolveGolemPhase(GameState $state): array
+    {
+        $events = [];
+        $toPlay = $state->golemCardsThisRound();
+
+        for ($i = 0; $i < $toPlay; $i++) {
+            $golem = $state->golem;
+
+            if ($golem['revealed'] === []) {
+                break; // deck + discard both exhausted — nothing left to resolve
+            }
+
+            $cardKey = array_pop($golem['revealed']);
+            $golem['discard_pile'][] = $cardKey;
+            $state = $state->with(['golem' => $golem]);
+
+            [$state, $cardEvents, $effects] = self::resolveGolemCard($state, $cardKey);
+            $events = [...$events, ...$cardEvents];
+
+            if ($effects['double_next'] && $i + 1 < $toPlay) {
+                // "Perform the next Golem card twice" — doubles the next
+                // physical card's effect without consuming an extra one of
+                // this round's N plays; the loop's own i++ still advances
+                // onto it normally afterward.
+                $golem = $state->golem;
+                if ($golem['revealed'] !== []) {
+                    $nextKey = $golem['revealed'][array_key_last($golem['revealed'])];
+                    [$state, $extraEvents] = self::resolveGolemCard($state, $nextKey);
+                    $events = [...$events, ...$extraEvents];
+                }
+            }
+
+            $toPlay += $effects['extra_cards'];
+
+            $state = self::refillGolemRevealed($state);
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Keeps the revealed row topped up to 3 after each resolution,
+     * reshuffling the discard pile back into the draw pile if it runs dry
+     * — same rule as the Location deck.
+     */
+    private static function refillGolemRevealed(GameState $state): GameState
+    {
+        $golem = $state->golem;
+
+        while (count($golem['revealed']) < self::GOLEM_REVEALED_SIZE) {
+            if ($golem['draw_pile'] === []) {
+                if ($golem['discard_pile'] === []) {
+                    break;
+                }
+
+                $golem['draw_pile'] = $golem['discard_pile'];
+                shuffle($golem['draw_pile']);
+                $golem['discard_pile'] = [];
+            }
+
+            $golem['revealed'][] = array_shift($golem['draw_pile']);
+        }
+
+        return $state->with(['golem' => $golem]);
+    }
+
+    /**
+     * Executes one Golem card. Only a hand-picked subset has real,
+     * mechanical behavior (movement/attack defaults, plus the named cases
+     * below) — every other card is logged with its full text so it's
+     * still visible to read and adjudicate by hand, but doesn't move
+     * anything.
+     *
+     * Simplification: when an attack would hit multiple Wanderers on one
+     * space, every one of them takes the damage, rather than pausing the
+     * phase for the Emperor to pick one (rules.md says the Emperor
+     * chooses) — there's no mid-phase interactive decision point built
+     * yet. Exhausted (0 HP) Wanderers are never targeted or damaged.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: array{double_next: bool, extra_cards: int}}
+     */
+    private static function resolveGolemCard(GameState $state, string $cardKey): array
+    {
+        $card = GolemCardCatalog::find($cardKey);
+        $baseKey = (string) preg_replace('/-\d+$/', '', $cardKey);
+        $effects = ['double_next' => false, 'extra_cards' => 0];
+
+        $events = [
+            ['type' => 'golem_card_resolved', 'role_key' => null, 'payload' => [
+                'card_key' => $cardKey, 'name' => $card?->name, 'action' => $card?->action,
+            ]],
+        ];
+
+        switch ($baseKey) {
+            case 'charge':
+                [$state, $e] = self::golemMoveTowardNearest($state, 2);
+                $events = [...$events, ...$e];
+                [$state, $e] = self::golemAttackHere($state, 3);
+                $events = [...$events, ...$e];
+                break;
+
+            case 'lurch':
+                [$state, $e] = self::golemMoveTowardNearest($state, 1);
+                $events = [...$events, ...$e];
+                [$state, $e] = self::golemAttackHere($state, 4);
+                $events = [...$events, ...$e];
+                break;
+
+            case 'pound':
+                [$state, $e] = self::golemMoveTowardNearest($state, 1);
+                $events = [...$events, ...$e];
+                [$state, $e] = self::golemAttackHere($state, 5);
+                $events = [...$events, ...$e];
+                break;
+
+            case 'deaths-door':
+                [$state, $e] = self::golemSetHpOnAndAdjacent($state, 1);
+                $events = [...$events, ...$e];
+                break;
+
+            case 'dissent':
+                [$state, $e] = self::golemDamageSharedCells($state, 3);
+                $events = [...$events, ...$e];
+                break;
+
+            case 'storm':
+                [$state, $e] = self::golemDamageAllWanderers($state, 2);
+                $events = [...$events, ...$e];
+                break;
+
+            case 'spew':
+                [$state, $e] = self::golemDamageWithinDistance($state, 2, 2);
+                $events = [...$events, ...$e];
+                break;
+
+            case 'stalk':
+                [$state, $e] = self::golemMoveToward($state, self::leastHpWanderer($state), 5);
+                $events = [...$events, ...$e];
+                break;
+
+            case 'pursue':
+                [$state, $e] = self::golemMoveToward($state, self::farthestWanderer($state), 5);
+                $events = [...$events, ...$e];
+                [$state, $e] = self::golemAttackHere($state, 2);
+                $events = [...$events, ...$e];
+                break;
+
+            case 'self-inscription':
+                [$state, $e] = self::addGlyphOfType($state, '👺');
+                $events = [...$events, ...$e];
+                break;
+
+            case 'penitence':
+                $state = $state->with(['golem' => $state->golemWith(['shame' => max(0, $state->golem['shame'] - 1)])]);
+                break;
+
+            case 'double-down':
+                $effects['double_next'] = true;
+                break;
+
+            case 'time-paradox':
+                $effects['extra_cards'] = 2;
+                break;
+        }
+
+        return [$state, $events, $effects];
+    }
+
+    /**
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemMoveTowardNearest(GameState $state, int $maxSteps): array
+    {
+        return self::golemMoveToward($state, self::nearestWanderer($state), $maxSteps);
+    }
+
+    /**
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemMoveToward(GameState $state, ?string $targetRole, int $maxSteps): array
+    {
+        $golemCell = $state->golem['cell'];
+
+        if ($targetRole === null || $golemCell === null) {
+            return [$state, []];
+        }
+
+        $path = Board::shortestPath($golemCell, $state->wanderers[$targetRole]['cell'], $state->board);
+
+        if ($path === null || $path === []) {
+            return [$state, []];
+        }
+
+        $steps = array_slice($path, 0, $maxSteps);
+        $destination = $steps[array_key_last($steps)];
+
+        $state = $state->with(['golem' => $state->golemWith(['cell' => $destination])]);
+
+        return [$state, [['type' => 'golem_moved', 'role_key' => null, 'payload' => ['to' => $destination]]]];
+    }
+
+    /**
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemAttackHere(GameState $state, int $damage): array
+    {
+        $golemCell = $state->golem['cell'];
+
+        if ($golemCell === null) {
+            return [$state, []];
+        }
+
+        return self::damageWanderersAt($state, [$golemCell], $damage);
+    }
+
+    /**
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemDamageWithinDistance(GameState $state, int $distance, int $damage): array
+    {
+        $golemCell = $state->golem['cell'];
+
+        if ($golemCell === null) {
+            return [$state, []];
+        }
+
+        $cells = Board::cellsWithinDistance($golemCell, $distance, $state->board);
+
+        return self::damageWanderersAt($state, $cells, $damage);
+    }
+
+    /**
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemDamageAllWanderers(GameState $state, int $damage): array
+    {
+        $events = [];
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            $state = self::applyDamage($state, $role, $damage);
+            $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => $damage]];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Dissent: each Wanderer sharing a space with another Wanderer loses
+     * Health.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemDamageSharedCells(GameState $state, int $damage): array
+    {
+        $byCell = [];
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            $byCell[Board::key($cell)][] = $role;
+        }
+
+        $events = [];
+        foreach ($byCell as $roles) {
+            if (count($roles) < 2) {
+                continue;
+            }
+
+            foreach ($roles as $role) {
+                $state = self::applyDamage($state, $role, $damage);
+                $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => $damage]];
+            }
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Death's Door: every Wanderer on or adjacent to the Golem's space
+     * goes to exactly the given HP.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemSetHpOnAndAdjacent(GameState $state, int $hp): array
+    {
+        $golemCell = $state->golem['cell'];
+
+        if ($golemCell === null) {
+            return [$state, []];
+        }
+
+        $affectedKeys = [
+            Board::key($golemCell),
+            ...array_map(Board::key(...), Board::occupiedNeighbors($golemCell, $state->board)),
+        ];
+
+        $events = [];
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            if (! in_array(Board::key($cell), $affectedKeys, true)) {
+                continue;
+            }
+
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
+            $events[] = ['type' => 'wanderer_hp_set', 'role_key' => $role, 'payload' => ['hp' => $hp]];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * @param  list<array{0: int, 1: int}>  $cells
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function damageWanderersAt(GameState $state, array $cells, int $damage): array
+    {
+        $cellKeys = array_map(Board::key(...), $cells);
+        $events = [];
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            if (! in_array(Board::key($cell), $cellKeys, true)) {
+                continue;
+            }
+
+            $state = self::applyDamage($state, $role, $damage);
+            $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => $damage]];
+        }
+
+        return [$state, $events];
+    }
+
+    private static function applyDamage(GameState $state, string $role, int $damage): GameState
+    {
+        $hp = max(0, $state->wanderers[$role]['hp'] - $damage);
+
+        return $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
+    }
+
+    /**
+     * @return array<string, array{0: int, 1: int}> active (non-exhausted) Wanderers' cells, keyed by role
+     */
+    private static function activeWanderers(GameState $state): array
+    {
+        $result = [];
+
+        foreach ($state->wanderers as $role => $wanderer) {
+            if ($wanderer['cell'] !== null && $wanderer['hp'] > 0) {
+                $result[$role] = $wanderer['cell'];
+            }
+        }
+
+        return $result;
+    }
+
+    private static function nearestWanderer(GameState $state): ?string
+    {
+        return self::extremeWanderer($state, fn (int $a, int $b) => $a < $b);
+    }
+
+    private static function farthestWanderer(GameState $state): ?string
+    {
+        return self::extremeWanderer($state, fn (int $a, int $b) => $a > $b);
+    }
+
+    private static function extremeWanderer(GameState $state, \Closure $isBetter): ?string
+    {
+        $golemCell = $state->golem['cell'];
+
+        if ($golemCell === null) {
+            return null;
+        }
+
+        $best = null;
+        $bestDistance = null;
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            $distance = Board::distance($golemCell, $cell, $state->board);
+
+            if ($distance === null) {
+                continue;
+            }
+
+            if ($bestDistance === null || $isBetter($distance, $bestDistance)) {
+                $best = $role;
+                $bestDistance = $distance;
+            }
+        }
+
+        return $best;
+    }
+
+    private static function leastHpWanderer(GameState $state): ?string
+    {
+        $best = null;
+        $bestHp = null;
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            $hp = $state->wanderers[$role]['hp'];
+
+            if ($bestHp === null || $hp < $bestHp) {
+                $best = $role;
+                $bestHp = $hp;
+            }
+        }
+
+        return $best;
+    }
+
+    /**
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function addGlyphOfType(GameState $state, string $type): array
+    {
+        $deck = $state->glyphDeck;
+        $index = null;
+
+        foreach ($deck as $i => $glyphKey) {
+            if (GlyphCatalog::find($glyphKey)?->type === $type) {
+                $index = $i;
+                break;
+            }
+        }
+
+        if ($index === null) {
+            return [$state, []];
+        }
+
+        $glyphKey = $deck[$index];
+        unset($deck[$index]);
+        $deck = array_values($deck);
+
+        $glyphs = $state->golem['glyphs'];
+        array_unshift($glyphs, $glyphKey);
+        $discardedGlyph = null;
+
+        if (count($glyphs) > self::GOLEM_MAX_GLYPHS) {
+            $discardedGlyph = array_pop($glyphs);
+        }
+
+        $state = $state->with(['golem' => $state->golemWith(['glyphs' => $glyphs]), 'glyphDeck' => $deck]);
+
+        $events = [['type' => 'glyph_added', 'role_key' => null, 'payload' => ['glyph_key' => $glyphKey]]];
+
+        if ($discardedGlyph !== null) {
+            $events[] = ['type' => 'glyph_discarded', 'role_key' => null, 'payload' => ['glyph_key' => $discardedGlyph]];
+        }
 
         return [$state, $events];
     }

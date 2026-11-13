@@ -2,6 +2,8 @@
 
 namespace App\Game;
 
+use App\Game\Catalog\GlyphCatalog;
+use App\Game\Catalog\GolemCardCatalog;
 use App\Game\Catalog\LocationCatalog;
 use App\Game\Catalog\RelicCatalog;
 
@@ -15,6 +17,8 @@ final class GameSetup
     private const STARTING_HP = 15;
 
     private const EQUIP_SLOTS = ['body', 'mind', 'hand_left', 'hand_right', 'bag'];
+
+    private const GOLEM_REVEALED_SIZE = 3;
 
     public static function create(int $wandererCount): GameState
     {
@@ -52,6 +56,13 @@ final class GameSetup
             ];
         }
 
+        $golemDeck = array_keys(GolemCardCatalog::all());
+        shuffle($golemDeck);
+        $revealed = array_splice($golemDeck, 0, self::GOLEM_REVEALED_SIZE);
+
+        $glyphDeck = array_keys(GlyphCatalog::all());
+        shuffle($glyphDeck);
+
         return new GameState(
             wandererCount: $wandererCount,
             round: 1,
@@ -62,7 +73,17 @@ final class GameSetup
             locationDiscard: [],
             relicDecks: $relicDecks,
             wanderers: $wanderers,
+            golem: [
+                'cell' => null,
+                'shame' => 0,
+                'glyphs' => [],
+                'draw_pile' => array_values($golemDeck),
+                'revealed' => array_values($revealed),
+                'discard_pile' => [],
+            ],
+            glyphDeck: array_values($glyphDeck),
             pendingSetupWanderers: $wandererRoles,
+            pendingGolemPlacement: true,
         );
     }
 

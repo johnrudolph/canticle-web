@@ -23,6 +23,14 @@ export interface WandererState {
     holding: string[];
 }
 
+export interface GolemState {
+    cell: [number, number] | null;
+    shame: number;
+    glyphs: string[];
+    revealed: string[];
+    draw_pile_count: number;
+}
+
 export interface GameStateDto {
     wanderer_count: number;
     round: number;
@@ -32,10 +40,13 @@ export interface GameStateDto {
     location_hand: string[];
     location_discard: string[];
     wanderers: Record<string, WandererState>;
+    golem: GolemState;
     pending_setup_wanderers: RoleKey[];
+    pending_golem_placement: boolean;
     wanderer_order: RoleKey[];
     active_wanderer_role: RoleKey | null;
     actions_per_wanderer_turn: number;
+    golem_cards_this_round: number;
 }
 
 export interface LocationCatalogEntry {
@@ -52,6 +63,17 @@ export interface RelicCatalogEntry {
     slot: 'Body' | 'Mind' | 'Hand' | 'Bag' | '';
     slot_emoji: string;
     symbol: string;
+}
+
+export interface GolemCardCatalogEntry {
+    name: string;
+    action: string;
+}
+
+export interface GlyphCatalogEntry {
+    name: string;
+    type: string;
+    description: string;
 }
 
 export interface GameLogEntry {
@@ -74,6 +96,8 @@ export interface GameSummary {
     state: GameStateDto | null;
     location_catalog: Record<string, LocationCatalogEntry>;
     relic_catalog: Record<string, RelicCatalogEntry>;
+    golem_card_catalog: Record<string, GolemCardCatalogEntry>;
+    glyph_catalog: Record<string, GlyphCatalogEntry>;
     events: GameLogEntry[];
 }
 
@@ -87,5 +111,7 @@ export interface GamePollResponse {
     state: GameStateDto | null;
     location_catalog: Record<string, LocationCatalogEntry>;
     relic_catalog: Record<string, RelicCatalogEntry>;
+    golem_card_catalog: Record<string, GolemCardCatalogEntry>;
+    glyph_catalog: Record<string, GlyphCatalogEntry>;
     events: GameLogEntry[];
 }

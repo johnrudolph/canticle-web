@@ -11,12 +11,15 @@ function describe(
     event: GameLogEntry,
     locationNames: Record<string, string>,
     relicNames: Record<string, string>,
+    glyphNames: Record<string, string>,
 ): string {
     const role = roleLabel(event.role_key);
 
     switch (event.type) {
         case 'wanderer_started':
             return `${role} started on the board.`;
+        case 'golem_placed':
+            return `The Golem was placed on the board.`;
         case 'round_started':
             return `Round ${event.payload.round} started.`;
         case 'location_played': {
@@ -43,8 +46,18 @@ function describe(
             return `${role} dropped ${relicNames[event.payload.relic_key as string] ?? event.payload.relic_key}.`;
         case 'relic_picked_up':
             return `${role} picked up ${relicNames[event.payload.relic_key as string] ?? event.payload.relic_key}.`;
-        case 'golem_phase_skipped':
-            return `Golem phase skipped (not yet implemented).`;
+        case 'golem_card_resolved':
+            return `Golem plays ${(event.payload.name as string) ?? event.payload.card_key}.`;
+        case 'golem_moved':
+            return `The Golem moves.`;
+        case 'wanderer_damaged':
+            return `${role} loses ${event.payload.amount} Health.`;
+        case 'wanderer_hp_set':
+            return `${role}'s Health is set to ${event.payload.hp}.`;
+        case 'glyph_added':
+            return `A Glyph is added to the Golem's mat: ${glyphNames[event.payload.glyph_key as string] ?? event.payload.glyph_key}.`;
+        case 'glyph_discarded':
+            return `A Glyph falls off the Golem's mat: ${glyphNames[event.payload.glyph_key as string] ?? event.payload.glyph_key}.`;
         case 'game_finished':
             return `The game has ended.`;
         default:
@@ -56,10 +69,12 @@ export function ActivityLog({
     events,
     locationNames,
     relicNames,
+    glyphNames,
 }: {
     events: GameLogEntry[];
     locationNames: Record<string, string>;
     relicNames: Record<string, string>;
+    glyphNames: Record<string, string>;
 }) {
     return (
         <div className="flex max-h-48 flex-col-reverse overflow-y-auto rounded-md border bg-card p-2 text-xs">
@@ -69,7 +84,7 @@ export function ActivityLog({
                 )}
                 {events.map((event) => (
                     <p key={event.id} className="text-muted-foreground">
-                        {describe(event, locationNames, relicNames)}
+                        {describe(event, locationNames, relicNames, glyphNames)}
                     </p>
                 ))}
             </div>

@@ -151,4 +151,95 @@ final class Board
 
         return array_values($candidates);
     }
+
+    /**
+     * BFS shortest path (in hops) from $from to $to, walking only over
+     * occupied cells (the Golem, like Wanderers, only ever stands on a
+     * built Location). Null if unreachable.
+     *
+     * @param  array<string, mixed>  $occupied  keyed by cell key
+     */
+    public static function distance(array $from, array $to, array $occupied): ?int
+    {
+        $path = self::shortestPath($from, $to, $occupied);
+
+        return $path === null ? null : count($path);
+    }
+
+    /**
+     * The sequence of cells from (but not including) $from to $to along a
+     * shortest path over occupied cells, or null if unreachable. Used to
+     * step the Golem N spaces toward a target.
+     *
+     * @param  array<string, mixed>  $occupied  keyed by cell key
+     * @return list<array{0: int, 1: int}>|null
+     */
+    public static function shortestPath(array $from, array $to, array $occupied): ?array
+    {
+        if (self::key($from) === self::key($to)) {
+            return [];
+        }
+
+        $visited = [self::key($from) => true];
+        $queue = [[self::key($from), []]];
+
+        while ($queue !== []) {
+            [$currentKey, $path] = array_shift($queue);
+
+            foreach (self::occupiedNeighbors(self::fromKey($currentKey), $occupied) as $neighbor) {
+                $neighborKey = self::key($neighbor);
+
+                if (isset($visited[$neighborKey])) {
+                    continue;
+                }
+
+                $newPath = [...$path, $neighbor];
+
+                if ($neighborKey === self::key($to)) {
+                    return $newPath;
+                }
+
+                $visited[$neighborKey] = true;
+                $queue[] = [$neighborKey, $newPath];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Every occupied cell reachable within $maxDistance hops of $center
+     * (BFS over occupied cells), including $center itself.
+     *
+     * @param  array<string, mixed>  $occupied  keyed by cell key
+     * @return list<array{0: int, 1: int}>
+     */
+    public static function cellsWithinDistance(array $center, int $maxDistance, array $occupied): array
+    {
+        $result = [$center];
+        $visited = [self::key($center) => true];
+        $frontier = [$center];
+
+        for ($i = 0; $i < $maxDistance; $i++) {
+            $next = [];
+
+            foreach ($frontier as $cell) {
+                foreach (self::occupiedNeighbors($cell, $occupied) as $neighbor) {
+                    $neighborKey = self::key($neighbor);
+
+                    if (isset($visited[$neighborKey])) {
+                        continue;
+                    }
+
+                    $visited[$neighborKey] = true;
+                    $result[] = $neighbor;
+                    $next[] = $neighbor;
+                }
+            }
+
+            $frontier = $next;
+        }
+
+        return $result;
+    }
 }

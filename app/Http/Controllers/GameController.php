@@ -2,6 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Game\Catalog\Glyph;
+use App\Game\Catalog\GlyphCatalog;
+use App\Game\Catalog\GolemCard;
+use App\Game\Catalog\GolemCardCatalog;
 use App\Game\Catalog\Location;
 use App\Game\Catalog\LocationCatalog;
 use App\Game\Catalog\Relic;
@@ -104,6 +108,8 @@ class GameController extends Controller
                 : null,
             'location_catalog' => $this->locationCatalog(),
             'relic_catalog' => $this->relicCatalog(),
+            'golem_card_catalog' => $this->golemCardCatalog(),
+            'glyph_catalog' => $this->glyphCatalog(),
             'events' => $this->eventLog($game),
         ];
     }
@@ -137,6 +143,26 @@ class GameController extends Controller
                 'slot_emoji' => $relic->slotEmoji,
                 'symbol' => $relic->symbol,
             ])
+            ->all();
+    }
+
+    /**
+     * @return array<string, array{name: string, action: string}>
+     */
+    private function golemCardCatalog(): array
+    {
+        return collect(GolemCardCatalog::all())
+            ->map(fn (GolemCard $card) => ['name' => $card->name, 'action' => $card->action])
+            ->all();
+    }
+
+    /**
+     * @return array<string, array{name: string, type: string, description: string}>
+     */
+    private function glyphCatalog(): array
+    {
+        return collect(GlyphCatalog::all())
+            ->map(fn (Glyph $glyph) => ['name' => $glyph->name, 'type' => $glyph->type, 'description' => $glyph->description])
             ->all();
     }
 
