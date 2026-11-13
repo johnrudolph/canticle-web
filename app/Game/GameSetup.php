@@ -9,9 +9,7 @@ use App\Game\Catalog\RelicCatalog;
 
 final class GameSetup
 {
-    // rules.md setup: "The Emperor draws 5 locations" — the first
-    // "draw back up to 6" doesn't happen until the end of round 1's
-    // Emperor phase, so the starting hand is 5, not 6.
+    // Matches GameEngine::EMPEROR_HAND_SIZE — the hand is always 5.
     private const STARTING_HAND_SIZE = 5;
 
     private const STARTING_HP = 15;
@@ -33,7 +31,7 @@ final class GameSetup
         $board = [];
         foreach ($startingCells as $i => $cell) {
             $location = LocationCatalog::find($startingKeys[$i]);
-            [$relics, $relicDecks] = RelicDealer::deal($relicDecks, $location);
+            [$relics, $relicDecks] = RelicDealer::dealForLocation($relicDecks, $location, $board);
 
             $board[Board::key($cell)] = [
                 'location_key' => $startingKeys[$i],

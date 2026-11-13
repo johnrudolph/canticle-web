@@ -28,6 +28,10 @@ final class GameEngine
 
     private const GOLEM_MAX_GLYPHS = 4;
 
+    // rules.md's Emperor phase step 5 — also the starting hand size
+    // (GameSetup), so the hand is always exactly 5 between turns.
+    private const EMPEROR_HAND_SIZE = 5;
+
     /**
      * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
@@ -178,7 +182,7 @@ final class GameEngine
             }
         }
 
-        [$relics, $relicDecks] = RelicDealer::deal($state->relicDecks, $location);
+        [$relics, $relicDecks] = RelicDealer::dealForLocation($state->relicDecks, $location, $state->board);
 
         $hand = array_values(array_diff($state->locationHand, [$locationKey]));
         $board = $state->boardWith($cellKey, [
@@ -732,10 +736,11 @@ final class GameEngine
     }
 
     /**
-     * Covers Emperor-phase steps 4 (discard) and 5 (draw back to 6) in one
-     * action, then hands off to the Wanderer phase. Infrastructure (step
-     * 3) isn't modeled yet; Relic dealing (step 2) happens automatically
-     * in playLocation() rather than as a separate step here.
+     * Covers Emperor-phase steps 4 (discard) and 5 (draw back to 5) in one
+     * action, then hands off to the Wanderer phase. Relic dealing (step 2)
+     * happens automatically in playLocation() rather than as a separate
+     * step here; Infrastructure (step 3) is its own place_infrastructure
+     * move, not gated by ending the phase.
      *
      * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
@@ -749,7 +754,7 @@ final class GameEngine
         $discardPile = [...$state->locationDiscard, ...$discard];
         $deck = $state->locationDeck;
 
-        $needed = 6 - count($hand);
+        $needed = self::EMPEROR_HAND_SIZE - count($hand);
         if ($needed > 0 && count($deck) < $needed && $discardPile !== []) {
             shuffle($discardPile);
             $deck = [...$deck, ...$discardPile];

@@ -7,74 +7,14 @@ they're resolved and fold the resolution into my own understanding instead
 
 ## Open
 
-1. **Road resource-network rule is missing from `rules.md` entirely.**
-   Confirmed via chat (2026-11-12): a space with a Road "produces" every
-   resource produced anywhere along its connected Road network, not just
-   its own printed resource. This needs to be written into the Infrastructure
-   section — right now `rules.md` only says Roads let Wanderers move through
-   for free, nothing about resource-sharing for Location build requirements.
-
-2. **No win/loss thresholds anywhere in `rules.md`'s Game End section.**
-   Confirmed via chat: 12 Prophecy = simple victory, 16 Prophecy = elite
-   victory. When a Golem-pilot is in play, Wanderers/Emperor lose if they
-   fail to reach 12 Prophecy by the end of round 8. None of this is written
-   down — "count your prophesy" is all the current text says.
-
-3. **Golem tie-breaking on 🦶 pathing isn't explicit.** Confirmed via chat:
-   when two Wanderers are equidistant for "shortest path to nearest
-   Wanderer," it's the Emperor's call — same as the 👊 multi-target rule.
-   The existing "if still ambiguous, the Emperor chooses" catch-all is right
-   next to the 👊 bullet, not the 🦶 one, so it reads like it might only
-   apply to attacks. Worth an explicit callout on the movement rule too.
-
-4. **How do Infrastructure tokens enter the Emperor's pool?** Still open —
-   wasn't covered in the chat answers. The Emperor Mat says "Play 2
-   Infrastructure tokens if you have any in your pool," implying some other
-   step adds tokens to it (Location "fixture outlines" is my best guess),
-   but nothing confirms the mechanism or quantities, and `locations.json`
-   only has a binary `has_shard` flag, not counts or which of the 4
-   Infrastructure types a given Location grants.
-
-5. **"Canals" and "Bridges" vs. the 4 real Infrastructure types.** Still
-   open. `rules.md`'s Components section lists "Monolith Shards, Canals,
-   and Bridges" as fixture examples, but the only real Infrastructure types
-   anywhere (Emperor Mat, card data) are Monolith Shard, Road, Walls, Fruit
-   tree. Is "Canals and Bridges" just stale wording that should say "Roads,"
-   or are those a real, undocumented fixture type?
-
-6. **What makes a Golem card "tapped"?** Still open. The Golem Mat explains
-   what happens *when* a card is tapped (skip resolution, discard
-   face-up), but nothing explains what causes a card to become tapped in
-   the first place.
-
-7. **Draw-back-up discrepancy.** Still open. `rules.md` step 5 of the
-   Emperor phase says "draw back up to 5," the Emperor Mat image says
-   "Draw back up to 6." One of these needs to change.
-
-8. **Shame/Scar token placement — whose choice?** Still open. Worded on the
-   Wanderer's own mat ("placed in a Relic slot of your choice"), so my
-   working assumption is the affected Wanderer picks which of their own
-   slots gets blocked, not the Emperor/Golem-pilot imposing it — but this
-   wasn't explicitly confirmed, flagging in case that's wrong.
-
-9. **Bound Relic exception has no resolution.** Still open. A found Bound
-   Relic "must equip after discovering, unless this slot is Scarred, or
-   already has a Bound Relic" — if an exception applies, what happens to
-   the Relic instead (trashed? held unequipped)?
-
-10. **Is equipping a Relic action-gated?** Built Phase B assuming "you may
-    immediately equip Relics on this mat" is a free, always-available
-    action (like drop/pickup), separate from the costed 🔎 search that
-    finds it — but unlike drop/pickup, rules.md never says "at any time"
-    for equipping specifically. If equipping is meant to cost an action
-    too, or can only happen on your own turn, let me know and I'll gate it
-    the same way search_location is gated.
-
-11. **"1 of each type already produced by the city" (Bazaar) isn't a
-    number.** Most Locations' Relic count is a plain integer ("6 🎨"), but
-    Bazaar's is a dynamic rule tied to city state. Not modeled yet —
-    currently just deals 0 Relics there. Low priority, flagging so it
-    doesn't look like a silent data bug later.
+1. **Golem card tapping needs real engine support.** Confirmed via chat
+   (2026-11-13): "tapped" means flipped face-down; when resolution reaches
+   a tapped card it does nothing and gets discarded. What's still an
+   engine task (not a rules question anymore): several Relics tap cards
+   in the Golem's draw pile directly (Blinding explosion, Whip of
+   Justice, Defanging tool, Golem log, Silent hunting cloak, Peacemaker's
+   spirit, Soothing Lullaby) — the draw pile currently has no per-card
+   tapped state to flip.
 
 ## Resolved (for my own reference, not standing asks)
 
@@ -95,9 +35,8 @@ they're resolved and fold the resolution into my own understanding instead
   never move once placed. No explicit max board size, but implicitly capped
   at 6 starting + 8 (one per round) = 14 total.
 - Location cost requirements: a single neighboring space can satisfy
-  multiple cost symbols at once (moot for most Locations today since none
-  currently produce multiple resources, but relevant once Road networks are
-  involved).
+  multiple cost symbols at once. Roads connect production across their
+  whole connected network (now in rules.md's Infrastructure section).
 - `print: false` in the synced sheets is irrelevant to gameplay (an
   artifact of the designer's Figma plugin) — treat every record as live.
 - UI should prefer resource/branch emoji over string names wherever
@@ -110,9 +49,25 @@ they're resolved and fold the resolution into my own understanding instead
 - Golem info modal needs: upcoming (revealed) Golem cards + active Glyphs.
   Discard pile not needed.
 - Turn gating: almost everything requires it being your role's turn, with
-  one explicit exception — dropping/picking up a Relic on your own space is
-  always available to any Wanderer, any time, turn or not (this is how
-  Relics get handed off between Wanderers for free).
+  explicit exceptions — dropping/picking up a Relic, and now equipping one
+  too, are always available to any Wanderer, any time, turn or not.
 - Each player gets their own focused/private UI view, but needs an activity
   log / step-by-step replay of what other players and the Golem did on
   their turns (mirrors beast-master-web's event log + spotlight pattern).
+- Infrastructure pool is an intentionally fixed supply, never replenished —
+  confirmed via chat, not a simplification. Starts at the full physical
+  component count (12/10/2/2) and that's it for the whole game.
+- Win/loss thresholds, Golem tie-breaking (🦶 pathing = Emperor's call),
+  and the Road resource-network rule are all now written into rules.md
+  directly.
+- Draw-back-up is to 5 (rules.md's number is the source of truth; the
+  Emperor Mat image saying 6 was stale).
+- Shame/Scar token placement: the affected Wanderer chooses which of their
+  own slots gets blocked in normal (cooperative) play. In adversary mode
+  (a human Golem-pilot), the Golem-pilot chooses instead.
+- A Bound Relic that can't be forced into its slot (Scarred, or already
+  holding a Bound Relic) is dropped face-up on the Location, same as any
+  other found-but-unequipped Relic. Longer-term UX idea from this
+  conversation, not yet built: a "here's what you found, here's where it
+  could go, keep or drop?" prompt at the moment of discovery rather than
+  leaving it to sit in `holding` indefinitely.

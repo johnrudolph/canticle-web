@@ -16,7 +16,7 @@ Locations comprise the map of Canticle. The game begins with 6 random Locations 
 - Rule: a special new rule that permanently affects gameplay.
 - Resource Production: what the Location produces for the city
 - Resource Requirement: what resources must already be produced by other adjacent Locations in the city in order to construct this.
-- Fixture outlines: these instruct the Emperor to place fixtures such as Monolith Shards, Canals, and Bridges.
+- Fixture outlines: these instruct the Emperor to place fixtures such as Monolith Shards.
 - Relics: this tells you which type of relic to place there when you build this location, and how many of each.
 #### Wanderer pawns
 These represent the Wanderers. Each Wanderer has one.
@@ -53,8 +53,7 @@ Canticle is an asymmetrical game with an Emperor and Wanderers. The minimum numb
 2. Give each Wanderer a Wanderer Mat. Place a Health Tracker at the highest number of your health tracker.
 3. Set all relic decks, separated by type, facedown near the Emperor. Shuffle each.
 4. The Emperor shuffles all locations, finds the first 6 starter locations, and places them in the configuration shown below. Shuffle the rest of the location cards to form the location deck near the emperor. The emperor draws 5 locations. For each location, draw the number of relics from the corresponding pile and place those relics facedown on the locations.
-
-![[Screenshot 2026-11-12 at 5.46.39 PM.png]]
+5. Place the Emperor's mat in front of the emperor and place all infrastructure tokens on their mat. 
 
 4. The Emperor places the Golem on any space. Each Wanderer places their wanderer token on any space. 
 
@@ -78,7 +77,7 @@ Each turn you play 2 tokens on the mat. The rules of each are as follows:
 
 - Monolith Shard (12): There can only be 1 Shard per space. These have no intrinsic effect, but many magical Relics interact with Shards.
 - Fruit tree (2): When Wanderers enter this space, they gain 1 action that they must use on this turn.
-- Road (10): When Wanderers move into a space that contains a Road, they can continue into an adjacent space for free.
+- Road (10): When Wanderers move into a space that contains a Road, they can continue into an adjacent space for free. A space that contains roads produces the symbols of all other spaces with roads that connect to that spaces. Example: Spaces A, B, and C are contiguous and all contain roads. Space C proudces 🐾, and so thus all 3 spaces produce 🐾.
 - Walls (2): The Golem cannot enter spaces with Walls.  When placing Walls:  
 	1. You cannot place it on the Golem’s space
 	2. You cannot trap the Golem. The Golem must be able to reach all Locations that do not have Walls.
@@ -102,7 +101,7 @@ Relic rules:
   
 - If you discover an Event, resolve immediately and trash.
 - You may immediately equip Relics on this mat. It must go in a slot that matches its type (🖐️, 🧠, etc.). If you already have a Relic in that slot, you may drop it.
-- You may pick up and drop Relics in your space at any time. This does not cost an action. This means if an ally is on your space, you can give them a Relic on their turn at no cost.
+- You may pick up face-up Relics and drop Relics in your space at any time (even if it is not your turn). This does not cost an action. This means if an ally is on your space, you can give them a Relic on their turn at no cost.
 - Dropping a relic leaves it face-up on your current space.
   
 Using your basic 🦶 action, you move 1 space to any adjacent Location (Wanderers must always be on a Location). But many 🦵 Relics allow you to travel extra spaces when you move. If you move multiple spaces, you cannot stop midway to perform actions.
@@ -122,14 +121,24 @@ Shame has no intrinsic value, but interacts with many Relics and Locations.
   
 Resolve from right to left. The number you play is dictated by the current Round number, on the Emperor’s mat. Resolve each card immediately as it is drawn. If the card is tapped (face-down) do not resolve it, and discard face-up as with any other card. If the Draw Pile is empty, shuffle the Discard pile. If the card is a Glyph, it is added to the Glyph section below. If full, you must remove one.
 
+Various cards will "tap" a queued Golem card. This means it is face-down. When you resolve a face-down Golem card, it has no effect.
+
 Other rules:  
 
 - If you ever draw an action the Golem is not able to take, ignore it. For example, if the card says to enter a space the Golem cannot enter.
-- 🦶 should always take the shortest path to the nearest Wanderer. Ignore if already on a space with a Wanderer.
+- 🦶 should always take the shortest path to the nearest Wanderer. If multiple Wanderers are the same distance, the Emperor chooses. Ignore if already on a space with a Wanderer.
 - 🌿 remove one Golem Modifier. The Emperor chooses, without any discussion.
 - 👊 attacks Wanderers in the Golem’s space. Unless otherwise stated, it attacks 1 Wanderer. If there are multiple Wanderers who can be targeted, the Emperor chooses.
 - If there is ever ambiguity about which Wanderer is targeted, the rules on the Golem cards and Modifiers always take precedence. If still ambiguous, the Emperor chooses.
 
 # Game end
-At the end of the 8th round, count your prophesy.
+At the end of the 8th round, count your prophesy. If you reach 12 prophesy, you win. If you reach 16 prophesy you have an elite victory.
 
+# Adversary mode
+If you have 3 or more players, one of you may play as the Goelm, against the rest of the players. The game plays essentially the same, with a few key rules changes: 
+
+1. On the Golem's turn, the adversary player picks up all the cards the Golem will play, and chooses which order they are played.
+2. Any time the Golem moves or attacks they decide where it goes and whom it attacks.
+3. If the Golem gives a Wanderer a Scar, the adversary decides which slot is scarred.
+
+At the end of the game, the adversary wins if they Wanderers have not reached 12 prophecy.

@@ -106,7 +106,10 @@ test('playing a Location enforces its adjacency resource cost', function () {
 
 test('a successfully played Location deals its Relic pile and leaves the Emperor hand', function () {
     $state = startedGame();
-    $costFree = collect(LocationCatalog::all())->first(fn ($l) => $l->costs === []);
+    // Bazaar has its own dynamic dealing (tested separately) and would
+    // make this assertion flaky, since its printed relicCount (parsed
+    // from "1 of each type...") doesn't reflect what it actually deals.
+    $costFree = collect(LocationCatalog::all())->first(fn ($l) => $l->costs === [] && $l->key !== 'bazaar');
     $state = $state->with(['locationHand' => [$costFree->key]]);
 
     $cell = Board::placeableCells($state->board)[0];
@@ -122,6 +125,26 @@ test('a successfully played Location deals its Relic pile and leaves the Emperor
         ->and($events[0]['type'])->toBe('location_played');
 });
 
+test('Bazaar deals 1 Relic per distinct branch already produced by the city, not its printed count', function () {
+    $state = startedGame();
+    $state = $state->with(['locationHand' => ['bazaar']]);
+
+    $producedBranches = collect($state->board)
+        ->map(fn ($entry) => LocationCatalog::find($entry['location_key'])->producesEmoji)
+        ->filter()
+        ->unique();
+
+    $cell = Board::placeableCells($state->board)[0];
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'play_location', 'location_key' => 'bazaar', 'cell' => $cell]);
+
+    $dealt = $state->board[Board::key($cell)]['relics'];
+
+    expect(count($dealt))->toBeLessThanOrEqual($producedBranches->count());
+    foreach ($dealt as $relicKey) {
+        expect(RelicCatalog::find($relicKey)->symbol)->toBeIn($producedBranches->all());
+    }
+});
+
 test('only the Emperor may play a Location, and only during the emperor phase', function () {
     $state = startedGame();
     $key = $state->locationHand[0];
@@ -130,13 +153,13 @@ test('only the Emperor may play a Location, and only during the emperor phase', 
     GameEngine::apply($state, 'wanderer_a', ['type' => 'play_location', 'location_key' => $key, 'cell' => $cell]);
 })->throws(InvalidMoveException::class, "It isn't your turn.");
 
-test('ending the Emperor phase draws back up to 6 and starts the first Wanderer turn', function () {
+test('ending the Emperor phase draws back up to 5 and starts the first Wanderer turn', function () {
     $state = startedGame();
 
     [$state, $events] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
     expect($state->phase)->toBe('wanderer')
-        ->and($state->locationHand)->toHaveCount(6)
+        ->and($state->locationHand)->toHaveCount(5)
         ->and($state->activeWandererRole())->toBe('wanderer_a')
         ->and($state->wanderers['wanderer_a']['actions_remaining'])->toBe(3)
         ->and(collect($events)->pluck('type'))->toContain('wanderer_turn_started');

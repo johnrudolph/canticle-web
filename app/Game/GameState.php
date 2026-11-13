@@ -38,10 +38,10 @@ namespace App\Game;
  * ]
  *
  * infrastructurePool = ['monolith_shard' => int, 'road' => int, 'walls' => int, 'fruit_tree' => int]
- * — the Emperor's pool to place 2 from per turn. Simplification, flagged
- * in rules-todo.md: starts at the full physical component count (12/10/2/2)
- * and is never replenished, since how the pool is meant to refill from
- * Location "fixture outlines" is still an open rules question.
+ * — the Emperor's pool to place 2 from per turn. An intentionally fixed
+ * supply (confirmed with the designer): starts at the full physical
+ * component count (12/10/2/2) and is never replenished for the rest of
+ * the game.
  *
  * relicDecks[branchEmoji] = list<string> — shuffled, shared across every
  * Location of that branch for the whole game; consumed as Locations are
