@@ -535,6 +535,10 @@ final class GameEngine
             'warlocks-robes' => [...self::relicWarlocksRobes($state, $actorRole, $move), false],
             'emperors-diary' => [...self::relicEmperorsDiary($state, $actorRole), false],
             'emperors-robes' => [...self::relicEmperorsRobes($state, $actorRole, $move), false],
+            'an-insight-from-the-future' => self::relicInsightFromTheFuture($state, $move),
+            'aural-inscription' => self::relicAuralInscription($state),
+            'divine-chant' => self::relicDivineChant($state, $actorRole),
+            'magistrates-robes' => [...self::relicMagistratesRobes($state, $actorRole, $move), false],
             default => [$state, [], false],
         };
     }
@@ -1419,6 +1423,196 @@ final class GameEngine
         $state = $state->with(['wanderers' => $state->wanderersWith($targetRole, ['hp' => $hp])]);
 
         return [$state, [['type' => 'wanderer_healed', 'role_key' => $targetRole, 'payload' => ['hp' => $hp]]]];
+    }
+
+    /**
+     * An insight from the future: "Search the Emperor's draw pile, and
+     * place one card into the Emperor's hand. Shuffle their draw pile.
+     * Then, trash this, and gain 📜." $move['location_key'] picks which
+     * card from the (hidden-information) Location deck to pull —
+     * there's no UI for "search a hidden pile" yet, so the caller must
+     * already know what's in it (e.g. a debug/test context); a missing
+     * or absent key is a no-op.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function relicInsightFromTheFuture(GameState $state, array $move): array
+    {
+        $locationKey = (string) ($move['location_key'] ?? '');
+        $deck = $state->locationDeck;
+        $index = array_search($locationKey, $deck, true);
+
+        if ($index === false) {
+            return [$state, [], false];
+        }
+
+        unset($deck[$index]);
+        $deck = array_values($deck);
+        shuffle($deck);
+
+        $hand = [...$state->locationHand, $locationKey];
+        $state = $state->with(['locationDeck' => $deck, 'locationHand' => $hand]);
+
+        return [$state, [['type' => 'location_drawn', 'role_key' => null, 'payload' => ['location_key' => $locationKey]]], true];
+    }
+
+    /**
+     * Aural inscription: "If all Wanderers are adjacent to the Golem
+     * but each on their own space, and all 3 🎶 Relics are equipped by
+     * Wanderers: gain 📜, and add a 🎨 Glyph to the Golem's mat. Then,
+     * trash this." Unlike Soothing Lullaby, the instruments just need
+     * to be equipped by Wanderers somewhere — not all in one space.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function relicAuralInscription(GameState $state): array
+    {
+        $golemCell = $state->golem['cell'];
+
+        if ($golemCell === null) {
+            return [$state, [], false];
+        }
+
+        $cells = self::activeWanderers($state);
+        $seenCellKeys = [];
+        $equippedAnywhere = [];
+
+        foreach ($cells as $role => $cell) {
+            if (Board::distance($golemCell, $cell, $state->board) !== 1) {
+                return [$state, [], false];
+            }
+
+            $cellKey = Board::key($cell);
+
+            if (isset($seenCellKeys[$cellKey])) {
+                return [$state, [], false];
+            }
+
+            $seenCellKeys[$cellKey] = true;
+            $equippedAnywhere = [...$equippedAnywhere, ...array_values($state->wanderers[$role]['equipped'])];
+        }
+
+        $instruments = ['lute', 'pipe', 'tabor-drum'];
+
+        if (count(array_intersect($instruments, $equippedAnywhere)) !== count($instruments)) {
+            return [$state, [], false];
+        }
+
+        return [...self::addGlyphOfType($state, '🎨'), true];
+    }
+
+    /**
+     * Divine Chant: "If you are on the Cathedral, the Golem 2+ spaces
+     * away, and all 3 🎶 Relics are equipped by Wanderers in your
+     * space: 🌿 all Wanderers to full health, then trash this and
+     * gain 📜."
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function relicDivineChant(GameState $state, string $actorRole): array
+    {
+        $casterCell = $state->wanderers[$actorRole]['cell'];
+        $golemCell = $state->golem['cell'];
+
+        if ($state->board[Board::key($casterCell)]['location_key'] !== 'cathedral') {
+            return [$state, [], false];
+        }
+
+        if ($golemCell === null || (Board::distance($casterCell, $golemCell, $state->board) ?? 0) < 2) {
+            return [$state, [], false];
+        }
+
+        $equippedInCasterSpace = [];
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            if (Board::key($cell) === Board::key($casterCell)) {
+                $equippedInCasterSpace = [...$equippedInCasterSpace, ...array_values($state->wanderers[$role]['equipped'])];
+            }
+        }
+
+        $instruments = ['lute', 'pipe', 'tabor-drum'];
+
+        if (count(array_intersect($instruments, $equippedInCasterSpace)) !== count($instruments)) {
+            return [$state, [], false];
+        }
+
+        $events = [];
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => 15])]);
+            $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => 15]];
+        }
+
+        return [$state, $events, true];
+    }
+
+    /**
+     * Magistrate's robes: "If you are on a space that produces ⚖️, move
+     * 2 Shame tokens from any Wanderer or Golem to any other Wanderer
+     * or Golem. Maximum 3 Shame tokens, as usual." $move['from_role']/
+     * ['to_role'] are either a Wanderer role key or the literal string
+     * 'golem'. Moves as many of the 2 as the source actually has and
+     * the destination has room for (capped at 3).
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicMagistratesRobes(GameState $state, string $actorRole, array $move): array
+    {
+        $casterCell = $state->wanderers[$actorRole]['cell'];
+        $location = LocationCatalog::find($state->board[Board::key($casterCell)]['location_key']);
+
+        if ($location === null || $location->producesEmoji !== '⚖️') {
+            return [$state, []];
+        }
+
+        $fromRole = (string) ($move['from_role'] ?? '');
+        $toRole = (string) ($move['to_role'] ?? '');
+
+        if ($fromRole === '' || $toRole === '' || $fromRole === $toRole) {
+            return [$state, []];
+        }
+
+        if ($fromRole !== 'golem' && ! isset($state->wanderers[$fromRole])) {
+            return [$state, []];
+        }
+
+        if ($toRole !== 'golem' && ! isset($state->wanderers[$toRole])) {
+            return [$state, []];
+        }
+
+        $events = [];
+
+        for ($i = 0; $i < 2; $i++) {
+            $available = $fromRole === 'golem'
+                ? $state->golem['shame'] > 0
+                : self::countStatusTokens($state->wanderers[$fromRole]['equipped'], 'shame_token') > 0;
+
+            $room = $toRole === 'golem'
+                ? $state->golem['shame'] < 3
+                : self::countStatusTokens($state->wanderers[$toRole]['equipped'], 'shame_token') < 3;
+
+            if (! $available || ! $room) {
+                break;
+            }
+
+            if ($fromRole === 'golem') {
+                $state = $state->with(['golem' => $state->golemWith(['shame' => $state->golem['shame'] - 1])]);
+            } else {
+                [$state, $e] = self::removeStatusToken($state, $fromRole, 'shame_token');
+                $events = [...$events, ...$e];
+            }
+
+            if ($toRole === 'golem') {
+                $state = $state->with(['golem' => $state->golemWith(['shame' => $state->golem['shame'] + 1])]);
+            } else {
+                [$state, $e] = self::applyStatusToken($state, $toRole, 'shame_token');
+                $events = [...$events, ...$e];
+            }
+
+            $events[] = ['type' => 'shame_moved', 'role_key' => null, 'payload' => ['from' => $fromRole, 'to' => $toRole]];
+        }
+
+        return [$state, $events];
     }
 
     /**

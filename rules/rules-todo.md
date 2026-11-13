@@ -24,6 +24,30 @@ they're resolved and fold the resolution into my own understanding instead
    the pool)? Left unimplemented until I hear back, rather than guess
    at a number.
 
+3. **Jericho inscription's "opposite side of that wall" assumes Walls
+   are an edge between two cells, not a whole-cell fixture.** Every
+   other Wall-related rule I've built (placement, the Golem's pathing
+   exclusion) treats a Wall as sitting on one hex space, the same as
+   Monolith Shards or Roads — there's no "side" to be on, since a
+   single hex has 6 neighbors, not 2. Is a Wall actually meant to be a
+   Carcassonne-style edge/river segment between two specific adjacent
+   spaces (which would mean reworking how Walls are stored — right now
+   they're just a string in that cell's infrastructure list, same as
+   any other Infrastructure type)? Left unimplemented pending that
+   answer, rather than guessing a hex-geometry interpretation of
+   "opposite side."
+
+4. **Past troubles doesn't match how Glyphs are currently modeled.**
+   Printed as: "Shuffle Glyphs on the Golem's mat, including face-up
+   and face-down Glyphs. Randomly re-fill the 4 active slots with the
+   shuffled cards, and return the rest to the Glyph discard pile."
+   Today the Golem only ever has up to 4 *face-up* Glyphs "on its mat"
+   (`golem['glyphs']`) — there's no separate face-down Glyph zone
+   attached to the mat itself, only the main face-down Glyph deck
+   (`glyphDeck`), which isn't "on the mat." If "face-down Glyphs on the
+   mat" refers to something else (a hidden reserve I haven't modeled?),
+   I'd want to know what before building a shuffle-and-refill for it.
+
 ## Resolved (for my own reference, not standing asks)
 
 - Solo/duo/trio play: Wanderer count is always exactly 2 or 3 — there's no
