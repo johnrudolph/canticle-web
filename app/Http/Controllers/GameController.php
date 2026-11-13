@@ -115,7 +115,7 @@ class GameController extends Controller
     }
 
     /**
-     * @return array<string, array{name: string, lore: string, produces: ?string, produces_emoji: ?string, costs: list<string>}>
+     * @return array<string, array{name: string, lore: string, back_text: ?string, produces: ?string, produces_emoji: ?string, costs: list<string>, relic_count: int}>
      */
     private function locationCatalog(): array
     {
@@ -123,15 +123,17 @@ class GameController extends Controller
             ->map(fn (Location $location) => [
                 'name' => $location->name,
                 'lore' => $location->lore,
+                'back_text' => $location->backText,
                 'produces' => $location->produces,
                 'produces_emoji' => $location->producesEmoji,
                 'costs' => $location->costs,
+                'relic_count' => $location->relicCount,
             ])
             ->all();
     }
 
     /**
-     * @return array<string, array{name: string, effect: string, slot: string, slot_emoji: string, symbol: string}>
+     * @return array<string, array{name: string, effect: string, slot: string, slot_emoji: string, symbol: string, location_name: ?string, is_event: bool, is_bound: bool}>
      */
     private function relicCatalog(): array
     {
@@ -142,6 +144,9 @@ class GameController extends Controller
                 'slot' => $relic->slot,
                 'slot_emoji' => $relic->slotEmoji,
                 'symbol' => $relic->symbol,
+                'location_name' => $relic->locationName,
+                'is_event' => $relic->isEvent,
+                'is_bound' => $relic->isBound,
             ])
             ->all();
     }

@@ -217,6 +217,7 @@ final readonly class GameState
                 'glyphs' => $this->golem['glyphs'],
                 'revealed' => $this->golem['revealed'],
                 'draw_pile_count' => count($this->golem['draw_pile']),
+                'discard_pile_count' => count($this->golem['discard_pile']),
             ],
             'pending_setup_wanderers' => $this->pendingSetupWanderers,
             'pending_golem_placement' => $this->pendingGolemPlacement,

@@ -43,16 +43,21 @@ final class RelicCatalog
             $key = $seenSlugs[$baseSlug] === 1 ? $baseSlug : "{$baseSlug}-{$seenSlugs[$baseSlug]}";
 
             $locationName = trim((string) ($row['location'] ?? ''));
+            $effect = trim((string) ($row['effect'] ?? ''));
 
             $relics[$key] = new Relic(
                 key: $key,
                 name: $name,
-                effect: trim((string) ($row['effect'] ?? '')),
+                effect: $effect,
                 slot: trim((string) ($row['slot'] ?? '')),
                 slotEmoji: trim((string) ($row['slot_emoji'] ?? '')),
                 symbol: trim((string) ($row['symbol'] ?? '')),
                 locationName: $locationName === '' ? null : $locationName,
                 isEvent: trim((string) ($row['type'] ?? '')) === 'Event',
+                // "Bound (🪡)" is printed as the first line of the effect
+                // text itself (no dedicated column in the sheet) — see
+                // e.g. Peacemaker's spirit, Hands of deliverance.
+                isBound: str_starts_with($effect, 'Bound'),
             );
         }
 

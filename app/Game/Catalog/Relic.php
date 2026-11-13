@@ -4,9 +4,9 @@ namespace App\Game\Catalog;
 
 /**
  * One row from resources/data/canticle/relics.json. `effect` is free text
- * — executing it is a bespoke, per-Relic implementation task (the "perform
- * the Action from an equipped Relic" Wanderer action is not modeled yet).
- * This DTO only covers what's needed to deal, equip, and display a Relic.
+ * — executing it is a bespoke, per-Relic implementation task. This DTO
+ * covers what's needed to deal, equip, display, and (where implemented)
+ * execute a Relic — see GameEngine::resolveRelicAction for which ones.
  */
 final class Relic
 {
@@ -19,6 +19,7 @@ final class Relic
         public readonly string $symbol, // branch emoji — which deck this belongs to
         public readonly ?string $locationName, // non-null => location-locked, see rules-todo
         public readonly bool $isEvent, // resolve immediately and trash, never equipped — rules.md
+        public readonly bool $isBound, // rules.md's Bound (🪡) Relics can never be dropped, only trashed
     ) {}
 
     /**
@@ -33,6 +34,9 @@ final class Relic
             'slot' => $this->slot,
             'slot_emoji' => $this->slotEmoji,
             'symbol' => $this->symbol,
+            'location_name' => $this->locationName,
+            'is_event' => $this->isEvent,
+            'is_bound' => $this->isBound,
         ];
     }
 }

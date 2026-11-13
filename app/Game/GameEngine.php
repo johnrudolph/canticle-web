@@ -50,6 +50,7 @@ final class GameEngine
             'drop_relic' => self::dropRelic($state, $actorRole, $move),
             'pickup_relic' => self::pickupRelic($state, $actorRole, $move),
             'use_relic' => self::useRelic($state, $actorRole, $move),
+            'rest' => self::rest($state, $actorRole),
             'end_wanderer_turn' => self::endWandererTurn($state, $actorRole),
             default => throw new InvalidMoveException('Unknown move type.'),
         };
@@ -277,6 +278,8 @@ final class GameEngine
             throw new InvalidMoveException('No actions remaining this turn.');
         }
 
+        self::requireNotExhausted($wanderer);
+
         $cellKey = Board::key($wanderer['cell']);
         $pile = $state->board[$cellKey]['relics'];
 
@@ -383,6 +386,14 @@ final class GameEngine
         $fromSlot = array_search($relicKey, $equipped, true);
 
         if ($fromSlot !== false) {
+            // rules.md: a Bound Relic can never be voluntarily dropped
+            // once equipped — only trashed via its own effect. It can
+            // still be dropped face-up while merely held (not yet
+            // equipped), same as any other found-but-unequipped Relic.
+            if (RelicCatalog::find($relicKey)?->isBound === true) {
+                throw new InvalidMoveException('Bound Relics cannot be dropped once equipped.');
+            }
+
             $equipped[$fromSlot] = null;
         } elseif (in_array($relicKey, $wanderer['holding'], true)) {
             // handled below via holding diff
@@ -459,6 +470,8 @@ final class GameEngine
         if ($wanderer['actions_remaining'] <= 0) {
             throw new InvalidMoveException('No actions remaining this turn.');
         }
+
+        self::requireNotExhausted($wanderer);
 
         $relicKey = (string) ($move['relic_key'] ?? '');
 
@@ -2104,6 +2117,8 @@ final class GameEngine
             throw new InvalidMoveException('No actions remaining this turn.');
         }
 
+        self::requireNotExhausted($wanderer);
+
         $direction = (string) ($move['direction'] ?? '');
         $to = Board::neighbor($wanderer['cell'], $direction);
         $toKey = Board::key($to);
@@ -3383,6 +3398,47 @@ final class GameEngine
         if ($actorRole !== $expectedRole) {
             throw new InvalidMoveException("It isn't your turn.");
         }
+    }
+
+    /**
+     * rules.md: "if you are at 0 HP, [resting] is the only action you
+     * can perform" — Move/Search/Use-relic are blocked at 0 HP, but
+     * resting itself, and the always-free equip/drop/pickup actions,
+     * are not.
+     *
+     * @param  array<string, mixed>  $wanderer
+     */
+    private static function requireNotExhausted(array $wanderer): void
+    {
+        if ($wanderer['hp'] <= 0) {
+            throw new InvalidMoveException('At 0 Health, resting is the only action you can take.');
+        }
+    }
+
+    /**
+     * rules.md: "🌿: increase Health by 2" — the baseline Wanderer
+     * action available even at 0 HP (where it's the only one available).
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function rest(GameState $state, string $actorRole): array
+    {
+        self::requireRole($state, $actorRole, $state->activeWandererRole(), 'wanderer');
+
+        $wanderer = $state->wanderers[$actorRole];
+
+        if ($wanderer['actions_remaining'] <= 0) {
+            throw new InvalidMoveException('No actions remaining this turn.');
+        }
+
+        $hp = min(15, $wanderer['hp'] + 2);
+        $wanderers = $state->wanderersWith($actorRole, [
+            'hp' => $hp,
+            'actions_remaining' => $wanderer['actions_remaining'] - 1,
+        ]);
+        $state = $state->with(['wanderers' => $wanderers]);
+
+        return [$state, [['type' => 'wanderer_healed', 'role_key' => $actorRole, 'payload' => ['hp' => $hp]]]];
     }
 
     /**
