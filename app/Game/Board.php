@@ -117,6 +117,7 @@ final class Board
      * keys (the board's current state). $excluded (e.g. Walled spaces,
      * which the Golem cannot enter) is filtered out too.
      *
+     * @param  array{0: int, 1: int}  $cell
      * @param  array<string, mixed>  $occupied  keyed by cell key
      * @param  list<string>  $excluded  cell keys to treat as unwalkable
      * @return list<array{0: int, 1: int}>
@@ -159,6 +160,8 @@ final class Board
      * occupied cells (the Golem, like Wanderers, only ever stands on a
      * built Location). Null if unreachable.
      *
+     * @param  array{0: int, 1: int}  $from
+     * @param  array{0: int, 1: int}  $to
      * @param  array<string, mixed>  $occupied  keyed by cell key
      * @param  list<string>  $excluded  cell keys to treat as unwalkable
      */
@@ -175,6 +178,8 @@ final class Board
      * step the Golem N spaces toward a target. $excluded lets the Golem's
      * own pathing avoid Walled spaces without affecting Wanderer movement.
      *
+     * @param  array{0: int, 1: int}  $from
+     * @param  array{0: int, 1: int}  $to
      * @param  array<string, mixed>  $occupied  keyed by cell key
      * @param  list<string>  $excluded  cell keys to treat as unwalkable
      * @return list<array{0: int, 1: int}>|null
@@ -216,6 +221,7 @@ final class Board
      * Every occupied cell reachable within $maxDistance hops of $center
      * (BFS over occupied cells), including $center itself.
      *
+     * @param  array{0: int, 1: int}  $center
      * @param  array<string, mixed>  $occupied  keyed by cell key
      * @return list<array{0: int, 1: int}>
      */

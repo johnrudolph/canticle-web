@@ -14,7 +14,7 @@ class DebugController extends Controller
     public function index(): JsonResponse
     {
         $games = Game::query()
-            ->withCount('seats')
+            ->withCount('roles')
             ->latest()
             ->limit(100)
             ->get()
@@ -22,8 +22,11 @@ class DebugController extends Controller
                 'id' => $game->id,
                 'code' => $game->code,
                 'status' => $game->status,
-                'player_count' => $game->player_count,
-                'seats_filled' => $game->seats_count,
+                'wanderer_count' => $game->wanderer_count,
+                'golem_enabled' => $game->golem_enabled,
+                'round' => $game->round,
+                'phase' => $game->phase,
+                'roles_count' => $game->roles_count,
                 'created_at' => $game->created_at,
                 'updated_at' => $game->updated_at,
             ]);
@@ -33,7 +36,7 @@ class DebugController extends Controller
 
     public function show(Game $game): JsonResponse
     {
-        $game->load(['creator', 'seats.user']);
+        $game->load(['creator', 'roles.user']);
 
         return response()->json(['game' => $game]);
     }

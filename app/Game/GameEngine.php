@@ -29,6 +29,7 @@ final class GameEngine
     private const GOLEM_MAX_GLYPHS = 4;
 
     /**
+     * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
     public static function apply(GameState $state, string $actorRole, array $move): array
@@ -50,6 +51,10 @@ final class GameEngine
         };
     }
 
+    /**
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
     private static function chooseStartingCell(GameState $state, string $actorRole, array $move): array
     {
         if ($state->phase !== 'setup') {
@@ -84,6 +89,9 @@ final class GameEngine
     /**
      * The Emperor also places the Golem anywhere on setup — rules.md:
      * "The Emperor places the Golem on any space."
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
     private static function chooseGolemCell(GameState $state, string $actorRole, array $move): array
     {
@@ -134,6 +142,10 @@ final class GameEngine
         return [$state, [['type' => 'round_started', 'role_key' => null, 'payload' => ['round' => $state->round]]]];
     }
 
+    /**
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
     private static function playLocation(GameState $state, string $actorRole, array $move): array
     {
         self::requireRole($state, $actorRole, RoleKeys::EMPEROR, 'emperor');
@@ -190,6 +202,9 @@ final class GameEngine
      * — a cooperative Emperor has no reason to actually do that, and
      * checking full board reachability after every Wall placement is more
      * than this is worth yet.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
     private static function placeInfrastructure(GameState $state, string $actorRole, array $move): array
     {
@@ -245,6 +260,8 @@ final class GameEngine
      * an Event, resolve immediately and trash." Resolving the effect
      * isn't modeled, but trashing it is: it's never added to `holding`,
      * since there'd be no way to ever do anything with it there.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
     private static function searchLocation(GameState $state, string $actorRole): array
     {
@@ -267,7 +284,8 @@ final class GameEngine
             $pile = array_values($pile);
         }
 
-        $isEvent = $found !== null && (RelicCatalog::find($found)?->isEvent ?? false);
+        $foundRelic = $found !== null ? RelicCatalog::find($found) : null;
+        $isEvent = $foundRelic !== null && $foundRelic->isEvent;
 
         $board = $state->board;
         $board[$cellKey] = [...$board[$cellKey], 'relics' => $pile];
@@ -289,6 +307,9 @@ final class GameEngine
      * reads as an always-available administrative move, distinct from the
      * costed 🔎 action that finds one. Flagged in rules-todo.md to confirm.
      * Bumps whatever was already in that slot onto the ground.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
     private static function equipRelic(GameState $state, string $actorRole, array $move): array
     {
@@ -334,6 +355,9 @@ final class GameEngine
     /**
      * Free at any time, per rules.md: "You may pick up and drop Relics in
      * your space at any time. This does not cost an action."
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
     private static function dropRelic(GameState $state, string $actorRole, array $move): array
     {
@@ -372,6 +396,9 @@ final class GameEngine
     /**
      * Free at any time — the other half of the drop rule above. Unlike
      * search, this takes a specific, known (already face-up) Relic.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
     private static function pickupRelic(GameState $state, string $actorRole, array $move): array
     {
@@ -406,6 +433,9 @@ final class GameEngine
      * same honesty pattern as Golem cards. "Gain 📜" clauses attached to
      * the implemented ones are deliberately skipped too (not just the
      * unimplemented Relics) — scoring sources are a separate pass.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
     private static function useRelic(GameState $state, string $actorRole, array $move): array
     {
@@ -445,6 +475,7 @@ final class GameEngine
     }
 
     /**
+     * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool} 2 = whether the Relic trashes itself after use
      */
     private static function resolveRelicAction(GameState $state, string $actorRole, string $baseKey, array $move): array
@@ -464,6 +495,7 @@ final class GameEngine
     }
 
     /**
+     * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
     private static function relicMove(GameState $state, string $actorRole, array $move, int $maxSteps): array
@@ -507,7 +539,8 @@ final class GameEngine
             unset($pile[$index]);
             $pile = array_values($pile);
 
-            $isEvent = RelicCatalog::find($found)?->isEvent ?? false;
+            $foundRelic = RelicCatalog::find($found);
+            $isEvent = $foundRelic !== null && $foundRelic->isEvent;
 
             $board = $state->board;
             $board[$cellKey] = [...$board[$cellKey], 'relics' => $pile];
@@ -564,6 +597,7 @@ final class GameEngine
     }
 
     /**
+     * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
     private static function relicHealSelfOrAlly(GameState $state, string $actorRole, array $move, int $amount): array
@@ -576,6 +610,7 @@ final class GameEngine
     }
 
     /**
+     * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
     private static function relicHealAllyToMax(GameState $state, string $actorRole, array $move): array
@@ -594,6 +629,8 @@ final class GameEngine
     /**
      * $move['target_role'], if given, must be another Wanderer sharing
      * the actor's current space — an "Ally" per rules.md.
+     *
+     * @param  array<string, mixed>  $move
      */
     private static function resolveAllyTarget(GameState $state, string $actorRole, array $move): ?string
     {
@@ -651,6 +688,7 @@ final class GameEngine
     }
 
     /**
+     * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
     private static function relicSwapWithAlly(GameState $state, string $actorRole, array $move): array
@@ -698,6 +736,9 @@ final class GameEngine
      * action, then hands off to the Wanderer phase. Infrastructure (step
      * 3) isn't modeled yet; Relic dealing (step 2) happens automatically
      * in playLocation() rather than as a separate step here.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
     private static function endEmperorPhase(GameState $state, string $actorRole, array $move): array
     {
@@ -726,9 +767,9 @@ final class GameEngine
         $wanderers[$firstRole] = [...$wanderers[$firstRole], 'actions_remaining' => $actionsPerTurn];
 
         $state = $state->with([
-            'locationHand' => array_values($hand),
-            'locationDiscard' => array_values($discardPile),
-            'locationDeck' => array_values($deck),
+            'locationHand' => $hand,
+            'locationDiscard' => $discardPile,
+            'locationDeck' => $deck,
             'wanderers' => $wanderers,
             'phase' => 'wanderer',
             'wandererOrder' => $wandererOrder,
@@ -751,6 +792,9 @@ final class GameEngine
      * Fruit tree: "When Wanderers enter this space, they gain 1 action
      * that they must use on this turn." Modeled as +1 action immediately;
      * the "must use it this turn" constraint isn't separately enforced.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
     private static function moveWanderer(GameState $state, string $actorRole, array $move): array
     {
@@ -795,6 +839,9 @@ final class GameEngine
         return [$state, $events];
     }
 
+    /**
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
     private static function endWandererTurn(GameState $state, string $actorRole): array
     {
         self::requireRole($state, $actorRole, $state->activeWandererRole(), 'wanderer');
@@ -1045,6 +1092,11 @@ final class GameEngine
         }
 
         $steps = array_slice($path, 0, $maxSteps);
+
+        if ($steps === []) {
+            return [$state, []];
+        }
+
         $destination = $steps[array_key_last($steps)];
 
         $state = $state->with(['golem' => $state->golemWith(['cell' => $destination])]);
@@ -1302,6 +1354,8 @@ final class GameEngine
      * (confirmed via chat 2026-11-12, not yet in rules.md — see
      * rules-todo.md) because that neighbor has a Road connecting it to a
      * network of other Road spaces, any of which produces it.
+     *
+     * @param  array{0: int, 1: int}  $cell
      */
     private static function effectiveProduces(GameState $state, array $cell, string $branch): bool
     {
@@ -1405,6 +1459,7 @@ final class GameEngine
     }
 
     /**
+     * @param  array<string, mixed>  $move
      * @return array{0: int, 1: int}
      */
     private static function requireCell(array $move, string $key): array

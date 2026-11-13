@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use Database\Factories\GameRoleFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class GameRole extends Model
 {
+    /** @use HasFactory<GameRoleFactory> */
     use HasFactory;
 
     protected $fillable = [
@@ -24,11 +26,17 @@ class GameRole extends Model
         ];
     }
 
+    /**
+     * @return BelongsTo<Game, $this>
+     */
     public function game(): BelongsTo
     {
         return $this->belongsTo(Game::class);
     }
 
+    /**
+     * @return BelongsTo<User, $this>
+     */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);

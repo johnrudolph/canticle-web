@@ -41,13 +41,19 @@ class User extends Authenticatable
         ];
     }
 
+    /**
+     * @return HasMany<Game, $this>
+     */
     public function createdGames(): HasMany
     {
         return $this->hasMany(Game::class, 'created_by_user_id');
     }
 
-    public function gameSeats(): HasMany
+    /**
+     * @return HasMany<GameRole, $this>
+     */
+    public function gameRoles(): HasMany
     {
-        return $this->hasMany(GameSeat::class);
+        return $this->hasMany(GameRole::class);
     }
 }

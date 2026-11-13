@@ -2,12 +2,17 @@
 
 namespace App\Models;
 
+use Database\Factories\GameEventFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property array<string, mixed>|null $payload
+ */
 class GameEvent extends Model
 {
+    /** @use HasFactory<GameEventFactory> */
     use HasFactory;
 
     protected $fillable = [
@@ -24,6 +29,9 @@ class GameEvent extends Model
         ];
     }
 
+    /**
+     * @return BelongsTo<Game, $this>
+     */
     public function game(): BelongsTo
     {
         return $this->belongsTo(Game::class);

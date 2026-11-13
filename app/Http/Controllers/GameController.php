@@ -171,20 +171,22 @@ class GameController extends Controller
      */
     private function eventLog(Game $game): array
     {
-        return GameEvent::where('game_id', $game->id)
-            ->latest('id')
-            ->limit(300)
-            ->get()
-            ->reverse()
-            ->values()
-            ->map(fn (GameEvent $event) => [
-                'id' => $event->id,
-                'type' => $event->type,
-                'role_key' => $event->role_key,
-                'payload' => $event->payload ?? [],
-                'created_at' => $event->created_at?->toIso8601String(),
-            ])
-            ->all();
+        return array_values(
+            GameEvent::where('game_id', $game->id)
+                ->latest('id')
+                ->limit(300)
+                ->get()
+                ->reverse()
+                ->values()
+                ->map(fn (GameEvent $event) => [
+                    'id' => $event->id,
+                    'type' => $event->type,
+                    'role_key' => $event->role_key,
+                    'payload' => $event->payload ?? [],
+                    'created_at' => $event->created_at?->toIso8601String(),
+                ])
+                ->all()
+        );
     }
 
     /**

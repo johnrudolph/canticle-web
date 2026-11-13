@@ -58,7 +58,7 @@ class SyncCardData extends Command
      */
     private function parseCsv(string $csv): array
     {
-        $stream = fopen('php://memory', 'r+');
+        $stream = fopen('php://memory', 'r+') ?: throw new RuntimeException('Could not open a memory stream.');
         fwrite($stream, $csv);
         rewind($stream);
 

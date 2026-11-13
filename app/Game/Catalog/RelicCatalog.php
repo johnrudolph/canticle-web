@@ -25,7 +25,8 @@ final class RelicCatalog
         }
 
         $path = config('canticle.output_path').'/relics.json';
-        $rows = json_decode(file_get_contents($path), true, flags: JSON_THROW_ON_ERROR);
+        $contents = file_get_contents($path) ?: throw new \RuntimeException("Could not read {$path}");
+        $rows = json_decode($contents, true, flags: JSON_THROW_ON_ERROR);
 
         $relics = [];
         $seenSlugs = [];

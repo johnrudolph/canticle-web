@@ -59,7 +59,7 @@ namespace App\Game;
 final readonly class GameState
 {
     /**
-     * @param  array<string, array{location_key: string, placed_round: int, relics: list<string>}>  $board
+     * @param  array<string, array{location_key: string, placed_round: int, relics: list<string>, infrastructure: list<string>}>  $board
      * @param  list<string>  $locationDeck
      * @param  list<string>  $locationHand
      * @param  list<string>  $locationDiscard
@@ -67,6 +67,7 @@ final readonly class GameState
      * @param  array<string, array<string, mixed>>  $wanderers
      * @param  array<string, mixed>  $golem
      * @param  list<string>  $glyphDeck
+     * @param  array<string, int>  $infrastructurePool
      * @param  list<string>  $pendingSetupWanderers
      * @param  list<string>  $wandererOrder
      */
@@ -157,7 +158,8 @@ final readonly class GameState
     }
 
     /**
-     * @return array<string, array{location_key: string, placed_round: int, relics: list<string>}>
+     * @param  array{location_key: string, placed_round: int, relics: list<string>, infrastructure: list<string>}  $entry
+     * @return array<string, array{location_key: string, placed_round: int, relics: list<string>, infrastructure: list<string>}>
      */
     public function boardWith(string $cellKey, array $entry): array
     {
@@ -169,6 +171,7 @@ final readonly class GameState
 
     /**
      * @param  array<string, mixed>  $overrides
+     * @return array<string, array<string, mixed>>
      */
     public function wanderersWith(string $role, array $overrides): array
     {
@@ -185,17 +188,6 @@ final readonly class GameState
     public function golemWith(array $overrides): array
     {
         return [...$this->golem, ...$overrides];
-    }
-
-    /**
-     * @return array<string, list<string>>
-     */
-    public function relicDecksWith(string $branchEmoji, array $deck): array
-    {
-        $decks = $this->relicDecks;
-        $decks[$branchEmoji] = $deck;
-
-        return $decks;
     }
 
     /**
@@ -250,6 +242,9 @@ final readonly class GameState
         ];
     }
 
+    /**
+     * @param  array<string, mixed>  $overrides
+     */
     public function with(array $overrides): self
     {
         $props = get_object_vars($this);
