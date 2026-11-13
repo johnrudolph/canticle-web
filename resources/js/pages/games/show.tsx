@@ -18,10 +18,18 @@ import roles from '@/routes/games/roles';
 import type {
     GamePollResponse,
     GameSummary,
+    InfrastructureType,
     LocationCatalogEntry,
     RoleKey,
     RoleSummary,
 } from '@/types/game';
+
+const INFRASTRUCTURE_LABELS: Record<InfrastructureType, string> = {
+    monolith_shard: '✨ Monolith Shard',
+    road: '🧱 Road',
+    walls: '🏰 Walls',
+    fruit_tree: '🌳 Fruit tree',
+};
 
 const ROLE_LABELS: Record<RoleKey, string> = {
     emperor: 'Emperor',
@@ -56,6 +64,9 @@ export default function GameShow({ game }: { game: GameSummary }) {
     const [events, setEvents] = useState(game.events);
     const [processing, setProcessing] = useState(false);
     const [selectedLocationKey, setSelectedLocationKey] = useState<string | null>(null);
+    const [selectedInfrastructureType, setSelectedInfrastructureType] = useState<InfrastructureType | null>(
+        null,
+    );
     const [discardKeys, setDiscardKeys] = useState<Set<string>>(new Set());
     const [copiedText, copy] = useClipboard();
 
@@ -260,6 +271,30 @@ export default function GameShow({ game }: { game: GameSummary }) {
         );
         onCellClick = (cell) =>
             submitMove('emperor', { type: 'play_location', location_key: selectedLocationKey, cell });
+    } else if (
+        state.phase === 'emperor' &&
+        myRoles.includes('emperor') &&
+        selectedInfrastructureType &&
+        state.infrastructure_placed_this_turn < 2
+    ) {
+        highlightedCells = new Set(
+            Object.entries(state.board)
+                .filter(
+                    ([key, cellData]) =>
+                        !(
+                            selectedInfrastructureType === 'monolith_shard' &&
+                            cellData.infrastructure.includes('monolith_shard')
+                        ) &&
+                        !(selectedInfrastructureType === 'walls' && key === (state.golem.cell && cellKey(state.golem.cell))),
+                )
+                .map(([key]) => key),
+        );
+        onCellClick = (cell) =>
+            submitMove('emperor', {
+                type: 'place_infrastructure',
+                infrastructure_type: selectedInfrastructureType,
+                cell,
+            });
     } else if (state.phase === 'wanderer' && state.active_wanderer_role && myRoles.includes(state.active_wanderer_role)) {
         const mine = state.wanderers[state.active_wanderer_role];
         if (mine.cell && mine.actions_remaining > 0) {
@@ -333,11 +368,12 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                         <button
                                             key={key}
                                             type="button"
-                                            onClick={() =>
+                                            onClick={() => {
+                                                setSelectedInfrastructureType(null);
                                                 setSelectedLocationKey(
                                                     selectedLocationKey === key ? null : key,
-                                                )
-                                            }
+                                                );
+                                            }}
                                             className={`rounded-md border p-2 text-left text-xs ${
                                                 selectedLocationKey === key
                                                     ? 'border-primary bg-primary/10'
@@ -356,16 +392,50 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                     );
                                 })}
                             </div>
+
+                            <p className="mt-3 mb-1 text-sm font-medium">
+                                Infrastructure ({state.infrastructure_placed_this_turn}/2 placed this turn)
+                            </p>
+                            <div className="flex flex-col gap-1">
+                                {(Object.keys(INFRASTRUCTURE_LABELS) as InfrastructureType[]).map((type) => (
+                                    <button
+                                        key={type}
+                                        type="button"
+                                        disabled={
+                                            state.infrastructure_pool[type] <= 0 ||
+                                            state.infrastructure_placed_this_turn >= 2
+                                        }
+                                        onClick={() => {
+                                            setSelectedLocationKey(null);
+                                            setSelectedInfrastructureType(
+                                                selectedInfrastructureType === type ? null : type,
+                                            );
+                                        }}
+                                        className={`flex items-center justify-between rounded-md border p-2 text-left text-xs disabled:opacity-40 ${
+                                            selectedInfrastructureType === type
+                                                ? 'border-primary bg-primary/10'
+                                                : ''
+                                        }`}
+                                    >
+                                        <span>{INFRASTRUCTURE_LABELS[type]}</span>
+                                        <span className="text-muted-foreground">
+                                            {state.infrastructure_pool[type]} left
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+
                             <Button
-                                className="mt-2 w-full"
+                                className="mt-3 w-full"
                                 size="sm"
                                 disabled={processing}
-                                onClick={() =>
+                                onClick={() => {
+                                    setSelectedInfrastructureType(null);
                                     submitMove('emperor', {
                                         type: 'end_emperor_phase',
                                         discard: Array.from(discardKeys),
-                                    })
-                                }
+                                    });
+                                }}
                             >
                                 End Emperor phase
                             </Button>

@@ -12,14 +12,13 @@ use App\Game\Catalog\RelicCatalog;
  * events). Never touches the database — GameStateRepository and EventLog
  * handle persistence, the controller handles auth.
  *
- * Phase A+B+C scope: setup (choose starting cells for Wanderers and the
+ * Phase A-D scope: setup (choose starting cells for Wanderers and the
  * Golem), Emperor phase (play a Location — dealing its Relics automatically
- * — discard, redraw), Wanderer phase (move, search, equip/drop/pickup
- * Relics), and a Golem phase that actually resolves cards — see
- * resolveGolemCard() for exactly which of the 29 cards have real behavior
- * vs. are logged-but-not-executed. Relic *effects* are never executed,
- * only dealing/searching/equipping them. Infrastructure and scoring aren't
- * modeled yet.
+ * — place up to 2 Infrastructure, discard, redraw), Wanderer phase (move,
+ * search, equip/drop/pickup Relics), and a Golem phase that actually
+ * resolves cards — see resolveGolemCard() for exactly which of the 29
+ * cards have real behavior vs. are logged-but-not-executed. Relic
+ * *effects* are never executed, only dealing/searching/equipping them.
  */
 final class GameEngine
 {
@@ -38,6 +37,7 @@ final class GameEngine
             'choose_starting_cell' => self::chooseStartingCell($state, $actorRole, $move),
             'choose_golem_cell' => self::chooseGolemCell($state, $actorRole, $move),
             'play_location' => self::playLocation($state, $actorRole, $move),
+            'place_infrastructure' => self::placeInfrastructure($state, $actorRole, $move),
             'end_emperor_phase' => self::endEmperorPhase($state, $actorRole, $move),
             'move_wanderer' => self::moveWanderer($state, $actorRole, $move),
             'search_location' => self::searchLocation($state, $actorRole),
@@ -160,7 +160,7 @@ final class GameEngine
         }
 
         foreach ($location->costs as $cost) {
-            if (! self::neighborProduces($state, $cell, $cost)) {
+            if (! self::effectiveProduces($state, $cell, $cost)) {
                 throw new InvalidMoveException("Must be built adjacent to a space that produces {$cost}.");
             }
         }
@@ -172,12 +172,66 @@ final class GameEngine
             'location_key' => $locationKey,
             'placed_round' => $state->round,
             'relics' => $relics,
+            'infrastructure' => [],
         ]);
 
         $state = $state->with(['board' => $board, 'locationHand' => $hand, 'relicDecks' => $relicDecks]);
 
         return [$state, [
             ['type' => 'location_played', 'role_key' => $actorRole, 'payload' => ['location_key' => $locationKey, 'cell' => $cell]],
+        ]];
+    }
+
+    /**
+     * Step 3 of the Emperor phase: up to 2 per turn, from the pool.
+     * Monolith Shard allows only 1 per space; Walls cannot go on the
+     * Golem's own space. The "cannot trap the Golem" rule isn't enforced
+     * — a cooperative Emperor has no reason to actually do that, and
+     * checking full board reachability after every Wall placement is more
+     * than this is worth yet.
+     */
+    private static function placeInfrastructure(GameState $state, string $actorRole, array $move): array
+    {
+        self::requireRole($state, $actorRole, RoleKeys::EMPEROR, 'emperor');
+
+        $type = (string) ($move['infrastructure_type'] ?? '');
+        $cell = self::requireCell($move, 'cell');
+        $cellKey = Board::key($cell);
+
+        if ($state->infrastructurePlacedThisTurn >= 2) {
+            throw new InvalidMoveException('Already placed 2 Infrastructure this turn.');
+        }
+
+        if (! array_key_exists($cellKey, $state->board)) {
+            throw new InvalidMoveException('Infrastructure must go on a built Location.');
+        }
+
+        if (($state->infrastructurePool[$type] ?? 0) <= 0) {
+            throw new InvalidMoveException('None of that Infrastructure left in the pool.');
+        }
+
+        if ($type === 'monolith_shard' && in_array('monolith_shard', $state->board[$cellKey]['infrastructure'], true)) {
+            throw new InvalidMoveException('Only 1 Monolith Shard per space.');
+        }
+
+        if ($type === 'walls' && $state->golem['cell'] !== null && Board::key($state->golem['cell']) === $cellKey) {
+            throw new InvalidMoveException('Cannot wall the Golem\'s own space.');
+        }
+
+        $board = $state->board;
+        $board[$cellKey] = [...$board[$cellKey], 'infrastructure' => [...$board[$cellKey]['infrastructure'], $type]];
+
+        $pool = $state->infrastructurePool;
+        $pool[$type]--;
+
+        $state = $state->with([
+            'board' => $board,
+            'infrastructurePool' => $pool,
+            'infrastructurePlacedThisTurn' => $state->infrastructurePlacedThisTurn + 1,
+        ]);
+
+        return [$state, [
+            ['type' => 'infrastructure_placed', 'role_key' => $actorRole, 'payload' => ['infrastructure' => $type, 'cell' => $cell]],
         ]];
     }
 
@@ -391,13 +445,25 @@ final class GameEngine
         ]];
     }
 
+    /**
+     * Road: "When Wanderers move into a space that contains a Road, they
+     * can continue into an adjacent space for free." Modeled as a
+     * one-hop-ahead flag set on arrival at a Road space and consumed by
+     * the very next move — chains naturally through consecutive Road
+     * spaces since each such arrival re-sets it.
+     *
+     * Fruit tree: "When Wanderers enter this space, they gain 1 action
+     * that they must use on this turn." Modeled as +1 action immediately;
+     * the "must use it this turn" constraint isn't separately enforced.
+     */
     private static function moveWanderer(GameState $state, string $actorRole, array $move): array
     {
         self::requireRole($state, $actorRole, $state->activeWandererRole(), 'wanderer');
 
         $wanderer = $state->wanderers[$actorRole];
+        $freeMove = $wanderer['free_move_available'];
 
-        if ($wanderer['actions_remaining'] <= 0) {
+        if (! $freeMove && $wanderer['actions_remaining'] <= 0) {
             throw new InvalidMoveException('No actions remaining this turn.');
         }
 
@@ -409,16 +475,28 @@ final class GameEngine
             throw new InvalidMoveException('Wanderers must always be on a Location.');
         }
 
+        $destinationInfrastructure = $state->board[$toKey]['infrastructure'];
+        $actionsRemaining = $wanderer['actions_remaining'] - ($freeMove ? 0 : 1);
+
+        if (in_array('fruit_tree', $destinationInfrastructure, true)) {
+            $actionsRemaining++;
+        }
+
         $wanderers = $state->wanderersWith($actorRole, [
             'cell' => $to,
-            'actions_remaining' => $wanderer['actions_remaining'] - 1,
+            'actions_remaining' => $actionsRemaining,
+            'free_move_available' => in_array('road', $destinationInfrastructure, true),
         ]);
 
         $state = $state->with(['wanderers' => $wanderers]);
 
-        return [$state, [
-            ['type' => 'wanderer_moved', 'role_key' => $actorRole, 'payload' => ['to' => $to]],
-        ]];
+        $events = [['type' => 'wanderer_moved', 'role_key' => $actorRole, 'payload' => ['to' => $to, 'free' => $freeMove]]];
+
+        if (in_array('fruit_tree', $destinationInfrastructure, true)) {
+            $events[] = ['type' => 'fruit_tree_bonus_action', 'role_key' => $actorRole, 'payload' => []];
+        }
+
+        return [$state, $events];
     }
 
     private static function endWandererTurn(GameState $state, string $actorRole): array
@@ -463,7 +541,12 @@ final class GameEngine
         }
 
         $nextRound = $state->round + 1;
-        $state = $state->with(['round' => $nextRound, 'phase' => 'emperor', 'activeWandererIndex' => null]);
+        $state = $state->with([
+            'round' => $nextRound,
+            'phase' => 'emperor',
+            'activeWandererIndex' => null,
+            'infrastructurePlacedThisTurn' => 0,
+        ]);
         $events[] = ['type' => 'round_started', 'role_key' => null, 'payload' => ['round' => $nextRound]];
 
         return [$state, $events];
@@ -659,7 +742,7 @@ final class GameEngine
             return [$state, []];
         }
 
-        $path = Board::shortestPath($golemCell, $state->wanderers[$targetRole]['cell'], $state->board);
+        $path = Board::shortestPath($golemCell, $state->wanderers[$targetRole]['cell'], $state->board, $state->wallKeys());
 
         if ($path === null || $path === []) {
             return [$state, []];
@@ -844,7 +927,7 @@ final class GameEngine
         $bestDistance = null;
 
         foreach (self::activeWanderers($state) as $role => $cell) {
-            $distance = Board::distance($golemCell, $cell, $state->board);
+            $distance = Board::distance($golemCell, $cell, $state->board, $state->wallKeys());
 
             if ($distance === null) {
                 continue;
@@ -918,7 +1001,13 @@ final class GameEngine
         return [$state, $events];
     }
 
-    private static function neighborProduces(GameState $state, array $cell, string $branch): bool
+    /**
+     * Whether a neighbor of $cell produces $branch — either directly, or
+     * (confirmed via chat 2026-11-12, not yet in rules.md — see
+     * rules-todo.md) because that neighbor has a Road connecting it to a
+     * network of other Road spaces, any of which produces it.
+     */
+    private static function effectiveProduces(GameState $state, array $cell, string $branch): bool
     {
         foreach (Board::occupiedNeighbors($cell, $state->board) as $neighbor) {
             $entry = $state->board[Board::key($neighbor)];
@@ -927,9 +1016,56 @@ final class GameEngine
             if ($location?->produces === $branch) {
                 return true;
             }
+
+            if (in_array('road', $entry['infrastructure'], true)
+                && in_array($branch, self::roadNetworkProduces($state, $neighbor), true)) {
+                return true;
+            }
         }
 
         return false;
+    }
+
+    /**
+     * BFS over the contiguous network of Road-having spaces starting at
+     * $startCell (which must itself have a Road), collecting every
+     * member's own produced resource.
+     *
+     * @param  array{0: int, 1: int}  $startCell
+     * @return list<string>
+     */
+    private static function roadNetworkProduces(GameState $state, array $startCell): array
+    {
+        $visited = [Board::key($startCell) => true];
+        $queue = [$startCell];
+        $produces = [];
+
+        while ($queue !== []) {
+            $cell = array_shift($queue);
+            $entry = $state->board[Board::key($cell)];
+            $location = LocationCatalog::find($entry['location_key']);
+
+            if ($location?->produces !== null) {
+                $produces[] = $location->produces;
+            }
+
+            foreach (Board::occupiedNeighbors($cell, $state->board) as $neighbor) {
+                $neighborKey = Board::key($neighbor);
+
+                if (isset($visited[$neighborKey])) {
+                    continue;
+                }
+
+                if (! in_array('road', $state->board[$neighborKey]['infrastructure'], true)) {
+                    continue;
+                }
+
+                $visited[$neighborKey] = true;
+                $queue[] = $neighbor;
+            }
+        }
+
+        return $produces;
     }
 
     private static function requireRole(GameState $state, string $actorRole, ?string $expectedRole, string $expectedPhase): void

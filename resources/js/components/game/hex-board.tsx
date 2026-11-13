@@ -15,6 +15,13 @@ const WANDERER_COLORS: Record<string, string> = {
     wanderer_c: '#16a34a',
 };
 
+const INFRASTRUCTURE_ICONS: Record<string, string> = {
+    monolith_shard: '✨',
+    road: '🧱',
+    walls: '🏰',
+    fruit_tree: '🌳',
+};
+
 export function HexBoard({
     board,
     locationCatalog,
@@ -84,6 +91,13 @@ export function HexBoard({
                         {cellData.relics.length > 0 && (
                             <span className="text-[10px] text-muted-foreground">
                                 🎴 {cellData.relics.length}
+                            </span>
+                        )}
+                        {cellData.infrastructure.length > 0 && (
+                            <span className="text-xs">
+                                {[...new Set(cellData.infrastructure)]
+                                    .map((type) => INFRASTRUCTURE_ICONS[type])
+                                    .join(' ')}
                             </span>
                         )}
                         <div className="flex gap-1">

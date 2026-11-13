@@ -114,16 +114,18 @@ final class Board
 
     /**
      * Every occupied neighbor of $cell, given the set of occupied cell
-     * keys (the board's current state).
+     * keys (the board's current state). $excluded (e.g. Walled spaces,
+     * which the Golem cannot enter) is filtered out too.
      *
      * @param  array<string, mixed>  $occupied  keyed by cell key
+     * @param  list<string>  $excluded  cell keys to treat as unwalkable
      * @return list<array{0: int, 1: int}>
      */
-    public static function occupiedNeighbors(array $cell, array $occupied): array
+    public static function occupiedNeighbors(array $cell, array $occupied, array $excluded = []): array
     {
         return array_values(array_filter(
             self::neighbors($cell),
-            fn (array $n) => array_key_exists(self::key($n), $occupied)
+            fn (array $n) => array_key_exists(self::key($n), $occupied) && ! in_array(self::key($n), $excluded, true)
         ));
     }
 
@@ -158,10 +160,11 @@ final class Board
      * built Location). Null if unreachable.
      *
      * @param  array<string, mixed>  $occupied  keyed by cell key
+     * @param  list<string>  $excluded  cell keys to treat as unwalkable
      */
-    public static function distance(array $from, array $to, array $occupied): ?int
+    public static function distance(array $from, array $to, array $occupied, array $excluded = []): ?int
     {
-        $path = self::shortestPath($from, $to, $occupied);
+        $path = self::shortestPath($from, $to, $occupied, $excluded);
 
         return $path === null ? null : count($path);
     }
@@ -169,12 +172,14 @@ final class Board
     /**
      * The sequence of cells from (but not including) $from to $to along a
      * shortest path over occupied cells, or null if unreachable. Used to
-     * step the Golem N spaces toward a target.
+     * step the Golem N spaces toward a target. $excluded lets the Golem's
+     * own pathing avoid Walled spaces without affecting Wanderer movement.
      *
      * @param  array<string, mixed>  $occupied  keyed by cell key
+     * @param  list<string>  $excluded  cell keys to treat as unwalkable
      * @return list<array{0: int, 1: int}>|null
      */
-    public static function shortestPath(array $from, array $to, array $occupied): ?array
+    public static function shortestPath(array $from, array $to, array $occupied, array $excluded = []): ?array
     {
         if (self::key($from) === self::key($to)) {
             return [];
@@ -186,7 +191,7 @@ final class Board
         while ($queue !== []) {
             [$currentKey, $path] = array_shift($queue);
 
-            foreach (self::occupiedNeighbors(self::fromKey($currentKey), $occupied) as $neighbor) {
+            foreach (self::occupiedNeighbors(self::fromKey($currentKey), $occupied, $excluded) as $neighbor) {
                 $neighborKey = self::key($neighbor);
 
                 if (isset($visited[$neighborKey])) {

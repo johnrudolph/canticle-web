@@ -39,6 +39,7 @@ final class GameSetup
                 'location_key' => $startingKeys[$i],
                 'placed_round' => 1,
                 'relics' => $relics,
+                'infrastructure' => [],
             ];
         }
 
@@ -53,6 +54,7 @@ final class GameSetup
                 'actions_remaining' => 0,
                 'equipped' => array_fill_keys(self::EQUIP_SLOTS, null),
                 'holding' => [],
+                'free_move_available' => false,
             ];
         }
 
@@ -82,6 +84,12 @@ final class GameSetup
                 'discard_pile' => [],
             ],
             glyphDeck: array_values($glyphDeck),
+            infrastructurePool: [
+                'monolith_shard' => 12,
+                'road' => 10,
+                'walls' => 2,
+                'fruit_tree' => 2,
+            ],
             pendingSetupWanderers: $wandererRoles,
             pendingGolemPlacement: true,
         );

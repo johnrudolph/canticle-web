@@ -9,10 +9,13 @@ export interface RoleSummary {
     is_mine: boolean;
 }
 
+export type InfrastructureType = 'monolith_shard' | 'road' | 'walls' | 'fruit_tree';
+
 export interface BoardCell {
     location_key: string;
     placed_round: number;
     relics: string[];
+    infrastructure: InfrastructureType[];
 }
 
 export interface WandererState {
@@ -47,6 +50,8 @@ export interface GameStateDto {
     active_wanderer_role: RoleKey | null;
     actions_per_wanderer_turn: number;
     golem_cards_this_round: number;
+    infrastructure_pool: Record<InfrastructureType, number>;
+    infrastructure_placed_this_turn: number;
     prophecy: number;
     outcome: 'elite_victory' | 'simple_victory' | 'defeat' | null;
 }

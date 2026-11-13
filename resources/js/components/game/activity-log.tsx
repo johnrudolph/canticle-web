@@ -28,10 +28,14 @@ function describe(
         }
         case 'emperor_phase_ended':
             return `${role} ended their phase.`;
+        case 'infrastructure_placed':
+            return `${role} placed ${event.payload.infrastructure}.`;
         case 'wanderer_turn_started':
             return `${role}'s turn (${event.payload.actions} actions).`;
         case 'wanderer_moved':
-            return `${role} moved.`;
+            return event.payload.free ? `${role} moved for free (Road).` : `${role} moved.`;
+        case 'fruit_tree_bonus_action':
+            return `${role} gains an extra action (Fruit tree).`;
         case 'location_searched': {
             const found = event.payload.found as string | null;
             if (!found) return `${role} searched and found nothing.`;

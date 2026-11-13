@@ -6,21 +6,22 @@ namespace App\Game;
  * Immutable snapshot of a game in progress. Pure data — all behavior lives
  * in GameEngine. Mutate via with(), which returns a new instance.
  *
- * Phase A+B+C scope: the hex city, Location placement, Wanderer movement,
- * the Relic search/equip/drop loop, and a Golem phase that resolves cards
- * right-to-left each round. Win/loss threshold logic exists (outcome()),
- * but nothing grants Prophecy yet — that all lives in Relic and Location
- * effects, which aren't executed. Infrastructure and Road networks aren't
- * modeled yet either. Only a hand-picked subset of the 29 Golem cards and
- * the ~109 Relics have real, executed behavior — see
- * GameEngine::resolveGolemCard for exactly which cards do what; everything
- * else is logged but not mechanically applied, same as Relic *effects*
- * (never executed at all).
+ * Phase A-D scope: the hex city, Location placement, Wanderer movement,
+ * the Relic search/equip/drop loop, a Golem phase that resolves cards
+ * right-to-left each round, and the 4 Infrastructure types (Monolith
+ * Shard, Road, Walls, Fruit tree). Win/loss threshold logic exists
+ * (outcome()), but nothing grants Prophecy yet — that all lives in Relic
+ * and Location effects, which aren't executed. Only a hand-picked subset
+ * of the 29 Golem cards and the ~109 Relics have real, executed behavior
+ * — see GameEngine::resolveGolemCard for exactly which cards do what;
+ * everything else is logged but not mechanically applied, same as Relic
+ * *effects* (never executed at all).
  *
  * board["col,row"] = [
  *     'location_key' => string,
  *     'placed_round' => int,
  *     'relics' => list<string>,  // face-down pile still on this space
+ *     'infrastructure' => list<'monolith_shard'|'road'|'walls'|'fruit_tree'>,
  * ]
  *
  * wanderers[roleKey] = [
@@ -33,7 +34,14 @@ namespace App\Game;
  *         'bag' => ?string,
  *     ],
  *     'holding' => list<string>,       // searched but not yet equipped or dropped
+ *     'free_move_available' => bool,   // set after arriving on a Road — next move is free
  * ]
+ *
+ * infrastructurePool = ['monolith_shard' => int, 'road' => int, 'walls' => int, 'fruit_tree' => int]
+ * — the Emperor's pool to place 2 from per turn. Simplification, flagged
+ * in rules-todo.md: starts at the full physical component count (12/10/2/2)
+ * and is never replenished, since how the pool is meant to refill from
+ * Location "fixture outlines" is still an open rules question.
  *
  * relicDecks[branchEmoji] = list<string> — shuffled, shared across every
  * Location of that branch for the whole game; consumed as Locations are
@@ -74,7 +82,9 @@ final readonly class GameState
         public array $wanderers,
         public array $golem,
         public array $glyphDeck,
+        public array $infrastructurePool,
         public int $prophecy = 0,
+        public int $infrastructurePlacedThisTurn = 0,
         public array $pendingSetupWanderers = [],
         public bool $pendingGolemPlacement = true,
         public array $wandererOrder = [],
@@ -131,6 +141,19 @@ final readonly class GameState
             $this->round <= 6 => 5,
             default => 6,
         };
+    }
+
+    /**
+     * Cell keys with a Walls fixture — the Golem cannot enter these.
+     *
+     * @return list<string>
+     */
+    public function wallKeys(): array
+    {
+        return array_keys(array_filter(
+            $this->board,
+            fn (array $entry) => in_array('walls', $entry['infrastructure'], true)
+        ));
     }
 
     /**
@@ -202,6 +225,8 @@ final readonly class GameState
             'active_wanderer_role' => $this->activeWandererRole(),
             'actions_per_wanderer_turn' => $this->actionsPerWandererTurn(),
             'golem_cards_this_round' => $this->golemCardsThisRound(),
+            'infrastructure_pool' => $this->infrastructurePool,
+            'infrastructure_placed_this_turn' => $this->infrastructurePlacedThisTurn,
             'prophecy' => $this->prophecy,
             'outcome' => $this->phase === 'finished' ? $this->outcome() : null,
         ];
