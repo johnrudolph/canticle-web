@@ -542,6 +542,7 @@ final class GameEngine
             'immolation-rags' => self::relicImmolationRags($state, $actorRole),
             'divine-cabalist-pyre' => self::relicDivineCabalistPyre($state, $actorRole, $move),
             'show-solidarity' => self::relicShowSolidarity($state, $actorRole, $move),
+            'cabalist-brand' => self::relicCabalistBrand($state, $actorRole, $move),
             default => [$state, [], false],
         };
     }
@@ -1795,6 +1796,55 @@ final class GameEngine
     }
 
     /**
+     * Cabalist brand: "If you are on the Golem's space, discard any
+     * Glyphs on its mat you choose, trash this, and gain 📜. Then, the
+     * Golem plays 3 cards." $move['glyph_keys'] picks which (any
+     * number, including zero) of the Golem's active Glyphs to discard
+     * before it plays. Reuses golemPlayCards so "plays 3 cards" is
+     * identical to 3 plays during a normal Golem phase — including
+     * Double Down/Time Paradox if drawn.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function relicCabalistBrand(GameState $state, string $actorRole, array $move): array
+    {
+        if (! self::golemSharesCellWith($state, $actorRole)) {
+            return [$state, [], false];
+        }
+
+        $chosen = $move['glyph_keys'] ?? [];
+        $events = [];
+
+        if (is_array($chosen)) {
+            $glyphs = $state->golem['glyphs'];
+
+            foreach ($chosen as $glyphKey) {
+                if (! is_string($glyphKey)) {
+                    continue;
+                }
+
+                $index = array_search($glyphKey, $glyphs, true);
+
+                if ($index === false) {
+                    continue;
+                }
+
+                unset($glyphs[$index]);
+                $glyphs = array_values($glyphs);
+                $events[] = ['type' => 'glyph_discarded', 'role_key' => null, 'payload' => ['glyph_key' => $glyphKey]];
+            }
+
+            $state = $state->with(['golem' => $state->golemWith(['glyphs' => $glyphs])]);
+        }
+
+        [$state, $cardEvents] = self::golemPlayCards($state, 3);
+        $events = [...$events, ...$cardEvents];
+
+        return [$state, $events, true];
+    }
+
+    /**
      * Dispatches each "Inscribe" card on its full disambiguated key —
      * see resolveRelicAction's docblock for why. All 12 add a specific
      * Glyph type under a specific condition; all but inscribe-12 then
@@ -2147,10 +2197,23 @@ final class GameEngine
      */
     private static function resolveGolemPhase(GameState $state): array
     {
-        $events = [];
-        $toPlay = $state->golemCardsThisRound();
+        return self::golemPlayCards($state, $state->golemCardsThisRound());
+    }
 
-        for ($i = 0; $i < $toPlay; $i++) {
+    /**
+     * Resolves up to $count Golem cards right now, exactly like the
+     * Golem phase's own loop (Double Down/Time Paradox included) —
+     * factored out so Relics that trigger extra Golem plays outside the
+     * normal phase (e.g. Cabalist brand) share the same logic instead
+     * of duplicating it.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemPlayCards(GameState $state, int $count): array
+    {
+        $events = [];
+
+        for ($i = 0; $i < $count; $i++) {
             $golem = $state->golem;
 
             if ($golem['revealed'] === []) {
@@ -2164,7 +2227,7 @@ final class GameEngine
             [$state, $cardEvents, $effects] = self::resolveOrSkipTappedCard($state, $cardEntry);
             $events = [...$events, ...$cardEvents];
 
-            if ($effects['double_next'] && $i + 1 < $toPlay) {
+            if ($effects['double_next'] && $i + 1 < $count) {
                 // "Perform the next Golem card twice" — doubles the next
                 // physical card's effect without consuming an extra one of
                 // this round's N plays; the loop's own i++ still advances
@@ -2177,7 +2240,7 @@ final class GameEngine
                 }
             }
 
-            $toPlay += $effects['extra_cards'];
+            $count += $effects['extra_cards'];
 
             $state = self::refillGolemRevealed($state);
         }
