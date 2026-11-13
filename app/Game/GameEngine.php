@@ -476,7 +476,7 @@ final class GameEngine
             ['type' => 'relic_used', 'role_key' => $actorRole, 'payload' => ['relic_key' => $relicKey, 'name' => $relic?->name]],
         ];
 
-        [$state, $relicEvents, $trash] = self::resolveRelicAction($state, $actorRole, $baseKey, $move);
+        [$state, $relicEvents, $trash] = self::resolveRelicAction($state, $actorRole, $baseKey, $relicKey, $move);
         $events = [...$events, ...$relicEvents];
 
         if ($trash) {
@@ -488,11 +488,22 @@ final class GameEngine
     }
 
     /**
+     * $baseKey has any "-N" disambiguating suffix stripped — safe for
+     * every Relic name except "Inscribe," whose dozen reprints are
+     * mechanically distinct cards despite the shared title (different
+     * slot, condition, and Glyph color each), so those are dispatched
+     * on the untouched $relicKey instead, before baseKey collapses them
+     * all together.
+     *
      * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool} 2 = whether the Relic trashes itself after use
      */
-    private static function resolveRelicAction(GameState $state, string $actorRole, string $baseKey, array $move): array
+    private static function resolveRelicAction(GameState $state, string $actorRole, string $baseKey, string $relicKey, array $move): array
     {
+        if (str_starts_with($relicKey, 'inscribe')) {
+            return self::resolveInscribe($state, $actorRole, $relicKey);
+        }
+
         return match ($baseKey) {
             'artists-insight' => [...self::relicMove($state, $actorRole, $move, 2), false],
             'a-keen-eye' => [...self::relicSearchN($state, $actorRole, 2), false],
@@ -1219,6 +1230,126 @@ final class GameEngine
         $state = $state->with(['board' => $board]);
 
         return [$state, [['type' => 'relic_moved', 'role_key' => null, 'payload' => ['relic_key' => $relicKey, 'from' => $fromKey, 'to' => $toKey]]]];
+    }
+
+    /**
+     * Dispatches each "Inscribe" card on its full disambiguated key —
+     * see resolveRelicAction's docblock for why. All 12 add a specific
+     * Glyph type under a specific condition; all but inscribe-12 then
+     * trash themselves (per each one's own printed text).
+     *
+     * inscribe-7 ("When the Golem hits you, add a 🌑 Glyph...") is a
+     * reactive trigger, not a player-initiated action — there's no
+     * damage-event hook for Relics to react to yet, so it's a no-op
+     * like any other unimplemented Relic.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function resolveInscribe(GameState $state, string $actorRole, string $relicKey): array
+    {
+        $casterCell = $state->wanderers[$actorRole]['cell'];
+        $onGolemSpace = self::golemSharesCellWith($state, $actorRole);
+        $noOp = [$state, [], false];
+
+        return match ($relicKey) {
+            'inscribe', 'inscribe-2', 'inscribe-3' => $onGolemSpace
+                ? [...self::addGlyphOfType($state, '⏳'), true]
+                : $noOp,
+
+            'inscribe-4' => self::inscribePrisonJudgment($state, $actorRole),
+
+            'inscribe-5' => $onGolemSpace && self::countStatusTokens($state->wanderers[$actorRole]['equipped'], 'shame_token') === 0
+                ? [...self::addGlyphOfType($state, '⚖️'), true]
+                : $noOp,
+
+            'inscribe-6' => $onGolemSpace && in_array('monolith_shard', $state->board[Board::key($casterCell)]['infrastructure'], true)
+                ? [...self::addGlyphOfType($state, '✨'), true]
+                : $noOp,
+
+            'inscribe-7' => $noOp,
+
+            'inscribe-8' => $onGolemSpace
+                ? [...self::addGlyphOfType($state, '🎨'), true]
+                : $noOp,
+
+            'inscribe-9' => $onGolemSpace
+                ? [...self::addGlyphOfType($state, '🐾'), true]
+                : $noOp,
+
+            'inscribe-10' => $onGolemSpace
+                ? [...self::addGlyphOfType($state, '📖'), true]
+                : $noOp,
+
+            'inscribe-11' => self::allWanderersShareGolemSpace($state)
+                ? [...self::addGlyphOfType($state, '🤝'), true]
+                : $noOp,
+
+            'inscribe-12' => $onGolemSpace && self::allWanderersMutuallyAtLeastDistance($state, 2)
+                ? [...self::addGlyphOfType($state, '🤝'), false]
+                : $noOp,
+
+            default => $noOp,
+        };
+    }
+
+    /**
+     * Inscribe #4: "If you and the Golem are in the Prison, you have 0
+     * Shame tokens, and the Golem has 3+ Shame tokens: add a ⚖️ Glyph to
+     * the Golem's mat ... and trash this."
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function inscribePrisonJudgment(GameState $state, string $actorRole): array
+    {
+        $casterCell = $state->wanderers[$actorRole]['cell'];
+        $onPrison = $state->board[Board::key($casterCell)]['location_key'] === 'prison';
+        $golemThere = self::golemSharesCellWith($state, $actorRole);
+        $noShame = self::countStatusTokens($state->wanderers[$actorRole]['equipped'], 'shame_token') === 0;
+        $golemHighShame = $state->golem['shame'] >= 3;
+
+        if (! ($onPrison && $golemThere && $noShame && $golemHighShame)) {
+            return [$state, [], false];
+        }
+
+        return [...self::addGlyphOfType($state, '⚖️'), true];
+    }
+
+    private static function allWanderersShareGolemSpace(GameState $state): bool
+    {
+        $golemCell = $state->golem['cell'];
+
+        if ($golemCell === null) {
+            return false;
+        }
+
+        foreach (self::activeWanderers($state) as $cell) {
+            if (Board::key($cell) !== Board::key($golemCell)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static function allWanderersMutuallyAtLeastDistance(GameState $state, int $min): bool
+    {
+        $cells = array_values(self::activeWanderers($state));
+
+        foreach ($cells as $i => $a) {
+            foreach ($cells as $j => $b) {
+                if ($i === $j) {
+                    continue;
+                }
+
+                $distance = Board::distance($a, $b, $state->board);
+
+                if ($distance === null || $distance < $min) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     /**
