@@ -307,10 +307,10 @@ final class GameEngine
     }
 
     /**
-     * Not action-gated — "you may immediately equip Relics on this mat"
-     * reads as an always-available administrative move, distinct from the
-     * costed 🔎 action that finds one. Flagged in rules-todo.md to confirm.
-     * Bumps whatever was already in that slot onto the ground.
+     * Free at any time — confirmed via chat 2026-11-13. Bumps whatever
+     * Relic was already in that slot onto the ground; a slot held by a
+     * Shame/Scar status token can't be equipped into at all, rules.md:
+     * "No Relic can go in that slot while the token remains."
      *
      * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
@@ -334,6 +334,11 @@ final class GameEngine
         }
 
         $displaced = $wanderer['equipped'][$slot];
+
+        if (self::isStatusToken($displaced)) {
+            throw new InvalidMoveException('That slot is blocked by a status token.');
+        }
+
         $cellKey = Board::key($wanderer['cell']);
         $board = $state->board;
 
@@ -369,6 +374,10 @@ final class GameEngine
 
         $wanderer = $state->wanderers[$actorRole];
         $relicKey = (string) ($move['relic_key'] ?? '');
+
+        if (self::isStatusToken($relicKey)) {
+            throw new InvalidMoveException('Status tokens are not dropped this way.');
+        }
 
         $equipped = $wanderer['equipped'];
         $fromSlot = array_search($relicKey, $equipped, true);
@@ -453,7 +462,7 @@ final class GameEngine
 
         $relicKey = (string) ($move['relic_key'] ?? '');
 
-        if (! in_array($relicKey, $wanderer['equipped'], true)) {
+        if (self::isStatusToken($relicKey) || ! in_array($relicKey, $wanderer['equipped'], true)) {
             throw new InvalidMoveException('That Relic is not equipped.');
         }
 
@@ -494,6 +503,8 @@ final class GameEngine
             'golem-whistle' => [...self::relicSummonGolem($state, $actorRole), false],
             'quantum-robes' => [...self::relicSwapWithAlly($state, $actorRole, $move), false],
             'last-rites' => [...self::relicHealAllyToMax($state, $actorRole, $move), true],
+            'holy-water' => [...self::relicRemoveStatus($state, $actorRole, $move), false],
+            'hands-of-forgiveness' => [...self::relicRemoveAllStatus($state, $actorRole, $move), false],
             default => [$state, [], false],
         };
     }
@@ -652,6 +663,91 @@ final class GameEngine
         }
 
         return $targetRole;
+    }
+
+    /**
+     * Like resolveAllyTarget, but the caster targeting themselves is
+     * allowed too — Hands of forgiveness says "Choose a Wanderer in your
+     * space," not "an Ally."
+     *
+     * @param  array<string, mixed>  $move
+     */
+    private static function resolveSameSpaceTarget(GameState $state, string $actorRole, array $move): ?string
+    {
+        $targetRole = $move['target_role'] ?? null;
+
+        if (! is_string($targetRole) || ! isset($state->wanderers[$targetRole])) {
+            return null;
+        }
+
+        $actorCell = $state->wanderers[$actorRole]['cell'];
+        $targetCell = $state->wanderers[$targetRole]['cell'];
+
+        if ($actorCell === null || $targetCell === null || Board::key($actorCell) !== Board::key($targetCell)) {
+            return null;
+        }
+
+        return $targetRole;
+    }
+
+    /**
+     * Holy water: "Remove 1 Shame or 1 Scar from yourself or an Ally in
+     * your space." $move['remove_type'] picks which; defaults to
+     * removing Shame if present, else Scar.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicRemoveStatus(GameState $state, string $actorRole, array $move): array
+    {
+        $targetRole = self::resolveSameSpaceTarget($state, $actorRole, $move) ?? $actorRole;
+        $equipped = $state->wanderers[$targetRole]['equipped'];
+
+        $removeType = $move['remove_type'] ?? null;
+
+        if (! in_array($removeType, ['shame_token', 'scar_token'], true)) {
+            $removeType = in_array('shame_token', $equipped, true) ? 'shame_token' : 'scar_token';
+        }
+
+        return self::removeStatusToken($state, $targetRole, $removeType);
+    }
+
+    /**
+     * Hands of forgiveness: "Choose a Wanderer in your space, and remove
+     * all of their Shame and Scar tokens."
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicRemoveAllStatus(GameState $state, string $actorRole, array $move): array
+    {
+        $targetRole = self::resolveSameSpaceTarget($state, $actorRole, $move);
+
+        if ($targetRole === null) {
+            return [$state, []];
+        }
+
+        $events = [];
+        [$state, $e] = self::removeStatusToken($state, $targetRole, 'shame_token');
+        $events = [...$events, ...$e];
+        [$state, $e] = self::removeStatusToken($state, $targetRole, 'scar_token');
+        $events = [...$events, ...$e];
+
+        // Hands of forgiveness only has one of each token to actually
+        // clear at a time per removeStatusToken call; repeat while any
+        // remain, since a Wanderer could in principle hold more than one
+        // of the same type across different slots.
+        while (in_array('shame_token', $state->wanderers[$targetRole]['equipped'], true)) {
+            [$state, $e] = self::removeStatusToken($state, $targetRole, 'shame_token');
+            $events = [...$events, ...$e];
+        }
+
+        while (in_array('scar_token', $state->wanderers[$targetRole]['equipped'], true)) {
+            [$state, $e] = self::removeStatusToken($state, $targetRole, 'scar_token');
+            $events = [...$events, ...$e];
+        }
+
+        return [$state, $events];
     }
 
     /**
@@ -1055,6 +1151,45 @@ final class GameEngine
                 $events = [...$events, ...$e];
                 break;
 
+            case 'scar':
+                $target = self::nearestWanderer($state);
+                [$state, $e] = self::golemMoveToward($state, $target, 1);
+                $events = [...$events, ...$e];
+
+                if ($target !== null) {
+                    [$state, $e] = self::applyStatusToken($state, $target, 'scar_token');
+                    $events = [...$events, ...$e];
+                }
+                break;
+
+            case 'public-lashings':
+                $target = self::mostShameWanderer($state);
+                [$state, $e] = self::golemMoveToward($state, $target, 1);
+                $events = [...$events, ...$e];
+
+                if ($target !== null && self::golemSharesCellWith($state, $target)) {
+                    $shame = self::countStatusTokens($state->wanderers[$target]['equipped'], 'shame_token');
+
+                    if ($shame > 0) {
+                        $state = self::applyDamage($state, $target, 3 * $shame);
+                        $events[] = ['type' => 'wanderer_damaged', 'role_key' => $target, 'payload' => ['amount' => 3 * $shame]];
+                    }
+                }
+                break;
+
+            case 'public-shaming':
+                foreach (self::activeWanderers($state) as $role => $cell) {
+                    $shame = self::countStatusTokens($state->wanderers[$role]['equipped'], 'shame_token');
+
+                    if ($shame === 0) {
+                        continue;
+                    }
+
+                    $state = self::applyDamage($state, $role, 2 * $shame);
+                    $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => 2 * $shame]];
+                }
+                break;
+
             case 'penitence':
                 $state = $state->with(['golem' => $state->golemWith(['shame' => max(0, $state->golem['shame'] - 1)])]);
                 break;
@@ -1295,6 +1430,31 @@ final class GameEngine
         return $best;
     }
 
+    private static function mostShameWanderer(GameState $state): ?string
+    {
+        $best = null;
+        $bestShame = -1;
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            $shame = self::countStatusTokens($state->wanderers[$role]['equipped'], 'shame_token');
+
+            if ($shame > $bestShame) {
+                $best = $role;
+                $bestShame = $shame;
+            }
+        }
+
+        return $best;
+    }
+
+    private static function golemSharesCellWith(GameState $state, string $role): bool
+    {
+        $golemCell = $state->golem['cell'];
+        $wandererCell = $state->wanderers[$role]['cell'];
+
+        return $golemCell !== null && $wandererCell !== null && Board::key($golemCell) === Board::key($wandererCell);
+    }
+
     private static function leastHpWanderer(GameState $state): ?string
     {
         $best = null;
@@ -1461,6 +1621,79 @@ final class GameEngine
             'hand_left', 'hand_right' => $relicSlot === 'Hand',
             default => false,
         };
+    }
+
+    private static function isStatusToken(mixed $value): bool
+    {
+        return $value === 'shame_token' || $value === 'scar_token';
+    }
+
+    /**
+     * Shame is capped at 3 (rules.md's Relic texts reference this
+     * explicitly); further gains are a no-op. Scar has no printed cap —
+     * bounded only by there being 5 equip slots.
+     *
+     * Who picks *which* slot is confirmed (the affected Wanderer in
+     * co-op, the Golem-pilot in adversary mode — rules.md), but applying
+     * this mid-way through an already-automatic Golem card resolution has
+     * no interactive pause to ask either of them; this always picks the
+     * first empty slot instead, or does nothing if every slot is full.
+     * Flagged as a real gap, not a rules question, in rules-todo.md.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function applyStatusToken(GameState $state, string $targetRole, string $token): array
+    {
+        $equipped = $state->wanderers[$targetRole]['equipped'];
+
+        if ($token === 'shame_token' && self::countStatusTokens($equipped, 'shame_token') >= 3) {
+            return [$state, []];
+        }
+
+        $emptySlot = array_search(null, $equipped, true);
+
+        if ($emptySlot === false) {
+            return [$state, []];
+        }
+
+        $equipped[$emptySlot] = $token;
+        $state = $state->with(['wanderers' => $state->wanderersWith($targetRole, ['equipped' => $equipped])]);
+
+        $eventType = $token === 'shame_token' ? 'wanderer_shamed' : 'wanderer_scarred';
+
+        return [$state, [['type' => $eventType, 'role_key' => $targetRole, 'payload' => ['slot' => $emptySlot]]]];
+    }
+
+    /**
+     * Removes one token of $token from $targetRole's mat (whichever slot
+     * it's in), if they have one. Used by Holy water (either type, caster's
+     * choice) and Hands of forgiveness (both types, no choice needed).
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function removeStatusToken(GameState $state, string $targetRole, string $token): array
+    {
+        $equipped = $state->wanderers[$targetRole]['equipped'];
+        $slot = array_search($token, $equipped, true);
+
+        if ($slot === false) {
+            return [$state, []];
+        }
+
+        $equipped[$slot] = null;
+        $state = $state->with(['wanderers' => $state->wanderersWith($targetRole, ['equipped' => $equipped])]);
+
+        $eventType = $token === 'shame_token' ? 'wanderer_shame_removed' : 'wanderer_scar_removed';
+
+        return [$state, [['type' => $eventType, 'role_key' => $targetRole, 'payload' => ['slot' => $slot]]]];
+    }
+
+    /**
+     * @param  array<string, string|null>  $equipped
+     */
+    private static function countStatusTokens(array $equipped, string $token): int
+    {
+        return count(array_filter($equipped, fn ($value) => $value === $token));
     }
 
     /**

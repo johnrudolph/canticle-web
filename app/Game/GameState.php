@@ -29,6 +29,10 @@ namespace App\Game;
  *     'hp' => int,                     // 1-15, 0 = exhausted (not dead)
  *     'actions_remaining' => int,      // only meaningful on that Wanderer's own turn
  *     'equipped' => [
+ *         // each slot: null, a Relic key, or a status token sentinel
+ *         // ('shame_token'|'scar_token') — rules.md: a token occupies a
+ *         // slot of the Wanderer's choice (the Golem-pilot's choice in
+ *         // adversary mode) and no Relic can go there while it remains.
  *         'body' => ?string, 'mind' => ?string,
  *         'hand_left' => ?string, 'hand_right' => ?string,
  *         'bag' => ?string,
