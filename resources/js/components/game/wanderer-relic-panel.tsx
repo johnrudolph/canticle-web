@@ -1,5 +1,14 @@
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import type { EquipSlot, RelicCatalogEntry, WandererState } from '@/types/game';
+import { HealthBar } from './health-bar';
+import { RoleAvatar } from './role-avatar';
+import { WandererDetailDialog } from './wanderer-detail-dialog';
 
 // "Use" always submits with no extra input. Relics whose engine behavior
 // needs more (e.g. Artist's insight's `directions` payload for its 🦶2)
@@ -22,9 +31,50 @@ const RELIC_SLOT_TO_EQUIP_SLOTS: Record<string, EquipSlot[]> = {
     Hand: ['hand_left', 'hand_right'],
 };
 
-function relicLabel(key: string, catalog: Record<string, RelicCatalogEntry>): string {
+function relicLabel(
+    key: string,
+    catalog: Record<string, RelicCatalogEntry>,
+): string {
     const entry = catalog[key];
     return entry ? `${entry.slot_emoji} ${entry.name}` : key;
+}
+
+function DropButton({
+    relicKey,
+    entry,
+    processing,
+    onSubmit,
+}: {
+    relicKey: string;
+    entry: RelicCatalogEntry | undefined;
+    processing: boolean;
+    onSubmit: (move: Record<string, unknown>) => void;
+}) {
+    const bound = entry?.is_bound === true;
+    const button = (
+        <button
+            type="button"
+            disabled={processing || bound}
+            className="text-muted-foreground hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-muted-foreground"
+            onClick={() =>
+                onSubmit({ type: 'drop_relic', relic_key: relicKey })
+            }
+        >
+            drop
+        </button>
+    );
+
+    if (!bound) return button;
+
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>{button}</TooltipTrigger>
+            <TooltipContent>
+                Bound Relics can't be dropped once equipped — only trashed by
+                their own effect.
+            </TooltipContent>
+        </Tooltip>
+    );
 }
 
 export function WandererRelicPanel({
@@ -34,47 +84,89 @@ export function WandererRelicPanel({
     processing,
     onSubmit,
     canAct,
+    isActive = false,
     allies,
 }: {
-    role: string;
+    role: 'wanderer_a' | 'wanderer_b' | 'wanderer_c';
     wanderer: WandererState;
     relicCatalog: Record<string, RelicCatalogEntry>;
     processing: boolean;
     onSubmit: (move: Record<string, unknown>) => void;
     /** Whether this Wanderer can spend an action right now (their own active turn). */
     canAct: boolean;
+    /** Whether it's this Wanderer's turn right now, regardless of who's viewing. */
+    isActive?: boolean;
     /** Other Wanderers sharing this one's space, for Relics that target an Ally. */
     allies: { role: string; label: string }[];
 }) {
+    const [detailOpen, setDetailOpen] = useState(false);
     const label = `Wanderer ${role.replace('wanderer_', '').toUpperCase()}`;
 
     return (
-        <div className="rounded-md border bg-card p-2 text-xs">
-            <p className="mb-1 font-medium">
-                {label} — {wanderer.hp} HP
-            </p>
+        <div
+            className={`rounded-md border bg-card p-2 text-xs ${
+                isActive ? 'border-primary ring-1 ring-primary' : ''
+            }`}
+        >
+            <button
+                type="button"
+                onClick={() => setDetailOpen(true)}
+                className="mb-1.5 flex w-full items-center gap-2 text-left hover:opacity-80"
+            >
+                <RoleAvatar role={role} size="lg" />
+                <div className="flex-1">
+                    <p className="font-medium">
+                        {label}
+                        {isActive && (
+                            <span className="ml-2 rounded bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground">
+                                {wanderer.actions_remaining} action
+                                {wanderer.actions_remaining === 1
+                                    ? ''
+                                    : 's'}{' '}
+                                left
+                            </span>
+                        )}
+                    </p>
+                    <HealthBar hp={wanderer.hp} className="mt-1" />
+                </div>
+            </button>
+
+            {canAct && (
+                <Button
+                    size="sm"
+                    variant="outline"
+                    className="mb-1.5 h-6 w-full px-1.5 text-[10px]"
+                    disabled={
+                        processing ||
+                        wanderer.hp >= 15 ||
+                        wanderer.actions_remaining <= 0
+                    }
+                    onClick={() => onSubmit({ type: 'rest' })}
+                >
+                    🌿 Rest (+2 Health)
+                </Button>
+            )}
+
             <div className="grid grid-cols-2 gap-1">
                 {(Object.keys(SLOT_LABELS) as EquipSlot[]).map((slot) => {
                     const relicKey = wanderer.equipped[slot];
                     return (
                         <div key={slot} className="rounded border px-1.5 py-1">
-                            <p className="text-muted-foreground">{SLOT_LABELS[slot]}</p>
+                            <p className="text-muted-foreground">
+                                {SLOT_LABELS[slot]}
+                            </p>
                             {relicKey ? (
                                 <div className="flex flex-col gap-1">
                                     <div className="flex items-center justify-between gap-1">
                                         <span className="truncate">
                                             {relicLabel(relicKey, relicCatalog)}
                                         </span>
-                                        <button
-                                            type="button"
-                                            disabled={processing}
-                                            className="text-muted-foreground hover:text-destructive"
-                                            onClick={() =>
-                                                onSubmit({ type: 'drop_relic', relic_key: relicKey })
-                                            }
-                                        >
-                                            drop
-                                        </button>
+                                        <DropButton
+                                            relicKey={relicKey}
+                                            entry={relicCatalog[relicKey]}
+                                            processing={processing}
+                                            onSubmit={onSubmit}
+                                        />
                                     </div>
                                     {canAct && (
                                         <div className="flex flex-wrap gap-1">
@@ -84,7 +176,10 @@ export function WandererRelicPanel({
                                                 className="h-5 px-1.5 text-[10px]"
                                                 disabled={processing}
                                                 onClick={() =>
-                                                    onSubmit({ type: 'use_relic', relic_key: relicKey })
+                                                    onSubmit({
+                                                        type: 'use_relic',
+                                                        relic_key: relicKey,
+                                                    })
                                                 }
                                             >
                                                 Use
@@ -100,7 +195,8 @@ export function WandererRelicPanel({
                                                         onSubmit({
                                                             type: 'use_relic',
                                                             relic_key: relicKey,
-                                                            target_role: ally.role,
+                                                            target_role:
+                                                                ally.role,
                                                         })
                                                     }
                                                 >
@@ -111,7 +207,9 @@ export function WandererRelicPanel({
                                     )}
                                 </div>
                             ) : (
-                                <span className="text-muted-foreground/60">empty</span>
+                                <span className="text-muted-foreground/60">
+                                    empty
+                                </span>
                             )}
                         </div>
                     );
@@ -123,7 +221,9 @@ export function WandererRelicPanel({
                     <p className="text-muted-foreground">Holding</p>
                     {wanderer.holding.map((relicKey) => {
                         const entry = relicCatalog[relicKey];
-                        const equipSlots = entry ? (RELIC_SLOT_TO_EQUIP_SLOTS[entry.slot] ?? []) : [];
+                        const equipSlots = entry
+                            ? (RELIC_SLOT_TO_EQUIP_SLOTS[entry.slot] ?? [])
+                            : [];
 
                         return (
                             <div
@@ -142,7 +242,11 @@ export function WandererRelicPanel({
                                             className="h-5 px-1.5 text-[10px]"
                                             disabled={processing}
                                             onClick={() =>
-                                                onSubmit({ type: 'equip_relic', relic_key: relicKey, slot })
+                                                onSubmit({
+                                                    type: 'equip_relic',
+                                                    relic_key: relicKey,
+                                                    slot,
+                                                })
                                             }
                                         >
                                             Equip {SLOT_LABELS[slot]}
@@ -153,7 +257,10 @@ export function WandererRelicPanel({
                                         disabled={processing}
                                         className="text-muted-foreground hover:text-destructive"
                                         onClick={() =>
-                                            onSubmit({ type: 'drop_relic', relic_key: relicKey })
+                                            onSubmit({
+                                                type: 'drop_relic',
+                                                relic_key: relicKey,
+                                            })
                                         }
                                     >
                                         drop
@@ -164,6 +271,17 @@ export function WandererRelicPanel({
                     })}
                 </div>
             )}
+
+            <WandererDetailDialog
+                open={detailOpen}
+                onOpenChange={setDetailOpen}
+                role={role}
+                wanderer={wanderer}
+                relicCatalog={relicCatalog}
+                canAct={canAct}
+                processing={processing}
+                onSubmit={onSubmit}
+            />
         </div>
     );
 }

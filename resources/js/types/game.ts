@@ -1,4 +1,9 @@
-export type RoleKey = 'wanderer_a' | 'wanderer_b' | 'wanderer_c' | 'emperor' | 'golem';
+export type RoleKey =
+    | 'wanderer_a'
+    | 'wanderer_b'
+    | 'wanderer_c'
+    | 'emperor'
+    | 'golem';
 
 export type EquipSlot = 'body' | 'mind' | 'hand_left' | 'hand_right' | 'bag';
 
@@ -9,7 +14,11 @@ export interface RoleSummary {
     is_mine: boolean;
 }
 
-export type InfrastructureType = 'monolith_shard' | 'road' | 'walls' | 'fruit_tree';
+export type InfrastructureType =
+    | 'monolith_shard'
+    | 'road'
+    | 'walls'
+    | 'fruit_tree';
 
 export interface BoardCell {
     location_key: string;
@@ -37,6 +46,7 @@ export interface GolemState {
     glyphs: string[];
     revealed: GolemCardEntry[];
     draw_pile_count: number;
+    discard_pile_count: number;
 }
 
 export interface GameStateDto {
@@ -64,9 +74,11 @@ export interface GameStateDto {
 export interface LocationCatalogEntry {
     name: string;
     lore: string;
+    back_text: string | null;
     produces: string | null;
     produces_emoji: string | null;
     costs: string[];
+    relic_count: number;
 }
 
 export interface RelicCatalogEntry {
@@ -75,6 +87,9 @@ export interface RelicCatalogEntry {
     slot: 'Body' | 'Mind' | 'Hand' | 'Bag' | '';
     slot_emoji: string;
     symbol: string;
+    location_name: string | null;
+    is_event: boolean;
+    is_bound: boolean;
 }
 
 export interface GolemCardCatalogEntry {

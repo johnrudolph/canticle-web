@@ -22,7 +22,9 @@ export async function postJson<T = unknown>(
     if (!response.ok) {
         const body = await response.json().catch(() => null);
         const reason = body?.errors?.move?.[0] ?? body?.message;
-        throw new Error(reason ?? `Request failed with status ${response.status}`);
+        throw new Error(
+            reason ?? `Request failed with status ${response.status}`,
+        );
     }
 
     return response.json();

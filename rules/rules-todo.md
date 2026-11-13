@@ -41,7 +41,7 @@ they're resolved and fold the resolution into my own understanding instead
    Printed as: "Shuffle Glyphs on the Golem's mat, including face-up
    and face-down Glyphs. Randomly re-fill the 4 active slots with the
    shuffled cards, and return the rest to the Glyph discard pile."
-   Today the Golem only ever has up to 4 *face-up* Glyphs "on its mat"
+   Today the Golem only ever has up to 4 _face-up_ Glyphs "on its mat"
    (`golem['glyphs']`) — there's no separate face-down Glyph zone
    attached to the mat itself, only the main face-down Glyph deck
    (`glyphDeck`), which isn't "on the mat." If "face-down Glyphs on the

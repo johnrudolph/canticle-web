@@ -86,10 +86,10 @@ export default function Welcome({ games: openGames }: { games: OpenGame[] }) {
                                 </Label>
                             </div>
                             <p className="text-xs text-muted-foreground">
-                                Roles (Emperor, 2-3 Wanderers, optional
-                                Golem) are assigned in the lobby, separately
-                                from however many people actually show up —
-                                solo play claims every role.
+                                Roles (Emperor, 2-3 Wanderers, optional Golem)
+                                are assigned in the lobby, separately from
+                                however many people actually show up — solo play
+                                claims every role.
                             </p>
                         </form>
                     </CardContent>

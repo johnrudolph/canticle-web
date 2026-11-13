@@ -33,7 +33,9 @@ function describe(
         case 'wanderer_turn_started':
             return `${role}'s turn (${event.payload.actions} actions).`;
         case 'wanderer_moved':
-            return event.payload.free ? `${role} moved for free (Road).` : `${role} moved.`;
+            return event.payload.free
+                ? `${role} moved for free (Road).`
+                : `${role} moved.`;
         case 'fruit_tree_bonus_action':
             return `${role} gains an extra action (Fruit tree).`;
         case 'location_searched': {
