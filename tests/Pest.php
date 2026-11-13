@@ -18,6 +18,11 @@ pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
     ->in('Feature');
 
+// Unit tests don't touch the database, but still need the app booted —
+// the game engine's Catalog loaders read their file paths via config().
+pest()->extend(TestCase::class)
+    ->in('Unit');
+
 /*
 |--------------------------------------------------------------------------
 | Expectations
