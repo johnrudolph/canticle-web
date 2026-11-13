@@ -495,7 +495,7 @@ final class GameEngine
     {
         return match ($baseKey) {
             'artists-insight' => [...self::relicMove($state, $actorRole, $move, 2), false],
-            'a-keen-eye' => [...self::relicSearchTwice($state, $actorRole), false],
+            'a-keen-eye' => [...self::relicSearchN($state, $actorRole, 2), false],
             'alms-for-the-poor' => [...self::relicHealBelowThreshold($state, 6), false],
             'burial-robes' => [...self::relicHealSharedCell($state, $actorRole, 15), false],
             'divine-healing-oil' => [...self::relicHealSelfOrAlly($state, $actorRole, $move, 3), false],
@@ -509,6 +509,16 @@ final class GameEngine
             'peacemakers-spirit' => [...self::relicTapGolemIfSharingCell($state, $actorRole, 2), false],
             'blinding-explosion' => self::relicBlindingExplosion($state, $actorRole),
             'soothing-lullaby' => self::relicSoothingLullaby($state, $actorRole),
+            'golem-prod' => [...self::relicGolemProd($state, $actorRole, $move), false],
+            'golem-intuition' => [...self::relicGolemIntuition($state, $actorRole), false],
+            'golem-anthropology' => [...self::relicSearchN($state, $actorRole, self::golemSharesCellWith($state, $actorRole) ? 3 : 1), false],
+            'pointed-finger' => self::relicPointedFinger($state, $actorRole),
+            'divine-aura' => [...self::relicDivineAura($state, $actorRole), false],
+            'emperors-staff' => [...self::relicEmperorsStaff($state, $actorRole), false],
+            'ban-of-dangerous-ideas' => [...self::relicBanOfDangerousIdeas($state), true],
+            'writ-of-solitude' => [...self::relicWritOfSolitude($state), true],
+            'teleportation-stone' => [...self::relicTeleportationStone($state, $actorRole, $move), false],
+            'hands-of-deliverance' => [...self::relicHandsOfDeliverance($state, $move), false],
             default => [$state, [], false],
         };
     }
@@ -540,11 +550,11 @@ final class GameEngine
     /**
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
-    private static function relicSearchTwice(GameState $state, string $actorRole): array
+    private static function relicSearchN(GameState $state, string $actorRole, int $count): array
     {
         $events = [];
 
-        for ($i = 0; $i < 2; $i++) {
+        for ($i = 0; $i < $count; $i++) {
             $wanderer = $state->wanderers[$actorRole];
             $cellKey = Board::key($wanderer['cell']);
             $pile = $state->board[$cellKey]['relics'];
@@ -908,6 +918,307 @@ final class GameEngine
         [$state, $events] = self::tapGolemDrawPile($state, 3);
 
         return [$state, $events, true];
+    }
+
+    /**
+     * Golem Prod: "If the Golem is in your space, you may move it to an
+     * adjacent space." $move['direction'] picks which of the 6; a no-op
+     * (not just skip) if the Golem isn't sharing the caster's cell, or
+     * the chosen direction leads off the built map.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicGolemProd(GameState $state, string $actorRole, array $move): array
+    {
+        if (! self::golemSharesCellWith($state, $actorRole)) {
+            return [$state, []];
+        }
+
+        $direction = (string) ($move['direction'] ?? '');
+        $golemCell = $state->golem['cell'];
+        $destination = Board::neighbor($golemCell, $direction);
+
+        if (! array_key_exists(Board::key($destination), $state->board)) {
+            return [$state, []];
+        }
+
+        if (in_array(Board::key($destination), $state->wallKeys(), true)) {
+            return [$state, []];
+        }
+
+        $state = $state->with(['golem' => $state->golemWith(['cell' => $destination])]);
+
+        return [$state, [['type' => 'golem_moved', 'role_key' => $actorRole, 'payload' => ['to' => $destination]]]];
+    }
+
+    /**
+     * Golem intuition: "If you are on the Golem's space, look at the top
+     * 3 cards of the Golem draw pile." Read-only — reveals the keys to
+     * the acting player via the event payload, no state change.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicGolemIntuition(GameState $state, string $actorRole): array
+    {
+        if (! self::golemSharesCellWith($state, $actorRole)) {
+            return [$state, []];
+        }
+
+        $topCards = array_map(fn (array $entry) => $entry['key'], array_slice($state->golem['draw_pile'], 0, 3));
+
+        return [$state, [['type' => 'golem_draw_pile_revealed', 'role_key' => $actorRole, 'payload' => ['card_keys' => $topCards]]]];
+    }
+
+    /**
+     * Pointed finger: "If you are on the Golem's space, add one Shame
+     * token to the Golem, and one to yourself. Then, trash this, and
+     * gain 📜." The Golem's own Shame counter has no printed cap
+     * (unlike a Wanderer's 5 equip slots) anywhere else in the engine,
+     * so it's left uncapped here too.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function relicPointedFinger(GameState $state, string $actorRole): array
+    {
+        if (! self::golemSharesCellWith($state, $actorRole)) {
+            return [$state, [], false];
+        }
+
+        $state = $state->with(['golem' => $state->golemWith(['shame' => $state->golem['shame'] + 1])]);
+        $events = [['type' => 'golem_shame_gained', 'role_key' => null, 'payload' => ['amount' => 1]]];
+
+        [$state, $e] = self::applyStatusToken($state, $actorRole, 'shame_token');
+        $events = [...$events, ...$e];
+
+        return [$state, $events, true];
+    }
+
+    /**
+     * Divine aura: "If you are on a space with a Monolith Shard, 🌿2 for
+     * all Wanderers on or adjacent to your space."
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicDivineAura(GameState $state, string $actorRole): array
+    {
+        $casterCell = $state->wanderers[$actorRole]['cell'];
+
+        if (! in_array('monolith_shard', $state->board[Board::key($casterCell)]['infrastructure'], true)) {
+            return [$state, []];
+        }
+
+        $cellKeys = [Board::key($casterCell), ...array_map(Board::key(...), Board::occupiedNeighbors($casterCell, $state->board))];
+        $events = [];
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            if (! in_array(Board::key($cell), $cellKeys, true)) {
+                continue;
+            }
+
+            $hp = min(15, $state->wanderers[$role]['hp'] + 2);
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
+            $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Emperor's Staff: "If your space does not have a Monolith Shard,
+     * create one." Draws from the Emperor's fixed Infrastructure pool
+     * like a normal placement would — a no-op if the pool is empty,
+     * since there's no other source of Monolith Shards in rules.md.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicEmperorsStaff(GameState $state, string $actorRole): array
+    {
+        $cellKey = Board::key($state->wanderers[$actorRole]['cell']);
+        $entry = $state->board[$cellKey];
+
+        if (in_array('monolith_shard', $entry['infrastructure'], true)) {
+            return [$state, []];
+        }
+
+        if (($state->infrastructurePool['monolith_shard'] ?? 0) <= 0) {
+            return [$state, []];
+        }
+
+        $board = $state->board;
+        $board[$cellKey] = [...$entry, 'infrastructure' => [...$entry['infrastructure'], 'monolith_shard']];
+        $pool = $state->infrastructurePool;
+        $pool['monolith_shard']--;
+        $state = $state->with(['board' => $board, 'infrastructurePool' => $pool]);
+
+        return [$state, [['type' => 'infrastructure_placed', 'role_key' => $actorRole, 'payload' => ['infrastructure' => 'monolith_shard', 'cell' => $state->wanderers[$actorRole]['cell']]]]];
+    }
+
+    /**
+     * Ban of dangerous ideas: "Any Wanderer or Golem on a space that
+     * produces 📖, 💭, 🎨, or 🪙 gains 1 Shame token (max 3 Shame
+     * tokens). Then, trash this." The Golem has no equip slots to hold a
+     * Shame token in, so (like Pointed finger) its Shame is tracked on
+     * its own uncapped counter — this card's printed cap of 3 only binds
+     * the comparison for symmetry with the Wanderer side, since nothing
+     * else in rules.md caps the Golem's Shame today.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicBanOfDangerousIdeas(GameState $state): array
+    {
+        $branches = ['📖', '💭', '🎨', '🪙'];
+        $events = [];
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            $location = LocationCatalog::find($state->board[Board::key($cell)]['location_key']);
+
+            if ($location === null || ! in_array($location->producesEmoji, $branches, true)) {
+                continue;
+            }
+
+            [$state, $e] = self::applyStatusToken($state, $role, 'shame_token');
+            $events = [...$events, ...$e];
+        }
+
+        $golemCell = $state->golem['cell'];
+
+        if ($golemCell !== null) {
+            $location = LocationCatalog::find($state->board[Board::key($golemCell)]['location_key']);
+
+            if ($location !== null && in_array($location->producesEmoji, $branches, true) && $state->golem['shame'] < 3) {
+                $state = $state->with(['golem' => $state->golemWith(['shame' => $state->golem['shame'] + 1])]);
+                $events[] = ['type' => 'golem_shame_gained', 'role_key' => null, 'payload' => ['amount' => 1]];
+            }
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Writ of solitude: "Any Wanderer or Golem who is on a space with a
+     * Wanderer gains 1 Shame token (max 3 Shame tokens). Then, trash
+     * this." A Wanderer alone on their own space doesn't trigger it —
+     * they need company (another Wanderer, or the Golem sharing a
+     * Wanderer's space triggers the Golem's own gain).
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicWritOfSolitude(GameState $state): array
+    {
+        $byCell = [];
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            $byCell[Board::key($cell)][] = $role;
+        }
+
+        $events = [];
+
+        foreach ($byCell as $roles) {
+            if (count($roles) < 2) {
+                continue;
+            }
+
+            foreach ($roles as $role) {
+                [$state, $e] = self::applyStatusToken($state, $role, 'shame_token');
+                $events = [...$events, ...$e];
+            }
+        }
+
+        $golemCell = $state->golem['cell'];
+
+        if ($golemCell !== null && isset($byCell[Board::key($golemCell)]) && $state->golem['shame'] < 3) {
+            $state = $state->with(['golem' => $state->golemWith(['shame' => $state->golem['shame'] + 1])]);
+            $events[] = ['type' => 'golem_shame_gained', 'role_key' => null, 'payload' => ['amount' => 1]];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Teleportation stone: "Move an Ally to any space that contains a
+     * Monolith Shard, if they are allowed to be there." $move
+     * ['target_role'] must be an Ally (sharing the caster's space, same
+     * definition used everywhere else); $move['cell'] must be a built
+     * space with a Monolith Shard on it.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicTeleportationStone(GameState $state, string $actorRole, array $move): array
+    {
+        $targetRole = self::resolveAllyTarget($state, $actorRole, $move);
+
+        if ($targetRole === null) {
+            return [$state, []];
+        }
+
+        $destination = $move['cell'] ?? null;
+
+        if (! is_array($destination) || count($destination) !== 2) {
+            return [$state, []];
+        }
+
+        $destination = [(int) $destination[0], (int) $destination[1]];
+        $destinationKey = Board::key($destination);
+
+        if (! array_key_exists($destinationKey, $state->board)) {
+            return [$state, []];
+        }
+
+        if (! in_array('monolith_shard', $state->board[$destinationKey]['infrastructure'], true)) {
+            return [$state, []];
+        }
+
+        $state = $state->with(['wanderers' => $state->wanderersWith($targetRole, ['cell' => $destination])]);
+
+        return [$state, [['type' => 'wanderer_moved', 'role_key' => $targetRole, 'payload' => ['to' => $destination]]]];
+    }
+
+    /**
+     * Hands of deliverance: "Bound. Move 1 face-up relic from any space
+     * to any other space." $move['from_cell']/['to_cell'] pick the two
+     * spaces, $move['board_relic_key'] which one in the source pile
+     * (not $move['relic_key'] — that's already taken by useRelic's own
+     * "which equipped Relic am I using" field).
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicHandsOfDeliverance(GameState $state, array $move): array
+    {
+        $fromCell = $move['from_cell'] ?? null;
+        $toCell = $move['to_cell'] ?? null;
+        $relicKey = (string) ($move['board_relic_key'] ?? '');
+
+        if (! is_array($fromCell) || count($fromCell) !== 2 || ! is_array($toCell) || count($toCell) !== 2) {
+            return [$state, []];
+        }
+
+        $fromKey = Board::key([(int) $fromCell[0], (int) $fromCell[1]]);
+        $toKey = Board::key([(int) $toCell[0], (int) $toCell[1]]);
+
+        if (! array_key_exists($fromKey, $state->board) || ! array_key_exists($toKey, $state->board)) {
+            return [$state, []];
+        }
+
+        $fromEntry = $state->board[$fromKey];
+        $index = array_search($relicKey, $fromEntry['relics'], true);
+
+        if ($index === false) {
+            return [$state, []];
+        }
+
+        $fromRelics = $fromEntry['relics'];
+        unset($fromRelics[$index]);
+        $fromRelics = array_values($fromRelics);
+
+        $board = $state->board;
+        $board[$fromKey] = [...$fromEntry, 'relics' => $fromRelics];
+        $board[$toKey] = [...$board[$toKey], 'relics' => [...$board[$toKey]['relics'], $relicKey]];
+        $state = $state->with(['board' => $board]);
+
+        return [$state, [['type' => 'relic_moved', 'role_key' => null, 'payload' => ['relic_key' => $relicKey, 'from' => $fromKey, 'to' => $toKey]]]];
     }
 
     /**
