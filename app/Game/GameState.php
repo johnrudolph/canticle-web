@@ -8,11 +8,14 @@ namespace App\Game;
  *
  * Phase A+B+C scope: the hex city, Location placement, Wanderer movement,
  * the Relic search/equip/drop loop, and a Golem phase that resolves cards
- * right-to-left each round. Infrastructure, Road networks, and scoring are
- * not modeled yet. Only a hand-picked subset of the 29 Golem cards and the
- * ~109 Relics have real, executed behavior — see GameEngine::resolveGolemCard
- * for exactly which cards do what; everything else is logged but not
- * mechanically applied, same as Relic *effects* (never executed at all).
+ * right-to-left each round. Win/loss threshold logic exists (outcome()),
+ * but nothing grants Prophecy yet — that all lives in Relic and Location
+ * effects, which aren't executed. Infrastructure and Road networks aren't
+ * modeled yet either. Only a hand-picked subset of the 29 Golem cards and
+ * the ~109 Relics have real, executed behavior — see
+ * GameEngine::resolveGolemCard for exactly which cards do what; everything
+ * else is logged but not mechanically applied, same as Relic *effects*
+ * (never executed at all).
  *
  * board["col,row"] = [
  *     'location_key' => string,
@@ -71,11 +74,29 @@ final readonly class GameState
         public array $wanderers,
         public array $golem,
         public array $glyphDeck,
+        public int $prophecy = 0,
         public array $pendingSetupWanderers = [],
         public bool $pendingGolemPlacement = true,
         public array $wandererOrder = [],
         public ?int $activeWandererIndex = null,
     ) {}
+
+    /**
+     * rules.md's Game End thresholds, confirmed with the designer
+     * 2026-11-12: 12 Prophecy = simple victory, 16 = elite victory.
+     * Prophecy-*granting* isn't modeled yet (it all comes from Relic and
+     * Location effects, which aren't executed), so this is always
+     * 'defeat' today — the threshold logic is just ready for whenever
+     * those land.
+     */
+    public function outcome(): string
+    {
+        return match (true) {
+            $this->prophecy >= 16 => 'elite_victory',
+            $this->prophecy >= 12 => 'simple_victory',
+            default => 'defeat',
+        };
+    }
 
     public function activeWandererRole(): ?string
     {
@@ -181,6 +202,8 @@ final readonly class GameState
             'active_wanderer_role' => $this->activeWandererRole(),
             'actions_per_wanderer_turn' => $this->actionsPerWandererTurn(),
             'golem_cards_this_round' => $this->golemCardsThisRound(),
+            'prophecy' => $this->prophecy,
+            'outcome' => $this->phase === 'finished' ? $this->outcome() : null,
         ];
     }
 

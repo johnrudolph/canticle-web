@@ -293,7 +293,16 @@ export default function GameShow({ game }: { game: GameSummary }) {
                         <p className="font-medium">
                             Round {state.round}/8 — {state.phase}
                         </p>
-                        {status === 'finished' && <p className="text-muted-foreground">Game over.</p>}
+                        <p className="text-muted-foreground">
+                            📜 Prophecy: {state.prophecy} (12 = victory, 16 = elite victory)
+                        </p>
+                        {status === 'finished' && state.outcome && (
+                            <p className="mt-1 font-medium">
+                                {state.outcome === 'elite_victory' && '🏆 Elite Victory!'}
+                                {state.outcome === 'simple_victory' && '🎉 Victory!'}
+                                {state.outcome === 'defeat' && '💀 Defeat.'}
+                            </p>
+                        )}
                         {status === 'abandoned' && <p className="text-destructive">Abandoned.</p>}
                     </div>
 

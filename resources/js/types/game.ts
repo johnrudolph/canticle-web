@@ -47,6 +47,8 @@ export interface GameStateDto {
     active_wanderer_role: RoleKey | null;
     actions_per_wanderer_turn: number;
     golem_cards_this_round: number;
+    prophecy: number;
+    outcome: 'elite_victory' | 'simple_victory' | 'defeat' | null;
 }
 
 export interface LocationCatalogEntry {
