@@ -1,0 +1,160 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Game\Catalog\Location;
+use App\Game\Catalog\LocationCatalog;
+use App\Game\EventLog;
+use App\Game\GameEngine;
+use App\Game\GameStateRepository;
+use App\Game\InvalidMoveException;
+use App\Models\Game;
+use App\Models\GameEvent;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class GameController extends Controller
+{
+    public function show(Game $game): Response
+    {
+        $this->requireViewable($game);
+
+        return Inertia::render('games/show', [
+            'game' => ['id' => $game->id, 'code' => $game->code, ...$this->summarize($game)],
+        ]);
+    }
+
+    /**
+     * Polled by the client every few seconds in place of a live push
+     * channel. Reverb is already running for another app on this server;
+     * this one deliberately stays on plain polling — a casual board game
+     * doesn't need sub-second sync, and polling avoids that extra coupling.
+     */
+    public function pollState(Game $game): JsonResponse
+    {
+        $this->requireViewable($game);
+
+        return response()->json($this->summarize($game));
+    }
+
+    public function storeMove(Request $request, Game $game): JsonResponse
+    {
+        $validated = $request->validate([
+            'role_key' => ['required', 'string'],
+            'move' => ['required', 'array'],
+        ]);
+
+        $roleKey = $validated['role_key'];
+        $game->roles()->where('role_key', $roleKey)->where('user_id', Auth::id())->firstOrFail();
+
+        if ($game->status !== 'active') {
+            throw ValidationException::withMessages(['move' => 'This game is not active.']);
+        }
+
+        $state = GameStateRepository::load($game);
+
+        try {
+            [$state, $events] = GameEngine::apply($state, $roleKey, $validated['move']);
+        } catch (InvalidMoveException $e) {
+            throw ValidationException::withMessages(['move' => $e->getMessage()]);
+        }
+
+        GameStateRepository::persist($game, $state);
+        EventLog::record($game, $events);
+
+        if ($state->phase === 'finished') {
+            $game->update(['status' => 'finished']);
+        }
+
+        return response()->json($this->summarize($game->fresh()));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function summarize(Game $game): array
+    {
+        $game->loadMissing('roles.user');
+
+        $myRoles = $game->roles
+            ->filter(fn ($role) => $role->user_id === Auth::id())
+            ->pluck('role_key')
+            ->values();
+
+        return [
+            'status' => $game->status,
+            'wanderer_count' => $game->wanderer_count,
+            'golem_enabled' => $game->golem_enabled,
+            'is_host' => $game->created_by_user_id === Auth::id(),
+            'my_roles' => $myRoles,
+            'roles' => $game->roles->map(fn ($role) => [
+                'role_key' => $role->role_key,
+                'is_ready' => $role->is_ready,
+                'user_name' => $role->user?->name,
+                'is_mine' => $role->user_id === Auth::id(),
+            ]),
+            'state' => in_array($game->status, ['active', 'finished', 'abandoned'], true) && $game->state !== null
+                ? GameStateRepository::load($game)->toArray()
+                : null,
+            'location_catalog' => $this->locationCatalog(),
+            'events' => $this->eventLog($game),
+        ];
+    }
+
+    /**
+     * @return array<string, array{name: string, lore: string, produces: ?string, produces_emoji: ?string, costs: list<string>}>
+     */
+    private function locationCatalog(): array
+    {
+        return collect(LocationCatalog::all())
+            ->map(fn (Location $location) => [
+                'name' => $location->name,
+                'lore' => $location->lore,
+                'produces' => $location->produces,
+                'produces_emoji' => $location->producesEmoji,
+                'costs' => $location->costs,
+            ])
+            ->all();
+    }
+
+    /**
+     * @return list<array{id: int, type: string, role_key: ?string, payload: array<string, mixed>, created_at: ?string}>
+     */
+    private function eventLog(Game $game): array
+    {
+        return GameEvent::where('game_id', $game->id)
+            ->latest('id')
+            ->limit(300)
+            ->get()
+            ->reverse()
+            ->values()
+            ->map(fn (GameEvent $event) => [
+                'id' => $event->id,
+                'type' => $event->type,
+                'role_key' => $event->role_key,
+                'payload' => $event->payload ?? [],
+                'created_at' => $event->created_at?->toIso8601String(),
+            ])
+            ->all();
+    }
+
+    /**
+     * The lobby is open to anyone with the link, so a role can be claimed
+     * in the first place — "Join by code" doesn't assign one. Once the
+     * game is active, only seated roles may keep watching.
+     */
+    private function requireViewable(Game $game): void
+    {
+        if ($game->status === 'lobby') {
+            return;
+        }
+
+        $hasRole = $game->roles()->where('user_id', Auth::id())->exists();
+
+        abort_if(! $hasRole, 403, 'You are not part of this game.');
+    }
+}

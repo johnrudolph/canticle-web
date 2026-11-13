@@ -1,0 +1,112 @@
+[
+    {
+        "Branches": "Magic",
+        "Emoji": "🖐️",
+        "Locations": "2",
+        "Relics": "39",
+        "R/L": "6.5",
+        "": "28",
+        "Relic type": "Hand",
+        "Stats": "Locations"
+    },
+    {
+        "Branches": "Religion",
+        "Emoji": "👝",
+        "Locations": "3",
+        "Relics": "20",
+        "R/L": "5.0",
+        "": "109",
+        "Relic type": "Bag",
+        "Stats": "Relics"
+    },
+    {
+        "Branches": "Solidarity",
+        "Emoji": "🧠",
+        "Locations": "2",
+        "Relics": "17",
+        "R/L": "4.5",
+        "": "",
+        "Relic type": "Mind",
+        "Stats": ""
+    },
+    {
+        "Branches": "Golem",
+        "Emoji": "🥋",
+        "Locations": "2",
+        "Relics": "19",
+        "R/L": "6.0",
+        "": "",
+        "Relic type": "Body",
+        "Stats": ""
+    },
+    {
+        "Branches": "Time",
+        "Emoji": "",
+        "Locations": "3",
+        "Relics": "",
+        "R/L": "4.3",
+        "": "",
+        "Relic type": "",
+        "Stats": ""
+    },
+    {
+        "Branches": "Dark",
+        "Emoji": "",
+        "Locations": "3",
+        "Relics": "",
+        "R/L": "5.7",
+        "": "",
+        "Relic type": "",
+        "Stats": ""
+    },
+    {
+        "Branches": "Law",
+        "Emoji": "",
+        "Locations": "2",
+        "Relics": "",
+        "R/L": "5.0",
+        "": "",
+        "Relic type": "",
+        "Stats": ""
+    },
+    {
+        "Branches": "Art",
+        "Emoji": "",
+        "Locations": "3",
+        "Relics": "",
+        "R/L": "6.7",
+        "": "",
+        "Relic type": "",
+        "Stats": ""
+    },
+    {
+        "Branches": "Agriculture",
+        "Emoji": "",
+        "Locations": "2",
+        "Relics": "",
+        "R/L": "0.0",
+        "": "",
+        "Relic type": "",
+        "Stats": ""
+    },
+    {
+        "Branches": "Commerce",
+        "Emoji": "",
+        "Locations": "1",
+        "Relics": "",
+        "R/L": "0.0",
+        "": "",
+        "Relic type": "",
+        "Stats": ""
+    },
+    {
+        "Branches": "Engineering",
+        "Emoji": "",
+        "Locations": "2",
+        "Relics": "",
+        "R/L": "0.0",
+        "": "",
+        "Relic type": "",
+        "Stats": ""
+    }
+]
