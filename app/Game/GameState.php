@@ -38,6 +38,7 @@ namespace App\Game;
  *     ],
  *     'holding' => list<string>,       // searched but not yet equipped or dropped
  *     'free_move_available' => bool,   // set after arriving on a Road — next move is free
+ *     'move_blocked_this_turn' => bool, // Incarceration — cleared when this Wanderer's next turn starts
  * ]
  *
  * infrastructurePool = ['monolith_shard' => int, 'road' => int, 'walls' => int, 'fruit_tree' => int]

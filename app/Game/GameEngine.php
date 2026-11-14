@@ -45,7 +45,7 @@ final class GameEngine
             'place_infrastructure' => self::placeInfrastructure($state, $actorRole, $move),
             'end_emperor_phase' => self::endEmperorPhase($state, $actorRole, $move),
             'move_wanderer' => self::moveWanderer($state, $actorRole, $move),
-            'search_location' => self::searchLocation($state, $actorRole),
+            'search_location' => self::searchLocation($state, $actorRole, $move),
             'equip_relic' => self::equipRelic($state, $actorRole, $move),
             'drop_relic' => self::dropRelic($state, $actorRole, $move),
             'pickup_relic' => self::pickupRelic($state, $actorRole, $move),
@@ -262,13 +262,15 @@ final class GameEngine
      * still costs the action, same as a physical search coming up short.
      *
      * Event-type Relics have no equip slot — rules.md: "If you discover
-     * an Event, resolve immediately and trash." Resolving the effect
-     * isn't modeled, but trashing it is: it's never added to `holding`,
-     * since there'd be no way to ever do anything with it there.
+     * an Event, resolve immediately and trash." It's never added to
+     * `holding`, since there'd be no way to ever do anything with it
+     * there — see resolveEventRelic for which ones have real,
+     * executed effects.
      *
+     * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
-    private static function searchLocation(GameState $state, string $actorRole): array
+    private static function searchLocation(GameState $state, string $actorRole, array $move): array
     {
         self::requireRole($state, $actorRole, $state->activeWandererRole(), 'wanderer');
 
@@ -304,9 +306,16 @@ final class GameEngine
 
         $state = $state->with(['board' => $board, 'wanderers' => $wanderers]);
 
-        return [$state, [
+        $events = [
             ['type' => 'location_searched', 'role_key' => $actorRole, 'payload' => ['found' => $found, 'trashed_as_event' => $isEvent]],
-        ]];
+        ];
+
+        if ($isEvent) {
+            [$state, $eventRelicEvents] = self::resolveEventRelic($state, $actorRole, $found, $move);
+            $events = [...$events, ...$eventRelicEvents];
+        }
+
+        return [$state, $events];
     }
 
     /**
@@ -561,6 +570,7 @@ final class GameEngine
             'silent-hunting-cloak' => [...self::relicSilentHuntingCloak($state, $actorRole), false],
             'jericho-inscription' => self::relicJerichoInscription($state, $actorRole),
             'past-troubles' => self::relicPastTroubles($state),
+            'pray' => self::relicPray($state, $actorRole),
             default => [$state, [], false],
         };
     }
@@ -622,6 +632,272 @@ final class GameEngine
 
             $state = $state->with(['board' => $board, 'wanderers' => $wanderers]);
             $events[] = ['type' => 'location_searched', 'role_key' => $actorRole, 'payload' => ['found' => $found, 'trashed_as_event' => $isEvent]];
+
+            if ($isEvent) {
+                [$state, $eventRelicEvents] = self::resolveEventRelic($state, $actorRole, $found, []);
+                $events = [...$events, ...$eventRelicEvents];
+            }
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Executes an Event Relic's effect the instant it's found — rules.md:
+     * "If an Event, resolve immediately and trash." Only a hand-picked
+     * subset have real, executed behavior; everything else is logged
+     * (via location_searched's trashed_as_event flag) but not applied,
+     * same honesty pattern as every other unimplemented Relic/Golem
+     * card. $move carries any extra choice a specific Event needs
+     * (e.g. Epiphany's target cell) — empty when resolved via a bonus
+     * search from another Relic's effect rather than the top-level
+     * search_location move.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function resolveEventRelic(GameState $state, string $actorRole, string $relicKey, array $move): array
+    {
+        return match ($relicKey) {
+            'time-jump' => self::golemPlayCards($state, 1),
+            'guilty-by-association', 'guilty-conscience' => self::applyStatusToken($state, $actorRole, 'shame_token'),
+            'sharp-objects' => self::applyStatusToken($state, $actorRole, 'scar_token'),
+            'incarceration' => self::relicIncarceration($state, $actorRole),
+            'buoyant-spirit' => self::relicActionDelta($state, $actorRole, 2),
+            'lost-in-thought' => self::relicActionDelta($state, $actorRole, -1),
+            'time-spasm' => self::relicTimeSpasm($state),
+            'epiphany' => self::relicEpiphany($state, $actorRole, $move),
+            'golem-avarice' => self::relicGolemAvarice($state, $actorRole),
+            'magic-explosion' => self::relicMagicExplosion($state, $actorRole),
+            'a-rush-of-companionship' => self::relicRushOfCompanionship($state),
+            default => [$state, []],
+        };
+    }
+
+    /**
+     * Incarceration: "You cannot move anymore this turn." Only blocks
+     * move_wanderer specifically (not Search/Use-relic/etc.), via a new
+     * per-Wanderer flag cleared when this Wanderer's next turn starts.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicIncarceration(GameState $state, string $actorRole): array
+    {
+        $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['move_blocked_this_turn' => true])]);
+
+        return [$state, [['type' => 'wanderer_move_blocked', 'role_key' => $actorRole, 'payload' => []]]];
+    }
+
+    /**
+     * Shared by Buoyant spirit (+2 actions) and Lost in thought (-1
+     * action) — both just adjust the caster's actions_remaining for
+     * the rest of this turn, floored at 0.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicActionDelta(GameState $state, string $actorRole, int $delta): array
+    {
+        $actions = max(0, $state->wanderers[$actorRole]['actions_remaining'] + $delta);
+        $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['actions_remaining' => $actions])]);
+
+        return [$state, [['type' => 'wanderer_actions_adjusted', 'role_key' => $actorRole, 'payload' => ['delta' => $delta, 'actions_remaining' => $actions]]]];
+    }
+
+    /**
+     * Time spasm: "If the current round is an odd number, move the
+     * round counter forward one round. If the current round is an
+     * even number, move the tracker back one round."
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicTimeSpasm(GameState $state): array
+    {
+        $newRound = $state->round % 2 === 1 ? $state->round + 1 : max(1, $state->round - 1);
+        $state = $state->with(['round' => $newRound]);
+
+        return [$state, [['type' => 'round_shifted', 'role_key' => null, 'payload' => ['round' => $newRound]]]];
+    }
+
+    /**
+     * Epiphany: "Gain a face-down Relic on a different Location you
+     * choose." $move['cell'] picks which built, non-empty, non-caster
+     * Location to pull a random face-down Relic from.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicEpiphany(GameState $state, string $actorRole, array $move): array
+    {
+        $targetCell = $move['cell'] ?? null;
+
+        if (! is_array($targetCell) || count($targetCell) !== 2) {
+            return [$state, []];
+        }
+
+        $targetKey = Board::key([(int) $targetCell[0], (int) $targetCell[1]]);
+        $casterCellKey = Board::key($state->wanderers[$actorRole]['cell']);
+
+        if ($targetKey === $casterCellKey || ! array_key_exists($targetKey, $state->board)) {
+            return [$state, []];
+        }
+
+        $pile = $state->board[$targetKey]['relics'];
+
+        if ($pile === []) {
+            return [$state, []];
+        }
+
+        $index = array_rand($pile);
+        $found = $pile[$index];
+        unset($pile[$index]);
+        $pile = array_values($pile);
+
+        $board = $state->board;
+        $board[$targetKey] = [...$board[$targetKey], 'relics' => $pile];
+
+        $foundRelic = RelicCatalog::find($found);
+        $isEvent = $foundRelic !== null && $foundRelic->isEvent;
+
+        $wanderer = $state->wanderers[$actorRole];
+        $wanderers = $state->wanderersWith($actorRole, [
+            'holding' => $isEvent ? $wanderer['holding'] : [...$wanderer['holding'], $found],
+        ]);
+
+        $state = $state->with(['board' => $board, 'wanderers' => $wanderers]);
+        $events = [['type' => 'location_searched', 'role_key' => $actorRole, 'payload' => ['found' => $found, 'trashed_as_event' => $isEvent]]];
+
+        if ($isEvent) {
+            [$state, $eventRelicEvents] = self::resolveEventRelic($state, $actorRole, $found, []);
+            $events = [...$events, ...$eventRelicEvents];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Golem avarice: "Move all face-up and face-down Relics here to
+     * the Golem's space. Place the face-down Relics underneath the
+     * face-down Relics on the Golem's space, if there are any." Our
+     * face-down pile has no top/bottom ordering (search draws
+     * randomly), so "underneath" has no observable effect here —
+     * the two piles are simply combined.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicGolemAvarice(GameState $state, string $actorRole): array
+    {
+        $golemCell = $state->golem['cell'];
+
+        if ($golemCell === null) {
+            return [$state, []];
+        }
+
+        $casterCellKey = Board::key($state->wanderers[$actorRole]['cell']);
+        $golemCellKey = Board::key($golemCell);
+
+        if ($casterCellKey === $golemCellKey) {
+            return [$state, []];
+        }
+
+        $moved = $state->board[$casterCellKey]['relics'];
+        $board = $state->board;
+        $board[$casterCellKey] = [...$board[$casterCellKey], 'relics' => []];
+        $board[$golemCellKey] = [...$board[$golemCellKey], 'relics' => [...$board[$golemCellKey]['relics'], ...$moved]];
+        $state = $state->with(['board' => $board]);
+
+        return [$state, [['type' => 'relics_moved_to_golem', 'role_key' => null, 'payload' => ['count' => count($moved)]]]];
+    }
+
+    /**
+     * Magic explosion: "Move all face-up and face-down Relics here to
+     * adjacent spaces, spread evenly. Then, place a Monolith Shard in
+     * each space where a Relic landed." "Spread evenly" is read as
+     * round-robin across the caster's occupied neighbors; a neighbor
+     * only gets a Shard if the pool still has one and it doesn't
+     * already have one (same 1-per-space rule as a normal placement).
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicMagicExplosion(GameState $state, string $actorRole): array
+    {
+        $casterCell = $state->wanderers[$actorRole]['cell'];
+        $casterCellKey = Board::key($casterCell);
+        $neighbors = Board::occupiedNeighbors($casterCell, $state->board);
+
+        if ($neighbors === []) {
+            return [$state, []];
+        }
+
+        $relics = $state->board[$casterCellKey]['relics'];
+        $board = $state->board;
+        $board[$casterCellKey] = [...$board[$casterCellKey], 'relics' => []];
+
+        $landedKeys = [];
+        foreach ($relics as $i => $relicKey) {
+            $neighborKey = Board::key($neighbors[$i % count($neighbors)]);
+            $board[$neighborKey] = [...$board[$neighborKey], 'relics' => [...$board[$neighborKey]['relics'], $relicKey]];
+            $landedKeys[$neighborKey] = true;
+        }
+
+        $pool = $state->infrastructurePool;
+        $events = [];
+
+        foreach (array_keys($landedKeys) as $neighborKey) {
+            if ($pool['monolith_shard'] <= 0) {
+                break;
+            }
+
+            if (in_array('monolith_shard', $board[$neighborKey]['infrastructure'], true)) {
+                continue;
+            }
+
+            $board[$neighborKey] = [...$board[$neighborKey], 'infrastructure' => [...$board[$neighborKey]['infrastructure'], 'monolith_shard']];
+            $pool['monolith_shard']--;
+            $events[] = ['type' => 'infrastructure_placed', 'role_key' => null, 'payload' => ['infrastructure' => 'monolith_shard', 'cell' => Board::fromKey($neighborKey)]];
+        }
+
+        $state = $state->with(['board' => $board, 'infrastructurePool' => $pool]);
+
+        return [$state, $events];
+    }
+
+    /**
+     * A rush of companionship: "All Wanderers may move to spaces with
+     * other Wanderers. Then, all Wanderers on or adjacent to spaces
+     * with other Wanderers 🌿5." The "may move" half is an optional,
+     * per-Wanderer choice with no decision UI yet, so this resolves
+     * only the heal, based on wherever everyone already happens to be
+     * — the same kind of simplification as every other "Emperor/
+     * Wanderer chooses" clause without a mid-phase pause system.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicRushOfCompanionship(GameState $state): array
+    {
+        $cells = self::activeWanderers($state);
+        $sharedCellKeys = [];
+
+        foreach ($cells as $role => $cell) {
+            $cellKey = Board::key($cell);
+            $sharedCellKeys[$cellKey] = ($sharedCellKeys[$cellKey] ?? 0) + 1;
+        }
+        $sharedCellKeys = array_keys(array_filter($sharedCellKeys, fn (int $n) => $n >= 2));
+
+        $events = [];
+        foreach ($cells as $role => $cell) {
+            $onShared = in_array(Board::key($cell), $sharedCellKeys, true);
+            $adjacentToShared = ! $onShared && array_intersect(
+                array_map(Board::key(...), Board::occupiedNeighbors($cell, $state->board)),
+                $sharedCellKeys
+            ) !== [];
+
+            if (! $onShared && ! $adjacentToShared) {
+                continue;
+            }
+
+            $hp = min(15, $state->wanderers[$role]['hp'] + 5);
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
+            $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
         }
 
         return [$state, $events];
@@ -2038,6 +2314,24 @@ final class GameEngine
     }
 
     /**
+     * Pray: "If you are exactly 3 spaces away from the Golem, add a 📖
+     * Glyph to its mat. Then, gain 📜 and trash this."
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function relicPray(GameState $state, string $actorRole): array
+    {
+        $casterCell = $state->wanderers[$actorRole]['cell'];
+        $golemCell = $state->golem['cell'];
+
+        if ($golemCell === null || Board::distance($casterCell, $golemCell, $state->board) !== 3) {
+            return [$state, [], false];
+        }
+
+        return [...self::addGlyphOfType($state, '📖'), true];
+    }
+
+    /**
      * Dispatches each "Inscribe" card on its full disambiguated key —
      * see resolveRelicAction's docblock for why. All 12 add a specific
      * Glyph type under a specific condition; all but inscribe-12 then
@@ -2254,7 +2548,7 @@ final class GameEngine
         $actionsPerTurn = $state->actionsPerWandererTurn();
 
         $wanderers = $state->wanderers;
-        $wanderers[$firstRole] = [...$wanderers[$firstRole], 'actions_remaining' => $actionsPerTurn];
+        $wanderers[$firstRole] = [...$wanderers[$firstRole], 'actions_remaining' => $actionsPerTurn, 'move_blocked_this_turn' => false];
 
         $state = $state->with([
             'locationHand' => $hand,
@@ -2298,6 +2592,10 @@ final class GameEngine
         }
 
         self::requireNotExhausted($wanderer);
+
+        if ($wanderer['move_blocked_this_turn']) {
+            throw new InvalidMoveException('Incarceration: you cannot move for the rest of this turn.');
+        }
 
         $direction = (string) ($move['direction'] ?? '');
         $to = Board::neighbor($wanderer['cell'], $direction);
@@ -2345,7 +2643,7 @@ final class GameEngine
             $actionsPerTurn = $state->actionsPerWandererTurn();
 
             $wanderers = $state->wanderers;
-            $wanderers[$nextRole] = [...$wanderers[$nextRole], 'actions_remaining' => $actionsPerTurn];
+            $wanderers[$nextRole] = [...$wanderers[$nextRole], 'actions_remaining' => $actionsPerTurn, 'move_blocked_this_turn' => false];
 
             $state = $state->with(['wanderers' => $wanderers, 'activeWandererIndex' => $nextIndex]);
 

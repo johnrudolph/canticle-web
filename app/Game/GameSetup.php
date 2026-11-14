@@ -53,6 +53,7 @@ final class GameSetup
                 'equipped' => array_fill_keys(self::EQUIP_SLOTS, null),
                 'holding' => [],
                 'free_move_available' => false,
+                'move_blocked_this_turn' => false,
             ];
         }
 

@@ -7,7 +7,15 @@ they're resolved and fold the resolution into my own understanding instead
 
 ## Open
 
-None right now.
+1. **Rift in time references a "Revelation card" that doesn't match
+   anything in the data model.** Printed as: "Choose a Revelation card
+   in play, and trash it. The emperor immediately draws 2 more and
+   chooses 1." Nothing synced from the sheet is called a Revelation —
+   is this an old/renamed term for a Location (the Emperor's hand is
+   the only thing with a "draw 2, keep 1"-shaped flow elsewhere in
+   rules.md, via Prophecies), or a mechanic that hasn't been added to
+   the sheet yet? Left unimplemented rather than guessing what a
+   Revelation card actually is.
 
 ## Resolved (for my own reference, not standing asks)
 
