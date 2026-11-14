@@ -252,3 +252,53 @@ test('Buckler uses the Action in the other Hand slot for free when the Golem att
         ->and($state->wanderers['wanderer_a']['actions_remaining'])->toBe($actionsBefore)
         ->and(collect($events)->pluck('type'))->toContain('wanderer_healed');
 });
+
+test('Cabalist\'s Gown sets Health to 5 and caps it there when equipped', function () {
+    $state = startedGame();
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['holding' => ['cabalists-gown'], 'hp' => 15])]);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', [
+        'type' => 'equip_relic', 'relic_key' => 'cabalists-gown', 'slot' => 'body',
+    ]);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(5)
+        ->and(collect($events)->pluck('type'))->toContain('wanderer_hp_set');
+
+    // Further heals are capped at 5 too.
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'burial-robes'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'burial-robes']);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(5);
+});
+
+test('Cabalist\'s Gown prevents any Health loss on a 🌑 space', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'cursed-tomb']; // produces 🌑
+    $state = $state->with(['board' => $board]);
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'cabalists-gown'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 5])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyDamage');
+    $reflection->setAccessible(true);
+    [$state] = $reflection->invoke(null, $state, 'wanderer_a', 10);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(5);
+});
+
+test('Cabalist\'s Gown does not block damage off a 🌑 space', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'artists-hovel']; // produces 🎨, not 🌑
+    $state = $state->with(['board' => $board]);
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'cabalists-gown'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 5])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyDamage');
+    $reflection->setAccessible(true);
+    [$state] = $reflection->invoke(null, $state, 'wanderer_a', 3);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(2);
+});

@@ -426,10 +426,18 @@ final class GameEngine
         ]);
 
         $state = $state->with(['board' => $board, 'wanderers' => $wanderers]);
-
-        return [$state, [
+        $events = [
             ['type' => 'relic_equipped', 'role_key' => $actorRole, 'payload' => ['relic_key' => $relicKey, 'slot' => $slot]],
-        ]];
+        ];
+
+        // Cabalist's Gown: "When you equip this, your Health goes to
+        // 5, and cannot rise above 5."
+        if ($relicKey === 'cabalists-gown') {
+            $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['hp' => 5])]);
+            $events[] = ['type' => 'wanderer_hp_set', 'role_key' => $actorRole, 'payload' => ['hp' => 5]];
+        }
+
+        return [$state, $events];
     }
 
     /**
@@ -2981,7 +2989,10 @@ final class GameEngine
      */
     private static function maxHpFor(GameState $state, string $role): int
     {
-        return in_array('dark-limitations', $state->wanderers[$role]['equipped'], true) ? 5 : 15;
+        $equipped = $state->wanderers[$role]['equipped'];
+
+        // Cabalist's Gown: "your Health ... cannot rise above 5."
+        return in_array('dark-limitations', $equipped, true) || in_array('cabalists-gown', $equipped, true) ? 5 : 15;
     }
 
     /**
@@ -4385,6 +4396,18 @@ final class GameEngine
     private static function applyDamage(GameState $state, string $role, int $damage, bool $isGolemAttack = false): array
     {
         $equipped = $state->wanderers[$role]['equipped'];
+
+        // Cabalist's Gown: "While you are on a space that produces 🌑,
+        // your Health never decreases."
+        $cell = $state->wanderers[$role]['cell'];
+        if ($cell !== null && in_array('cabalists-gown', $equipped, true)) {
+            $location = LocationCatalog::find($state->board[Board::key($cell)]['location_key']);
+
+            if ($location?->producesEmoji === '🌑') {
+                return [$state, []];
+            }
+        }
+
         $darkCount = count(array_filter(
             $equipped,
             fn (mixed $key) => is_string($key) && str_starts_with((string) RelicCatalog::find($key)?->name, 'Dark')
