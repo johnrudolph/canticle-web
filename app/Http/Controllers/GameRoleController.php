@@ -86,6 +86,6 @@ class GameRoleController extends Controller
 
         $game->update(['status' => 'abandoned']);
 
-        return to_route('games.show', $game);
+        return to_route('home');
     }
 }

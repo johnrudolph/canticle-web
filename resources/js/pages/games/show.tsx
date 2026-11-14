@@ -1,4 +1,4 @@
-import { Head, router } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ActivityLog } from '@/components/game/activity-log';
@@ -20,6 +20,7 @@ import {
 } from '@/lib/hex';
 import type { Cell } from '@/lib/hex';
 import { postJson } from '@/lib/http';
+import { home } from '@/routes';
 import games from '@/routes/games';
 import roles from '@/routes/games/roles';
 import type {
@@ -328,9 +329,16 @@ export default function GameShow({ game }: { game: GameSummary }) {
             <>
                 <Head title={`Game ${game.code}`} />
                 <div className="min-h-dvh p-4">
-                    {status === 'abandoned'
-                        ? 'This game was abandoned.'
-                        : 'Loading game...'}
+                    {status === 'abandoned' ? (
+                        <div className="space-y-3">
+                            <p>This game was abandoned.</p>
+                            <Button asChild variant="outline" size="sm">
+                                <Link href={home()}>Return home</Link>
+                            </Button>
+                        </div>
+                    ) : (
+                        'Loading game...'
+                    )}
                 </div>
             </>
         );
