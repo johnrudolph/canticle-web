@@ -26,7 +26,18 @@ final class GameSetup
         $deck = array_keys(LocationCatalog::all());
         shuffle($deck);
 
-        $startingKeys = array_splice($deck, 0, 6);
+        // The 6 starting Locations are placed on the board, not built —
+        // a Location's cost describes what it must be adjacent to in
+        // order to be built later, which is meaningless for a space
+        // that's simply there from the start. Only cost-free Locations
+        // may start on the board; costed ones stay in the deck to be
+        // built normally once their requirement can actually be met.
+        $freeKeys = array_values(array_filter(
+            $deck,
+            fn (string $key) => LocationCatalog::find($key)?->costs === [],
+        ));
+        $startingKeys = array_splice($freeKeys, 0, 6);
+        $deck = array_values(array_diff($deck, $startingKeys));
         $startingCells = Board::startingCells();
 
         $relicDecks = self::buildRelicDecks();
