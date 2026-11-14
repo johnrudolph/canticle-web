@@ -18,14 +18,19 @@ function startedGame(): GameState
 {
     $state = GameSetup::create(2);
 
-    // The 6 starting Locations are dealt randomly — swap out any that
-    // would make ordinary movement/positioning in tests nondeterministic
-    // (Catacombs blocks entry outright; Beds of poison deals surprise
-    // damage on entry) for a neutral stand-in. Tests that specifically
-    // want one of these set board[...]['location_key'] explicitly anyway.
+    // The 6 starting Locations are dealt randomly — swap out any whose
+    // own mechanic would make an unrelated test nondeterministic for a
+    // neutral stand-in. Tests that specifically want one of these set
+    // board[...]['location_key'] explicitly anyway.
+    //   - Catacombs blocks entry outright.
+    //   - Beds of poison deals surprise damage on entry.
+    //   - Golem sanctuary silently tucks (instead of trashing) any
+    //     healing Relic used there — and the Golem and both Wanderers
+    //     start on the same hub cell by default, so this would hijack
+    //     any other heal-Relic test that happens to land on the hub.
     $board = $state->board;
     foreach ($board as $key => $entry) {
-        if (in_array($entry['location_key'], ['catacombs', 'beds-of-poison'], true)) {
+        if (in_array($entry['location_key'], ['catacombs', 'beds-of-poison', 'golem-sanctuary'], true)) {
             $board[$key] = [...$entry, 'location_key' => 'artists-hovel'];
         }
     }

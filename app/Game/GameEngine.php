@@ -51,6 +51,8 @@ final class GameEngine
             'pickup_relic' => self::pickupRelic($state, $actorRole, $move),
             'use_relic' => self::useRelic($state, $actorRole, $move),
             'rest' => self::rest($state, $actorRole),
+            'tuck_relic_at_bazaar' => self::tuckRelicAtBazaar($state, $actorRole, $move),
+            'cleanse_at_purification_pools' => self::cleanseAtPurificationPools($state, $actorRole),
             'end_wanderer_turn' => self::endWandererTurn($state, $actorRole),
             default => throw new InvalidMoveException('Unknown move type.'),
         };
@@ -191,6 +193,7 @@ final class GameEngine
             'placed_round' => $state->round,
             'relics' => $relics,
             'infrastructure' => [],
+            'tucked' => [],
         ]);
 
         $state = $state->with(['board' => $board, 'locationHand' => $hand, 'relicDecks' => $relicDecks]);
@@ -581,7 +584,32 @@ final class GameEngine
         [$state, $divineIconEvents] = self::applyDivineIconBoost($state, $actorRole, $hpBeforeDivineIcon);
         $events = [...$events, ...$divineIconEvents];
 
-        if ($trash) {
+        // Golem sanctuary: "When playing a 🌿 Relic in the Golem's
+        // space, tuck the Relic here." Reuses the same HP-diff used for
+        // Divine Icon to detect a 🌿 effect without special-casing
+        // every heal Relic. Overrides the Relic's own trash clause —
+        // it gets tucked here either way.
+        $healedAnyone = (bool) array_filter(
+            $state->wanderers,
+            fn (array $w, string $r) => $w['hp'] > ($hpBeforeDivineIcon[$r] ?? $w['hp']),
+            ARRAY_FILTER_USE_BOTH
+        );
+        $casterCellKey = Board::key($state->wanderers[$actorRole]['cell']);
+        $onGolemSanctuary = $healedAnyone
+            && $state->board[$casterCellKey]['location_key'] === 'golem-sanctuary'
+            && self::golemSharesCellWith($state, $actorRole);
+
+        if ($onGolemSanctuary && in_array($relicKey, $state->wanderers[$actorRole]['equipped'], true)) {
+            $equipped = $state->wanderers[$actorRole]['equipped'];
+            $equipped[array_search($relicKey, $equipped, true)] = null;
+            $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['equipped' => $equipped])]);
+
+            $board = $state->board;
+            $board[$casterCellKey] = [...$board[$casterCellKey], 'tucked' => [...$board[$casterCellKey]['tucked'], $relicKey]];
+            $state = $state->with(['board' => $board]);
+
+            $events[] = ['type' => 'relic_tucked', 'role_key' => $actorRole, 'payload' => ['relic_key' => $relicKey, 'cell' => $state->wanderers[$actorRole]['cell']]];
+        } elseif ($trash) {
             $state = self::trashEquippedRelic($state, $actorRole, $relicKey);
             $events[] = ['type' => 'relic_trashed', 'role_key' => $actorRole, 'payload' => ['relic_key' => $relicKey]];
         }
@@ -802,6 +830,7 @@ final class GameEngine
             'golem-avarice' => self::relicGolemAvarice($state, $actorRole),
             'magic-explosion' => self::relicMagicExplosion($state, $actorRole),
             'a-rush-of-companionship' => self::relicRushOfCompanionship($state),
+            'invigoration' => self::relicInvigoration($state, $actorRole, $move),
             default => [$state, []],
         };
     }
@@ -1033,6 +1062,32 @@ final class GameEngine
         }
 
         return [$state, $events];
+    }
+
+    /**
+     * Invigoration: "You may lose 7 Health in exchange for 2 extra
+     * actions this round." The "may" is a real optional choice —
+     * $move['take_invigoration'] must be explicitly truthy, since
+     * defaulting to either yes or no would be putting words in the
+     * player's mouth, unlike a plain unconditional effect.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicInvigoration(GameState $state, string $actorRole, array $move): array
+    {
+        if (($move['take_invigoration'] ?? false) !== true) {
+            return [$state, []];
+        }
+
+        $hp = max(0, $state->wanderers[$actorRole]['hp'] - 7);
+        $actions = $state->wanderers[$actorRole]['actions_remaining'] + 2;
+        $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['hp' => $hp, 'actions_remaining' => $actions])]);
+
+        return [$state, [
+            ['type' => 'wanderer_damaged', 'role_key' => $actorRole, 'payload' => ['amount' => 7]],
+            ['type' => 'wanderer_actions_adjusted', 'role_key' => $actorRole, 'payload' => ['delta' => 2, 'actions_remaining' => $actions]],
+        ]];
     }
 
     /**
@@ -4602,6 +4657,106 @@ final class GameEngine
         $state = $state->with(['wanderers' => $wanderers]);
 
         return [$state, [['type' => 'wanderer_healed', 'role_key' => $actorRole, 'payload' => ['hp' => $hp]]]];
+    }
+
+    /**
+     * Bazaar: "Action: Tuck a Relic from your mat here. Then, gain 1
+     * action." Costs 1 action to take, then immediately refunds 1 —
+     * net zero, matching the printed text exactly rather than treating
+     * it as a free action.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function tuckRelicAtBazaar(GameState $state, string $actorRole, array $move): array
+    {
+        self::requireRole($state, $actorRole, $state->activeWandererRole(), 'wanderer');
+
+        $wanderer = $state->wanderers[$actorRole];
+
+        if ($wanderer['actions_remaining'] <= 0) {
+            throw new InvalidMoveException('No actions remaining this turn.');
+        }
+
+        self::requireNotExhausted($wanderer);
+
+        $cellKey = Board::key($wanderer['cell']);
+
+        if ($state->board[$cellKey]['location_key'] !== 'bazaar') {
+            throw new InvalidMoveException('You must be on the Bazaar to do this.');
+        }
+
+        $relicKey = (string) ($move['relic_key'] ?? '');
+        $equipped = $wanderer['equipped'];
+        $fromSlot = array_search($relicKey, $equipped, true);
+        $fromHolding = in_array($relicKey, $wanderer['holding'], true);
+
+        if (! $fromSlot && ! $fromHolding) {
+            throw new InvalidMoveException('You do not have that Relic.');
+        }
+
+        if ($fromSlot !== false) {
+            $equipped[$fromSlot] = null;
+        }
+
+        $wanderers = $state->wanderersWith($actorRole, [
+            'equipped' => $equipped,
+            'holding' => array_values(array_diff($wanderer['holding'], [$relicKey])),
+            // Net zero — the action spent tucking is immediately refunded.
+        ]);
+        $state = $state->with(['wanderers' => $wanderers]);
+
+        $board = $state->board;
+        $board[$cellKey] = [...$board[$cellKey], 'tucked' => [...$board[$cellKey]['tucked'], $relicKey]];
+        $state = $state->with(['board' => $board]);
+
+        return [$state, [['type' => 'relic_tucked', 'role_key' => $actorRole, 'payload' => ['relic_key' => $relicKey, 'cell' => $wanderer['cell']]]]];
+    }
+
+    /**
+     * Purification pools: "Ongoing: If you begin your turn here, you
+     * may remove Shame tokens, Scar tokens, and Bound Relics from your
+     * mat." Modeled as a free action (no action cost, callable any
+     * time during the Wanderer's own turn while on this space) rather
+     * than strictly gating it to the literal first instant of the
+     * turn, since there's no mid-phase pause to offer the choice right
+     * then.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function cleanseAtPurificationPools(GameState $state, string $actorRole): array
+    {
+        self::requireRole($state, $actorRole, $state->activeWandererRole(), 'wanderer');
+
+        $wanderer = $state->wanderers[$actorRole];
+        $cellKey = Board::key($wanderer['cell']);
+
+        if ($state->board[$cellKey]['location_key'] !== 'purification-pools') {
+            throw new InvalidMoveException('You must be on the Purification pools to do this.');
+        }
+
+        $equipped = $wanderer['equipped'];
+        $events = [];
+
+        foreach ($equipped as $slot => $value) {
+            if ($value === null) {
+                continue;
+            }
+
+            if (self::isStatusToken($value)) {
+                $equipped[$slot] = null;
+                $events[] = ['type' => $value === 'shame_token' ? 'wanderer_shame_removed' : 'wanderer_scar_removed', 'role_key' => $actorRole, 'payload' => ['slot' => $slot]];
+            } elseif (RelicCatalog::find($value)?->isBound === true) {
+                $trashedKey = $value;
+                $equipped[$slot] = null;
+                $state = $state->with(['trashedRelics' => [...$state->trashedRelics, $trashedKey]]);
+                $events[] = ['type' => 'relic_trashed', 'role_key' => $actorRole, 'payload' => ['relic_key' => $trashedKey]];
+            }
+        }
+
+        $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['equipped' => $equipped])]);
+
+        return [$state, $events];
     }
 
     /**

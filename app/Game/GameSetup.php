@@ -38,6 +38,7 @@ final class GameSetup
                 'placed_round' => 1,
                 'relics' => $relics,
                 'infrastructure' => [],
+                'tucked' => [],
             ];
         }
 

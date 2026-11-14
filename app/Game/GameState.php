@@ -21,6 +21,7 @@ namespace App\Game;
  *     'placed_round' => int,
  *     'relics' => list<string>,  // face-down pile still on this space
  *     'infrastructure' => list<'monolith_shard'|'road'|'walls'|'fruit_tree'>,
+ *     'tucked' => list<string>,  // Bazaar/Golem sanctuary/Defenders' Guild/House of Cryptids tuck Relic or Golem card keys here, per their own back_text
  * ]
  *
  * wanderers[roleKey] = [
@@ -74,7 +75,7 @@ namespace App\Game;
 final readonly class GameState
 {
     /**
-     * @param  array<string, array{location_key: string, placed_round: int, relics: list<string>, infrastructure: list<string>}>  $board
+     * @param  array<string, array{location_key: string, placed_round: int, relics: list<string>, infrastructure: list<string>, tucked: list<string>}>  $board
      * @param  list<string>  $locationDeck
      * @param  list<string>  $locationHand
      * @param  list<string>  $locationDiscard
@@ -178,8 +179,8 @@ final readonly class GameState
     }
 
     /**
-     * @param  array{location_key: string, placed_round: int, relics: list<string>, infrastructure: list<string>}  $entry
-     * @return array<string, array{location_key: string, placed_round: int, relics: list<string>, infrastructure: list<string>}>
+     * @param  array{location_key: string, placed_round: int, relics: list<string>, infrastructure: list<string>, tucked: list<string>}  $entry
+     * @return array<string, array{location_key: string, placed_round: int, relics: list<string>, infrastructure: list<string>, tucked: list<string>}>
      */
     public function boardWith(string $cellKey, array $entry): array
     {
