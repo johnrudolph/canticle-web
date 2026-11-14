@@ -730,7 +730,7 @@ final class GameEngine
             'emperors-diary' => [...self::relicEmperorsDiary($state, $actorRole), false],
             'emperors-robes' => [...self::relicEmperorsRobes($state, $actorRole, $move), false],
             'an-insight-from-the-future' => self::relicInsightFromTheFuture($state, $move),
-            'aural-inscription' => self::relicAuralInscription($state),
+            'aural-inscription' => self::relicAuralInscription($state, $actorRole),
             'divine-chant' => self::relicDivineChant($state, $actorRole),
             'magistrates-robes' => [...self::relicMagistratesRobes($state, $actorRole, $move), false],
             'immolation-rags' => self::relicImmolationRags($state, $actorRole),
@@ -748,8 +748,43 @@ final class GameEngine
             'defanging-tool' => self::relicDefangingTool($state, $actorRole),
             'golem-log' => self::relicGolemLog($state, $actorRole, $move),
             'merchants-gloves' => [...self::relicMerchantsGloves($state, $actorRole, $move), false],
+            'emperors-timepiece' => self::relicEmperorsTimepiece($state, $actorRole),
             default => [$state, [], false],
         };
+    }
+
+    /**
+     * Emperor's Timepiece: "If you have all 5 Relics that begin with
+     * 'Emperor's __' equipped, swap places with the Emperor, then trash
+     * this and gain 📜. You are now the Emperor, and they are now a
+     * Wanderer." The 5 named Relics (Emperor's Diary/Knowledge/Robes/
+     * Staff/Timepiece) exactly match the 5 physical mat slots, so this
+     * only ever fires with an otherwise-empty mat.
+     *
+     * The actual role swap is a human/seating concern (which player
+     * controls the 'emperor' role vs this Wanderer role), not something
+     * GameState itself models — that's GameRole's user_id<->role_key
+     * assignment in the DB layer. This only validates the condition and
+     * applies the card's own GameState-level effects (trash + Prophecy);
+     * the emperor_timepiece_swap event tells the controller which two
+     * roles to actually swap.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function relicEmperorsTimepiece(GameState $state, string $actorRole): array
+    {
+        $amount = self::countEmperorsRelics(array_values($state->wanderers[$actorRole]['equipped']));
+
+        if ($amount < 5) {
+            return [$state, [], false];
+        }
+
+        $state = $state->with(['prophecy' => $state->prophecy + 1]);
+
+        return [$state, [
+            ['type' => 'emperor_timepiece_swap', 'role_key' => $actorRole, 'payload' => ['new_emperor_role' => $actorRole, 'new_wanderer_role' => RoleKeys::EMPEROR]],
+            ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => 1]],
+        ], true];
     }
 
     /**
@@ -848,8 +883,47 @@ final class GameEngine
             'magic-explosion' => self::relicMagicExplosion($state, $actorRole),
             'a-rush-of-companionship' => self::relicRushOfCompanionship($state),
             'invigoration' => self::relicInvigoration($state, $actorRole, $move),
+            'rift-in-time' => self::relicRiftInTime($state, $actorRole, $move),
             default => [$state, []],
         };
+    }
+
+    /**
+     * Rift in time: "Choose a face-up Golem Glyph (if there are any),
+     * discard it, and replace it with another Glyph of the same type."
+     * $move['glyph_key'] picks which currently-active Glyph; a missing
+     * key, one not actually active, or an empty active row is a no-op
+     * ("if there are any").
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicRiftInTime(GameState $state, string $actorRole, array $move): array
+    {
+        $glyphKey = (string) ($move['glyph_key'] ?? '');
+        $glyphs = $state->golem['glyphs'];
+        $index = array_search($glyphKey, $glyphs, true);
+
+        if ($index === false) {
+            return [$state, []];
+        }
+
+        $type = GlyphCatalog::find($glyphKey)?->type;
+
+        if ($type === null) {
+            return [$state, []];
+        }
+
+        unset($glyphs[$index]);
+        $glyphs = array_values($glyphs);
+        $glyphDiscardPile = [...$state->glyphDiscardPile, $glyphKey];
+        $state = $state->with(['golem' => $state->golemWith(['glyphs' => $glyphs]), 'glyphDiscardPile' => $glyphDiscardPile]);
+
+        $events = [['type' => 'glyph_discarded', 'role_key' => $actorRole, 'payload' => ['glyph_key' => $glyphKey]]];
+
+        [$state, $replaceEvents] = self::addGlyphOfType($state, $type, $actorRole);
+
+        return [$state, [...$events, ...$replaceEvents]];
     }
 
     /**
@@ -1972,7 +2046,7 @@ final class GameEngine
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
      */
-    private static function relicAuralInscription(GameState $state): array
+    private static function relicAuralInscription(GameState $state, string $actorRole): array
     {
         $golemCell = $state->golem['cell'];
 
@@ -2005,7 +2079,7 @@ final class GameEngine
             return [$state, [], false];
         }
 
-        return [...self::addGlyphOfType($state, '🎨'), true];
+        return [...self::addGlyphOfType($state, '🎨', $actorRole), true];
     }
 
     /**
@@ -2485,7 +2559,7 @@ final class GameEngine
             $pool['walls']++;
             $state = $state->with(['board' => $board, 'infrastructurePool' => $pool]);
 
-            [$state, $events] = self::addGlyphOfType($state, '🎨');
+            [$state, $events] = self::addGlyphOfType($state, '🎨', $actorRole);
             $events[] = ['type' => 'infrastructure_returned', 'role_key' => null, 'payload' => ['cell' => $wallCell]];
 
             return [$state, $events, true];
@@ -2534,7 +2608,7 @@ final class GameEngine
             return [$state, [], false];
         }
 
-        return [...self::addGlyphOfType($state, '📖'), true];
+        return [...self::addGlyphOfType($state, '📖', $actorRole), true];
     }
 
     /**
@@ -2820,39 +2894,39 @@ final class GameEngine
 
         return match ($relicKey) {
             'inscribe', 'inscribe-2', 'inscribe-3' => $onGolemSpace
-                ? [...self::addGlyphOfType($state, '⏳'), true]
+                ? [...self::addGlyphOfType($state, '⏳', $actorRole), true]
                 : $noOp,
 
             'inscribe-4' => self::inscribePrisonJudgment($state, $actorRole),
 
             'inscribe-5' => $onGolemSpace && self::countStatusTokens($state->wanderers[$actorRole]['equipped'], 'shame_token') === 0
-                ? [...self::addGlyphOfType($state, '⚖️'), true]
+                ? [...self::addGlyphOfType($state, '⚖️', $actorRole), true]
                 : $noOp,
 
             'inscribe-6' => $onGolemSpace && in_array('monolith_shard', $state->board[Board::key($casterCell)]['infrastructure'], true)
-                ? [...self::addGlyphOfType($state, '✨'), true]
+                ? [...self::addGlyphOfType($state, '✨', $actorRole), true]
                 : $noOp,
 
             'inscribe-7' => $noOp,
 
             'inscribe-8' => $onGolemSpace
-                ? [...self::addGlyphOfType($state, '🎨'), true]
+                ? [...self::addGlyphOfType($state, '🎨', $actorRole), true]
                 : $noOp,
 
             'inscribe-9' => $onGolemSpace
-                ? [...self::addGlyphOfType($state, '🐾'), true]
+                ? [...self::addGlyphOfType($state, '🐾', $actorRole), true]
                 : $noOp,
 
             'inscribe-10' => $onGolemSpace
-                ? [...self::addGlyphOfType($state, '📖'), true]
+                ? [...self::addGlyphOfType($state, '📖', $actorRole), true]
                 : $noOp,
 
             'inscribe-11' => self::allWanderersShareGolemSpace($state)
-                ? [...self::addGlyphOfType($state, '🤝'), true]
+                ? [...self::addGlyphOfType($state, '🤝', $actorRole), true]
                 : $noOp,
 
             'inscribe-12' => $onGolemSpace && self::allWanderersMutuallyAtLeastDistance($state, 2)
-                ? [...self::addGlyphOfType($state, '🤝'), false]
+                ? [...self::addGlyphOfType($state, '🤝', $actorRole), false]
                 : $noOp,
 
             default => $noOp,
@@ -2878,7 +2952,7 @@ final class GameEngine
             return [$state, [], false];
         }
 
-        return [...self::addGlyphOfType($state, '⚖️'), true];
+        return [...self::addGlyphOfType($state, '⚖️', $actorRole), true];
     }
 
     private static function allWanderersShareGolemSpace(GameState $state): bool
@@ -3129,7 +3203,9 @@ final class GameEngine
         $actionsRemaining = $wanderer['actions_remaining'] - ($freeMove ? 0 : 1);
 
         if (in_array('fruit_tree', $destinationInfrastructure, true)) {
-            $actionsRemaining++;
+            // Farmer's insight: "🌳 have double effect for you" — Fruit
+            // tree's own action bonus, doubled.
+            $actionsRemaining += in_array('farmers-insight', $wanderer['equipped'], true) ? 2 : 1;
         }
 
         // Emperor's Knowledge: "When moving, move an additional space for
@@ -4781,7 +4857,7 @@ final class GameEngine
         }
 
         if (in_array('inscribe-7', $equipped, true)) {
-            [$state, $e] = self::addGlyphOfType($state, '🌑');
+            [$state, $e] = self::addGlyphOfType($state, '🌑', $role);
             $events = [...$events, ...$e];
 
             if ($e !== []) {
@@ -4909,7 +4985,7 @@ final class GameEngine
     /**
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
-    private static function addGlyphOfType(GameState $state, string $type): array
+    private static function addGlyphOfType(GameState $state, string $type, ?string $actorRole = null): array
     {
         $deck = $state->glyphDeck;
         $index = null;
@@ -4953,6 +5029,26 @@ final class GameEngine
 
         if ($discardedGlyph !== null) {
             $events[] = ['type' => 'glyph_discarded', 'role_key' => null, 'payload' => ['glyph_key' => $discardedGlyph]];
+        }
+
+        // Prohibition of inscribing: "If anyone (Wanderer or Golem) adds
+        // a Glyph to the Golem mat, they gain 1 Shame token." Gated on
+        // the card being equipped ANYWHERE (it describes a standing rule
+        // while it's in play, not a personal reaction), and only applies
+        // to a Wanderer-attributed add — the Golem's own card effects
+        // (self-inscription) pass no actorRole, and the Golem has no
+        // slot to hold a token in anyway.
+        $prohibitionInPlay = false;
+        foreach ($state->wanderers as $otherWanderer) {
+            if (in_array('prohibition-of-inscribing', $otherWanderer['equipped'], true)) {
+                $prohibitionInPlay = true;
+                break;
+            }
+        }
+
+        if ($actorRole !== null && $prohibitionInPlay) {
+            [$state, $shameEvents] = self::applyStatusToken($state, $actorRole, 'shame_token');
+            $events = [...$events, ...$shameEvents];
         }
 
         return [$state, $events];

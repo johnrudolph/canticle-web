@@ -72,11 +72,42 @@ class GameController extends Controller
         GameStateRepository::persist($game, $state);
         EventLog::record($game, $events);
 
+        // Emperor's Timepiece: "You are now the Emperor, and they are
+        // now a Wanderer." GameState has no notion of who controls which
+        // role — that's GameRole's user_id<->role_key assignment — so the
+        // actual swap happens here, reacting to the event GameEngine
+        // emitted rather than inside the engine itself.
+        foreach ($events as $event) {
+            if ($event['type'] === 'emperor_timepiece_swap') {
+                $this->swapRoles($game, $event['payload']['new_emperor_role'], $event['payload']['new_wanderer_role']);
+            }
+        }
+
         if ($state->phase === 'finished') {
             $game->update(['status' => 'finished']);
         }
 
         return response()->json($this->summarize($game->fresh()));
+    }
+
+    /**
+     * Swaps which user controls each of two role_keys for this game.
+     * Solo play (one user piloting both roles already) is a no-op by
+     * construction — swapping a role's user_id with itself changes
+     * nothing.
+     */
+    private function swapRoles(Game $game, string $roleA, string $roleB): void
+    {
+        $rowA = $game->roles()->where('role_key', $roleA)->first();
+        $rowB = $game->roles()->where('role_key', $roleB)->first();
+
+        if ($rowA === null || $rowB === null) {
+            return;
+        }
+
+        [$userA, $userB] = [$rowA->user_id, $rowB->user_id];
+        $rowA->update(['user_id' => $userB]);
+        $rowB->update(['user_id' => $userA]);
     }
 
     /**

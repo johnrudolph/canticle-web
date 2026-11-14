@@ -7,51 +7,36 @@ they're resolved and fold the resolution into my own understanding instead
 
 ## Open
 
-1. **Rift in time references a "Revelation card" that doesn't match
-   anything in the data model.** Printed as: "Choose a Revelation card
-   in play, and trash it. The emperor immediately draws 2 more and
-   chooses 1." Nothing synced from the sheet is called a Revelation —
-   is this an old/renamed term for a Location (the Emperor's hand is
-   the only thing with a "draw 2, keep 1"-shaped flow elsewhere in
-   rules.md, via Prophecies), or a mechanic that hasn't been added to
-   the sheet yet? Left unimplemented rather than guessing what a
-   Revelation card actually is.
-
-2. **Prohibition of inscribing's grammar is ambiguous about who needs
-   to have it equipped.** Printed as: "Any Wanderer with a Relic or
-   Golem who adds a Glyph to the Golem mat gains 1 Shame token." Does
-   "any Wanderer with a Relic" mean any Wanderer who triggers a
-   Glyph-adding Relic (regardless of whether they have Prohibition of
-   inscribing itself), or does it only apply to Wanderers who have
-   Prohibition of inscribing equipped (which would be an odd way for a
-   card to refer to itself)? Left unimplemented pending which reading
-   is correct, rather than guessing.
-
-3. **Farmer's insight's "double effect" doesn't map onto a concrete
-   mechanic.** Printed as: "Spaces that produce 🌾 have double effect
-   for you." Locations don't have a generic recurring "effect" in the
-   engine beyond satisfying build costs — is this about search draws,
-   some other 🌾-specific interaction, or something not yet in the
-   sheet? Left unimplemented pending what "double effect" means here.
-
-4. **Emperor's Timepiece references "all 5 of the Emperor's Relics"
-   with no such set defined anywhere.** Printed as: "If you have all 5
-   of the Emperor's Relics equipped, swap places with the Emperor,
-   then trash this and gain 📜. You are now the Emperor, and they are
-   now a Wanderer." Nothing in rules.md or the synced sheet names a
-   fixed "Emperor's Relics" set (no `location` field groups 5 Relics
-   under an Emperor-flavored heading the way location-locked Relics
-   do) — is this a yet-to-be-named Relic subset, or does "Emperor's
-   Relics" mean something else entirely (Relics the Emperor has
-   personally handed out)? Left unimplemented pending which 5 Relics
-   this actually refers to. Separately, note for whenever this is
-   resolved: the actual role swap ("you are now the Emperor") crosses
-   into the DB layer (GameRole user_id<->role_key assignment), not
-   something GameEngine's pure GameState can express on its own — the
-   engine would validate the condition and emit an event; the
-   controller would do the actual swap.
+(none currently)
 
 ## Resolved (for my own reference, not standing asks)
+
+- Rift in time: sheet replaced the undefined "Revelation card" wording
+  entirely — now "Choose a face-up Golem Glyph (if there are any),
+  discard it, and replace it with another Glyph of the same type."
+  Implemented by reusing `addGlyphOfType()` (discard the chosen one,
+  draw a fresh one of the same type).
+- Prohibition of inscribing: sheet reworded to "If anyone (Wanderer or
+  Golem) adds a Glyph to the Golem mat, they gain 1 Shame token" —
+  confirms it's a standing rule while equipped by ANYONE, not a
+  personal reaction, and applies to whoever actually triggers the add.
+  Implemented inside `addGlyphOfType()` itself (now takes an optional
+  `$actorRole`, threaded through every call site that has one) so it
+  covers every existing Glyph-adding Relic in one place; Golem-
+  triggered adds (no actorRole) and the Golem itself (no slot to hold
+  a token) are correctly no-ops.
+- Farmer's insight: sheet replaced "Spaces that produce 🌾" with "🌳
+  have double effect for you" — 🌳 is Fruit tree's own emoji, not a
+  Location-produces branch, so this doubles Fruit tree's existing
+  "+1 action on entry" to +2 for this card's holder.
+- Emperor's Timepiece: sheet reworded to "all 5 Relics that begin with
+  'Emperor's __'" — a concrete, countable condition matching the
+  `countEmperorsRelics()` helper already shared by Emperor's Diary/
+  Robes/Knowledge. Implemented the GameState-level effects (validate,
+  trash, +1 📜) in GameEngine; the actual role swap is a GameRole
+  user_id<->role_key reassignment in GameController::swapRoles(),
+  reacting to the emperor_timepiece_swap event GameEngine emits —
+  GameState itself has no notion of "who controls which role."
 
 - Silent hunting cloak: sheet fixed to "tap its next 2 untapped cards."
   Implemented as on-a-🐾-space + sharing the Golem's space, same shape

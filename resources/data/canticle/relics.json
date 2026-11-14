@@ -52,13 +52,13 @@
         "is_event": "Hide"
     },
     {
-        "print": false,
+        "print": true,
         "name": "Emperor's Timepiece",
         "location": "Enchanted clocktower",
         "slot": "Bag",
         "type": "Action",
         "symbol": "⏳",
-        "effect": "If you have all 5 of the Emperor's Relics equipped, swap places with the Emperor, then trash this and gain 📜. You are now the Emperor, and they are now a Wanderer. ",
+        "effect": "If you have all 5 Relics that begin with \"Emperor's __\", swap places with the Emperor, then trash this and gain 📜. You are now the Emperor, and they are now a Wanderer. ",
         "slot_emoji": "👝",
         "is_action": "Show",
         "is_passive": "Hide",
@@ -130,13 +130,13 @@
         "is_event": "Hide"
     },
     {
-        "print": false,
+        "print": true,
         "name": "Rift in time",
         "location": "",
         "slot": "",
         "type": "Event",
         "symbol": "⏳",
-        "effect": "Choose a Revelation card in play, and trash it. The emperor immediately draws 2 more and chooses 1.",
+        "effect": "Choose a face-up Golem Glyph (if there are any), discard it, and replace it with another Glyph of the same type.",
         "slot_emoji": "",
         "is_action": "Hide",
         "is_passive": "Hide",
@@ -260,13 +260,13 @@
         "is_event": "Hide"
     },
     {
-        "print": false,
+        "print": true,
         "name": "Prohibition of inscribing",
         "location": "",
         "slot": "Hand",
         "type": "Passive",
         "symbol": "⚖️",
-        "effect": "Any Wanderer with a Relic or Golem who adds a Glyph to the Golem mat gains 1 Shame token (max 3 Shame tokens).",
+        "effect": "If anyone (Wanderer or Golem) adds a Glyph to the Golem mat, they gain 1 Shame token (max 3 Shame tokens).",
         "slot_emoji": "🖐️",
         "is_action": "Hide",
         "is_passive": "Show",
@@ -819,13 +819,13 @@
         "is_event": "Show"
     },
     {
-        "print": false,
+        "print": true,
         "name": "Farmer's insight",
         "location": "",
         "slot": "Mind",
         "type": "Passive",
         "symbol": "🎨",
-        "effect": "Spaces that produce 🌾 have double effect for you.",
+        "effect": "🌳 have double effect for you.",
         "slot_emoji": "🧠",
         "is_action": "Hide",
         "is_passive": "Show",

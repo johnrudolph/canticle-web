@@ -597,3 +597,111 @@ test('Icon of the resurrected does not score if any slot is unbound', function (
     expect($state->prophecy)->toBe(0)
         ->and($events)->toBe([]);
 });
+
+test('Emperor\'s Timepiece swaps roles, trashes itself, and grants 1 Prophecy once all 5 Emperor\'s Relics are equipped', function () {
+    $state = startedGame();
+    $equipped = [
+        'body' => 'emperors-robes', 'mind' => 'emperors-knowledge',
+        'hand_left' => 'emperors-diary', 'hand_right' => 'emperors-staff',
+        'bag' => 'emperors-timepiece',
+    ];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'emperors-timepiece']);
+
+    expect($state->wanderers['wanderer_a']['equipped']['bag'])->toBeNull()
+        ->and($state->prophecy)->toBe(1)
+        ->and(collect($events)->pluck('type'))->toContain('emperor_timepiece_swap');
+    $swap = collect($events)->firstWhere('type', 'emperor_timepiece_swap');
+    expect($swap['payload'])->toBe(['new_emperor_role' => 'wanderer_a', 'new_wanderer_role' => 'emperor']);
+});
+
+test('Emperor\'s Timepiece does nothing with fewer than all 5 Emperor\'s Relics equipped', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'bag' => 'emperors-timepiece', 'body' => 'emperors-robes'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'emperors-timepiece']);
+
+    expect($state->wanderers['wanderer_a']['equipped']['bag'])->toBe('emperors-timepiece')
+        ->and($state->prophecy)->toBe(0)
+        ->and(collect($events)->pluck('type'))->not->toContain('emperor_timepiece_swap');
+});
+
+test('Rift in time discards a chosen face-up Glyph and replaces it with another of the same type', function () {
+    $state = startedGame();
+    $glyphDeck = $state->glyphDeck;
+    $chosen = $glyphDeck[0];
+    // The forced face-up Glyph has to actually leave the deck too — a
+    // real game state never has the same Glyph key both on the mat and
+    // still in the deck.
+    $state = $state->with([
+        'golem' => $state->golemWith(['glyphs' => [$chosen]]),
+        'glyphDeck' => array_values(array_slice($glyphDeck, 1)),
+    ]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'resolveEventRelic');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state, 'wanderer_a', 'rift-in-time', ['glyph_key' => $chosen]);
+
+    expect($state->golem['glyphs'])->not->toContain($chosen)
+        ->and($state->golem['glyphs'])->toHaveCount(1)
+        ->and($state->glyphDiscardPile)->toContain($chosen)
+        ->and(collect($events)->pluck('type'))->toContain('glyph_discarded', 'glyph_added');
+});
+
+test('Rift in time does nothing if there are no face-up Glyphs', function () {
+    $state = startedGame();
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => []])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'resolveEventRelic');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state, 'wanderer_a', 'rift-in-time', ['glyph_key' => 'nonexistent']);
+
+    expect($events)->toBe([]);
+});
+
+test('Prohibition of inscribing gives the actor who added a Glyph 1 Shame token, while equipped by anyone', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_b']['equipped'], 'hand_left' => 'prohibition-of-inscribing'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['equipped' => $equipped])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'addGlyphOfType');
+    $reflection->setAccessible(true);
+    $type = GlyphCatalog::find($state->glyphDeck[0])?->type;
+    [$state, $events] = $reflection->invoke(null, $state, $type, 'wanderer_a');
+
+    expect(collect($events)->pluck('type'))->toContain('wanderer_shamed')
+        ->and($state->wanderers['wanderer_a']['equipped'])->toContain('shame_token');
+});
+
+test('Prohibition of inscribing does not trigger a Golem-attributed Glyph add (no actorRole)', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_b']['equipped'], 'hand_left' => 'prohibition-of-inscribing'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['equipped' => $equipped])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'addGlyphOfType');
+    $reflection->setAccessible(true);
+    $type = GlyphCatalog::find($state->glyphDeck[0])?->type;
+    [$state, $events] = $reflection->invoke(null, $state, $type);
+
+    expect(collect($events)->pluck('type'))->not->toContain('wanderer_shamed');
+});
+
+test('Farmer\'s insight doubles the Fruit tree action bonus for its holder', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['2,0'] = [...$board['2,0'], 'location_key' => 'artists-hovel', 'infrastructure' => ['fruit_tree']];
+    $state = $state->with(['board' => $board]);
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'mind' => 'farmers-insight'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+    $actionsBefore = $state->wanderers['wanderer_a']['actions_remaining'];
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => 'NE']);
+
+    // -1 to move, +2 from the doubled Fruit tree bonus => net +1.
+    expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe($actionsBefore + 1);
+});
