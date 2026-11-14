@@ -2,6 +2,7 @@ import { Head, Link, router } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ActivityLog } from '@/components/game/activity-log';
+import { EventRelicDialog } from '@/components/game/event-relic-dialog';
 import { GolemPanel } from '@/components/game/golem-panel';
 import { HexBoard } from '@/components/game/hex-board';
 import { InsightFromTheFutureDialog } from '@/components/game/insight-from-the-future-dialog';
@@ -97,7 +98,11 @@ export default function GameShow({ game }: { game: GameSummary }) {
         relicKey: string;
         deck: string[];
     } | null>(null);
+    const [eventRelicQueue, setEventRelicQueue] = useState<
+        { role: RoleKey; relicKey: string }[]
+    >([]);
     const holdingSeenRef = useRef<Record<string, Set<string>>>({});
+    const seenEventIdRef = useRef<number | null>(null);
     const emperorStepRoundRef = useRef<number | null>(null);
 
     useEffect(() => {
@@ -116,6 +121,13 @@ export default function GameShow({ game }: { game: GameSummary }) {
                 }
             }
         }
+
+        // Same idea for Event Relics: don't re-surface a notification for
+        // events that already happened before this page load.
+        seenEventIdRef.current = game.events.reduce(
+            (max, e) => Math.max(max, e.id),
+            0,
+        );
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [game.status, game.roles, game.my_roles, game.state]);
 
@@ -168,8 +180,33 @@ export default function GameShow({ game }: { game: GameSummary }) {
         }
     }
 
+    function detectEventRelic(payload: GamePollResponse) {
+        const lastSeen = seenEventIdRef.current ?? 0;
+        const found = payload.events.filter(
+            (e) =>
+                e.id > lastSeen &&
+                e.type === 'location_searched' &&
+                e.payload.trashed_as_event === true,
+        );
+        seenEventIdRef.current = payload.events.reduce(
+            (max, e) => Math.max(max, e.id),
+            lastSeen,
+        );
+
+        if (found.length > 0) {
+            setEventRelicQueue((queue) => [
+                ...queue,
+                ...found.map((e) => ({
+                    role: e.role_key as RoleKey,
+                    relicKey: e.payload.found as string,
+                })),
+            ]);
+        }
+    }
+
     function applyPoll(payload: GamePollResponse) {
         detectNewRelic(payload.state, payload.my_roles);
+        detectEventRelic(payload);
         setStatus(payload.status);
         setRoleList(payload.roles);
         setMyRoles(payload.my_roles);
@@ -1186,6 +1223,18 @@ export default function GameShow({ game }: { game: GameSummary }) {
                 relicCatalog={game.relic_catalog}
                 processing={processing}
                 onSubmit={(move) => newRelic && submitMove(newRelic.role, move)}
+            />
+
+            <EventRelicDialog
+                open={eventRelicQueue.length > 0}
+                role={eventRelicQueue[0]?.role ?? null}
+                relicKey={eventRelicQueue[0]?.relicKey ?? null}
+                entry={
+                    eventRelicQueue[0]
+                        ? game.relic_catalog[eventRelicQueue[0].relicKey]
+                        : undefined
+                }
+                onDismiss={() => setEventRelicQueue((queue) => queue.slice(1))}
             />
 
             <LocationDetailDialog

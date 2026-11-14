@@ -37,7 +37,7 @@ export function GolemDetailDialog({
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="space-y-4 text-sm">
+                <div className="min-w-0 space-y-4 text-sm">
                     <div>
                         <p className="mb-2 font-medium">
                             Upcoming cards (rightmost resolves next)
@@ -53,13 +53,13 @@ export function GolemDetailDialog({
                                 return (
                                     <div
                                         key={`${entry.key}-${i}`}
-                                        className={`rounded-md border p-2 ${entry.tapped ? 'opacity-50' : ''}`}
+                                        className={`min-w-0 rounded-md border p-2 ${entry.tapped ? 'opacity-50' : ''}`}
                                     >
-                                        <p className="font-medium">
+                                        <p className="font-medium break-words">
                                             {entry.tapped ? '🂠 Tapped — ' : ''}
                                             {card?.name ?? entry.key}
                                         </p>
-                                        <p className="text-muted-foreground">
+                                        <p className="break-words text-muted-foreground">
                                             {entry.tapped
                                                 ? 'Face-down — does nothing when resolved.'
                                                 : card?.action}
@@ -92,13 +92,13 @@ export function GolemDetailDialog({
                             {golem.glyphs.map((key, i) => (
                                 <div
                                     key={`${key}-${i}`}
-                                    className="rounded-md border p-2"
+                                    className="min-w-0 rounded-md border p-2"
                                 >
-                                    <p className="font-medium">
+                                    <p className="font-medium break-words">
                                         {glyphCatalog[key]?.type}{' '}
                                         {glyphCatalog[key]?.name ?? key}
                                     </p>
-                                    <p className="text-muted-foreground">
+                                    <p className="break-words text-muted-foreground">
                                         {glyphCatalog[key]?.description}
                                     </p>
                                 </div>

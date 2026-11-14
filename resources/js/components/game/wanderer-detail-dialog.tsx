@@ -26,8 +26,8 @@ function RelicRow({
     entry: RelicCatalogEntry | undefined;
 }) {
     return (
-        <div className="rounded-md border p-2">
-            <p className="font-medium">
+        <div className="min-w-0 rounded-md border p-2">
+            <p className="font-medium break-words">
                 {entry ? `${entry.slot_emoji} ${entry.name}` : relicKey}
                 {entry?.is_bound && (
                     <span className="ml-2 text-[10px] font-normal text-muted-foreground">
@@ -36,7 +36,9 @@ function RelicRow({
                 )}
             </p>
             {entry?.effect && (
-                <p className="text-muted-foreground">{entry.effect}</p>
+                <p className="break-words text-muted-foreground">
+                    {entry.effect}
+                </p>
             )}
         </div>
     );
@@ -81,7 +83,7 @@ export function WandererDetailDialog({
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="space-y-4 text-sm">
+                <div className="min-w-0 space-y-4 text-sm">
                     <HealthBar hp={wanderer.hp} />
 
                     {canAct && (

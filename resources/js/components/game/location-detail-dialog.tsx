@@ -56,7 +56,7 @@ export function LocationDetailDialog({
                     </DialogTitle>
                 </DialogHeader>
 
-                <div className="space-y-4 text-sm">
+                <div className="min-w-0 space-y-4 text-sm">
                     {location.lore && (
                         <p className="text-muted-foreground italic">
                             {location.lore}
@@ -64,11 +64,11 @@ export function LocationDetailDialog({
                     )}
 
                     {location.back_text && (
-                        <div className="rounded-md border bg-muted/40 p-3">
+                        <div className="min-w-0 rounded-md border bg-muted/40 p-3">
                             <p className="mb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                 Rule
                             </p>
-                            <p className="whitespace-pre-wrap">
+                            <p className="min-w-0 break-words whitespace-pre-wrap">
                                 {location.back_text}
                             </p>
                         </div>
@@ -155,8 +155,8 @@ export function LocationDetailDialog({
                                             key={`${relicKey}-${i}`}
                                             className="rounded-md border bg-muted/40 p-2"
                                         >
-                                            <div className="flex items-center justify-between gap-2">
-                                                <p className="font-medium">
+                                            <div className="flex min-w-0 items-center justify-between gap-2">
+                                                <p className="min-w-0 font-medium break-words">
                                                     {entry?.symbol}{' '}
                                                     {entry?.name ?? relicKey}
                                                 </p>
@@ -178,7 +178,7 @@ export function LocationDetailDialog({
                                                     )}
                                             </div>
                                             {entry?.effect && (
-                                                <p className="mt-1 text-muted-foreground">
+                                                <p className="mt-1 break-words text-muted-foreground">
                                                     {entry.effect}
                                                 </p>
                                             )}

@@ -69,13 +69,13 @@ export function NewRelicDialog({
                 onEscapeKeyDown={(e) => e.preventDefault()}
                 onPointerDownOutside={(e) => e.preventDefault()}
             >
-                <DialogHeader>
-                    <DialogTitle className="text-2xl">
+                <DialogHeader className="min-w-0">
+                    <DialogTitle className="text-2xl break-words">
                         ✨ You found{' '}
                         {entry ? `${entry.slot_emoji} ${entry.name}` : relicKey}
                         !
                     </DialogTitle>
-                    <DialogDescription>
+                    <DialogDescription className="break-words">
                         {entry?.is_bound &&
                             'Bound — once equipped, this can only be removed by trashing. '}
                         Equip it now (this drops whatever is in that slot), or
@@ -84,12 +84,12 @@ export function NewRelicDialog({
                 </DialogHeader>
 
                 {entry?.effect && (
-                    <p className="rounded-md border bg-muted/40 p-3 text-sm">
+                    <p className="min-w-0 rounded-md border bg-muted/40 p-3 text-sm break-words">
                         {entry.effect}
                     </p>
                 )}
 
-                <div className="space-y-2">
+                <div className="min-w-0 space-y-2">
                     {equipSlots.map((slot) => {
                         const current = equipped?.[slot] ?? null;
                         const currentEntry = current
@@ -105,7 +105,7 @@ export function NewRelicDialog({
                                     <p className="font-medium">
                                         {SLOT_LABELS[slot]}
                                     </p>
-                                    <p className="truncate text-xs text-muted-foreground">
+                                    <p className="min-w-0 text-xs break-words text-muted-foreground">
                                         {current === null && 'Currently empty.'}
                                         {isStatusToken(current) &&
                                             `Blocked by a ${current === 'shame_token' ? 'Shame' : 'Scar'} token.`}
