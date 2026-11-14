@@ -303,6 +303,66 @@ test('Cabalist\'s Gown does not block damage off a 🌑 space', function () {
     expect($state->wanderers['wanderer_a']['hp'])->toBe(2);
 });
 
+test('Inverted Glyph heals instead of damaging a Golem attack on a ⏳ space', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'sundial']; // produces ⏳
+    $state = $state->with(['board' => $board, 'golem' => $state->golemWith(['glyphs' => ['inverted']])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 5])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyDamage');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state, 'wanderer_a', 4, true);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(9)
+        ->and(collect($events)->pluck('type'))->toContain('wanderer_healed')
+        ->and(collect($events)->pluck('type'))->not->toContain('wanderer_damaged');
+});
+
+test('Inverted Glyph does not affect damage off a ⏳ space', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'artists-hovel']; // produces 🎨, not ⏳
+    $state = $state->with(['board' => $board, 'golem' => $state->golemWith(['glyphs' => ['inverted']])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 5])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyDamage');
+    $reflection->setAccessible(true);
+    [$state] = $reflection->invoke(null, $state, 'wanderer_a', 4, true);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(1);
+});
+
+test('Inverted Glyph does not affect non-Golem damage on a ⏳ space', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'sundial']; // produces ⏳
+    $state = $state->with(['board' => $board, 'golem' => $state->golemWith(['glyphs' => ['inverted']])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 5])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyDamage');
+    $reflection->setAccessible(true);
+    [$state] = $reflection->invoke(null, $state, 'wanderer_a', 4, false);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(1);
+});
+
+test('Golem attacking on a ⏳ space with Inverted logs the heal, not a contradictory damage line', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'sundial']; // produces ⏳, Golem's own starting cell
+    $state = $state->with(['board' => $board, 'golem' => $state->golemWith(['glyphs' => ['inverted']])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 5])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'golemAttackHere');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state, 4);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(9)
+        ->and(collect($events)->pluck('type'))->toContain('wanderer_healed')
+        ->and(collect($events)->pluck('type'))->not->toContain('wanderer_damaged');
+});
+
 test('Magnetic mail moves its holder into an adjacent Ally\'s Monolith Shard space, any time', function () {
     $state = startedGame();
     $board = $state->board;

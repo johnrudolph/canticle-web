@@ -4246,8 +4246,7 @@ final class GameEngine
 
                     if ($shame > 0) {
                         [$state, $damageEvents] = self::applyDamage($state, $target, 3 * $shame, true);
-                        $events = [...$events, ...$damageEvents];
-                        $events[] = ['type' => 'wanderer_damaged', 'role_key' => $target, 'payload' => ['amount' => 3 * $shame]];
+                        $events = [...$events, ...self::withDamagedEvent($damageEvents, $target, 3 * $shame)];
                     }
                 }
                 break;
@@ -4261,8 +4260,7 @@ final class GameEngine
                     }
 
                     [$state, $damageEvents] = self::applyDamage($state, $role, 2 * $shame, true);
-                    $events = [...$events, ...$damageEvents];
-                    $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => 2 * $shame]];
+                    $events = [...$events, ...self::withDamagedEvent($damageEvents, $role, 2 * $shame)];
                 }
                 break;
 
@@ -4542,8 +4540,7 @@ final class GameEngine
 
             $hpBefore = $state->wanderers[$role]['hp'];
             [$state, $damageEvents] = self::applyDamage($state, $role, 3, true);
-            $events = [...$events, ...$damageEvents];
-            $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => 3]];
+            $events = [...$events, ...self::withDamagedEvent($damageEvents, $role, 3)];
 
             // "Each Wanderer who lost Health as a result" — checked
             // against actual HP lost, not just hpBefore > 0, since Dark
@@ -4575,8 +4572,7 @@ final class GameEngine
 
             $hpBefore = $state->wanderers[$role]['hp'];
             [$state, $damageEvents] = self::applyDamage($state, $role, 5, true);
-            $events = [...$events, ...$damageEvents];
-            $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => 5]];
+            $events = [...$events, ...self::withDamagedEvent($damageEvents, $role, 5)];
 
             // "Give a Scar token to all Wanderers who lost Health" —
             // checked against actual HP lost, not just hpBefore > 0, since
@@ -4616,8 +4612,7 @@ final class GameEngine
             }
 
             [$state, $damageEvents] = self::applyDamage($state, $role, $count, true);
-            $events = [...$events, ...$damageEvents];
-            $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => $count]];
+            $events = [...$events, ...self::withDamagedEvent($damageEvents, $role, $count)];
         }
 
         return [$state, $events];
@@ -4649,8 +4644,7 @@ final class GameEngine
                 }
 
                 [$state, $damageEvents] = self::applyDamage($state, $role, 2, true);
-                $events = [...$events, ...$damageEvents];
-                $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => 2]];
+                $events = [...$events, ...self::withDamagedEvent($damageEvents, $role, 2)];
             }
         }
 
@@ -4693,8 +4687,7 @@ final class GameEngine
             }
 
             [$state, $damageEvents] = self::applyDamage($state, $role, 3, true);
-            $events = [...$events, ...$damageEvents];
-            $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => 3]];
+            $events = [...$events, ...self::withDamagedEvent($damageEvents, $role, 3)];
             $affectedRoles[] = $role;
         }
 
@@ -4909,13 +4902,11 @@ final class GameEngine
         }
 
         [$state, $damageEvents] = self::applyDamage($state, $target, 5, true);
-        $events = [...$events, ...$damageEvents];
-        $events[] = ['type' => 'wanderer_damaged', 'role_key' => $target, 'payload' => ['amount' => 5]];
+        $events = [...$events, ...self::withDamagedEvent($damageEvents, $target, 5)];
 
         foreach ($allies as $role) {
             [$state, $damageEvents] = self::applyDamage($state, $role, 5, true);
-            $events = [...$events, ...$damageEvents];
-            $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => 5]];
+            $events = [...$events, ...self::withDamagedEvent($damageEvents, $role, 5)];
         }
 
         return [$state, $events];
@@ -4960,8 +4951,7 @@ final class GameEngine
 
         foreach (self::activeWanderers($state) as $role => $cell) {
             [$state, $damageEvents] = self::applyDamage($state, $role, $damage, true);
-            $events = [...$events, ...$damageEvents];
-            $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => $damage]];
+            $events = [...$events, ...self::withDamagedEvent($damageEvents, $role, $damage)];
         }
 
         return [$state, $events];
@@ -4988,8 +4978,7 @@ final class GameEngine
 
             foreach ($roles as $role) {
                 [$state, $damageEvents] = self::applyDamage($state, $role, $damage, true);
-                $events = [...$events, ...$damageEvents];
-                $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => $damage]];
+                $events = [...$events, ...self::withDamagedEvent($damageEvents, $role, $damage)];
             }
         }
 
@@ -5043,11 +5032,33 @@ final class GameEngine
             }
 
             [$state, $damageEvents] = self::applyDamage($state, $role, $damage, $isGolemAttack);
-            $events = [...$events, ...$damageEvents];
-            $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => $damage]];
+            $events = [...$events, ...self::withDamagedEvent($damageEvents, $role, $damage)];
         }
 
         return [$state, $events];
+    }
+
+    /**
+     * Appends the caller's own "wanderer_damaged" log line after a call
+     * to applyDamage() — unless applyDamage() already reported a
+     * contradicting outcome for this Wanderer (currently: Inverted
+     * Glyph turning the attack into a heal), in which case the heal
+     * event it already returned describes what actually happened, and
+     * logging "lost N Health" right after it would be a flat
+     * contradiction.
+     *
+     * @param  list<array{type: string, role_key: ?string, payload: array<string, mixed>}>  $damageEvents
+     * @return list<array{type: string, role_key: ?string, payload: array<string, mixed>}>
+     */
+    private static function withDamagedEvent(array $damageEvents, string $role, int $damage): array
+    {
+        foreach ($damageEvents as $event) {
+            if ($event['type'] === 'wanderer_healed' && $event['role_key'] === $role) {
+                return $damageEvents;
+            }
+        }
+
+        return [...$damageEvents, ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => $damage]]];
     }
 
     /**
@@ -5075,6 +5086,23 @@ final class GameEngine
 
             if ($location?->producesEmoji === '🌑') {
                 return [$state, []];
+            }
+        }
+
+        // Inverted Glyph: "When the Golem 👊 on a space that produces
+        // ⏳, it increases Wanderer Health instead of decreasing it."
+        // Checked before any other incoming-damage logic — on a
+        // matching attack the Golem heals instead of hurting, full
+        // stop, so none of the damage-reduction/reaction logic below
+        // (Dark Relics, Poison Charm, Cabalist wraps, etc.) applies.
+        if ($isGolemAttack && $cell !== null && in_array('inverted', $state->golem['glyphs'], true)) {
+            $location = LocationCatalog::find($state->board[Board::key($cell)]['location_key']);
+
+            if ($location?->producesEmoji === '⏳') {
+                $hp = min(self::maxHpFor($state, $role), $state->wanderers[$role]['hp'] + $damage);
+                $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
+
+                return [$state, [['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]]]];
             }
         }
 
