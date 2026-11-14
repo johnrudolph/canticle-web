@@ -87,7 +87,7 @@ export function HexBoard({
                                 type="button"
                                 disabled={!onCellClick}
                                 onClick={() => onCellClick?.(cell)}
-                                className={`flex size-full flex-col items-center justify-between p-1.5 text-center ${
+                                className={`flex size-full flex-col items-start justify-between p-1.5 text-left ${
                                     isHighlighted ? 'hover:bg-primary/20' : ''
                                 }`}
                             >
@@ -188,6 +188,14 @@ export function HexBoard({
                         : undefined
                 }
                 cellData={infoKey ? board[infoKey] : undefined}
+                wanderersHere={
+                    infoKey ? (wandererByCell.get(infoKey) ?? []) : []
+                }
+                golemHere={
+                    infoKey !== null &&
+                    !!golemCell &&
+                    cellKey(golemCell) === infoKey
+                }
             />
         </>
     );
