@@ -4,8 +4,10 @@ import { toast } from 'sonner';
 import { ActivityLog } from '@/components/game/activity-log';
 import { GolemPanel } from '@/components/game/golem-panel';
 import { HexBoard } from '@/components/game/hex-board';
+import { LocationDetailDialog } from '@/components/game/location-detail-dialog';
 import { NewRelicDialog } from '@/components/game/new-relic-dialog';
 import { WandererRelicPanel } from '@/components/game/wanderer-relic-panel';
+import { WandererSummaryRow } from '@/components/game/wanderer-summary-row';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -79,12 +81,17 @@ export default function GameShow({ game }: { game: GameSummary }) {
     const [selectedInfrastructureType, setSelectedInfrastructureType] =
         useState<InfrastructureType | null>(null);
     const [discardKeys, setDiscardKeys] = useState<Set<string>>(new Set());
+    const [emperorStep, setEmperorStep] = useState<
+        'location' | 'infrastructure' | 'discard'
+    >('location');
+    const [handInfoKey, setHandInfoKey] = useState<string | null>(null);
     const [copiedText, copy] = useClipboard();
     const [newRelic, setNewRelic] = useState<{
         role: RoleKey;
         relicKey: string;
     } | null>(null);
     const holdingSeenRef = useRef<Record<string, Set<string>>>({});
+    const emperorStepRoundRef = useRef<number | null>(null);
 
     useEffect(() => {
         setStatus(game.status);
@@ -104,6 +111,19 @@ export default function GameShow({ game }: { game: GameSummary }) {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [game.status, game.roles, game.my_roles, game.state]);
+
+    // Reset the Emperor's turn back to step 1 at the start of each new
+    // Emperor phase (a fresh round, or coming back from the Wanderer/Golem
+    // phases) — otherwise it'd stay wherever it was left mid-turn.
+    useEffect(() => {
+        if (
+            state?.phase === 'emperor' &&
+            emperorStepRoundRef.current !== state.round
+        ) {
+            emperorStepRoundRef.current = state.round;
+            setEmperorStep('location');
+        }
+    }, [state?.phase, state?.round]);
 
     function detectNewRelic(nextState: typeof state, roles: RoleKey[]) {
         if (!nextState) return;
@@ -505,174 +525,363 @@ export default function GameShow({ game }: { game: GameSummary }) {
                     {/* Emperor, then each Wanderer, then the Golem — turn order. */}
                     {state.phase === 'emperor' &&
                         myRoles.includes('emperor') && (
-                            <div
-                                className={`rounded-md border bg-card p-2 ${
-                                    state.phase === 'emperor'
-                                        ? 'border-primary ring-1 ring-primary'
-                                        : ''
-                                }`}
-                            >
-                                <p className="mb-2 text-sm font-medium">
-                                    👑 Emperor's turn — your hand
-                                </p>
-                                <div className="flex flex-col gap-1">
-                                    {state.location_hand.map((key) => {
-                                        const loc = locationCatalog[key];
-                                        const marked = discardKeys.has(key);
-                                        return (
-                                            <div
-                                                key={key}
-                                                className={`flex items-center gap-2 rounded-md border p-2 text-xs ${
-                                                    selectedLocationKey === key
-                                                        ? 'border-primary bg-primary/10'
-                                                        : ''
-                                                } ${marked ? 'opacity-50' : ''}`}
-                                            >
-                                                <label
-                                                    className="flex items-center gap-1.5"
-                                                    title="Mark for discard at end of phase"
-                                                >
-                                                    <Checkbox
-                                                        checked={marked}
-                                                        onCheckedChange={(
-                                                            checked,
-                                                        ) => {
-                                                            setDiscardKeys(
-                                                                (prev) => {
-                                                                    const next =
-                                                                        new Set(
-                                                                            prev,
-                                                                        );
-                                                                    if (
-                                                                        checked
-                                                                    ) {
-                                                                        next.add(
-                                                                            key,
-                                                                        );
-                                                                    } else {
-                                                                        next.delete(
-                                                                            key,
-                                                                        );
-                                                                    }
-                                                                    return next;
-                                                                },
-                                                            );
-                                                        }}
-                                                    />
-                                                </label>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setSelectedInfrastructureType(
-                                                            null,
-                                                        );
-                                                        setSelectedLocationKey(
-                                                            selectedLocationKey ===
-                                                                key
-                                                                ? null
-                                                                : key,
-                                                        );
-                                                    }}
-                                                    className="flex-1 text-left"
-                                                    disabled={marked}
-                                                >
-                                                    <span className="font-medium">
-                                                        {loc.produces_emoji}{' '}
-                                                        {loc.name}
-                                                    </span>
-                                                    {loc.costs.length > 0 && (
-                                                        <span className="block text-muted-foreground">
-                                                            Needs:{' '}
-                                                            {loc.costs.join(
-                                                                ', ',
-                                                            )}
-                                                        </span>
-                                                    )}
-                                                </button>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                                {discardKeys.size > 0 && (
-                                    <p className="mt-1 text-[10px] text-muted-foreground">
-                                        {discardKeys.size} marked to discard at
-                                        end of phase.
+                            <div className="rounded-md border border-primary bg-card p-2 ring-1 ring-primary">
+                                <div className="mb-2 flex items-center justify-between">
+                                    <p className="text-sm font-medium">
+                                        👑 Emperor's turn
                                     </p>
-                                )}
-
-                                <p className="mt-3 mb-1 text-sm font-medium">
-                                    Infrastructure (
-                                    {state.infrastructure_placed_this_turn}/2
-                                    placed this turn)
-                                </p>
-                                <div className="flex flex-col gap-1">
-                                    {(
-                                        Object.keys(
-                                            INFRASTRUCTURE_LABELS,
-                                        ) as InfrastructureType[]
-                                    ).map((type) => (
-                                        <button
-                                            key={type}
-                                            type="button"
-                                            disabled={
-                                                state.infrastructure_pool[
-                                                    type
-                                                ] <= 0 ||
-                                                state.infrastructure_placed_this_turn >=
-                                                    2
+                                    <div className="flex gap-1 text-[10px] text-muted-foreground">
+                                        <span
+                                            className={
+                                                emperorStep === 'location'
+                                                    ? 'font-semibold text-foreground'
+                                                    : ''
                                             }
+                                        >
+                                            1. Play
+                                        </span>
+                                        <span>→</span>
+                                        <span
+                                            className={
+                                                emperorStep === 'infrastructure'
+                                                    ? 'font-semibold text-foreground'
+                                                    : ''
+                                            }
+                                        >
+                                            2. Infrastructure
+                                        </span>
+                                        <span>→</span>
+                                        <span
+                                            className={
+                                                emperorStep === 'discard'
+                                                    ? 'font-semibold text-foreground'
+                                                    : ''
+                                            }
+                                        >
+                                            3. Discard
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {emperorStep === 'location' && (
+                                    <>
+                                        <p className="mb-2 text-xs text-muted-foreground">
+                                            Play 1 Location from your hand
+                                            (click it, then click a highlighted
+                                            space on the board). Tap ℹ️ to read
+                                            what a Location actually does before
+                                            committing to it.
+                                        </p>
+                                        <div className="flex flex-col gap-1">
+                                            {state.location_hand.map((key) => {
+                                                const loc =
+                                                    locationCatalog[key];
+                                                return (
+                                                    <div
+                                                        key={key}
+                                                        className={`flex items-center gap-2 rounded-md border p-2 text-xs ${
+                                                            selectedLocationKey ===
+                                                            key
+                                                                ? 'border-primary bg-primary/10'
+                                                                : ''
+                                                        }`}
+                                                    >
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                setHandInfoKey(
+                                                                    key,
+                                                                )
+                                                            }
+                                                            className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted hover:bg-muted-foreground/20"
+                                                            aria-label={`Inspect ${loc.name}`}
+                                                        >
+                                                            ℹ️
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                setSelectedLocationKey(
+                                                                    selectedLocationKey ===
+                                                                        key
+                                                                        ? null
+                                                                        : key,
+                                                                )
+                                                            }
+                                                            className="flex-1 text-left"
+                                                        >
+                                                            <span className="font-medium">
+                                                                {
+                                                                    loc.produces_emoji
+                                                                }{' '}
+                                                                {loc.name}
+                                                            </span>
+                                                            {loc.costs.length >
+                                                                0 && (
+                                                                <span className="block text-muted-foreground">
+                                                                    Needs:{' '}
+                                                                    {loc.costs.join(
+                                                                        ', ',
+                                                                    )}
+                                                                </span>
+                                                            )}
+                                                        </button>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        <Button
+                                            className="mt-3 w-full"
+                                            size="sm"
                                             onClick={() => {
                                                 setSelectedLocationKey(null);
-                                                setSelectedInfrastructureType(
-                                                    selectedInfrastructureType ===
-                                                        type
-                                                        ? null
-                                                        : type,
+                                                setEmperorStep(
+                                                    'infrastructure',
                                                 );
                                             }}
-                                            className={`flex items-center justify-between rounded-md border p-2 text-left text-xs disabled:opacity-40 ${
-                                                selectedInfrastructureType ===
-                                                type
-                                                    ? 'border-primary bg-primary/10'
-                                                    : ''
-                                            }`}
                                         >
-                                            <span>
-                                                {INFRASTRUCTURE_LABELS[type]}
-                                            </span>
-                                            <span className="text-muted-foreground">
-                                                {
-                                                    state.infrastructure_pool[
-                                                        type
-                                                    ]
-                                                }{' '}
-                                                left
-                                            </span>
-                                        </button>
-                                    ))}
-                                </div>
+                                            Next: Place Infrastructure →
+                                        </Button>
+                                    </>
+                                )}
 
-                                <Button
-                                    className="mt-3 w-full"
-                                    size="sm"
-                                    disabled={processing}
-                                    onClick={() => {
-                                        setSelectedInfrastructureType(null);
-                                        submitMove('emperor', {
-                                            type: 'end_emperor_phase',
-                                            discard: Array.from(discardKeys),
-                                        });
-                                    }}
-                                >
-                                    End Emperor phase
-                                </Button>
+                                {emperorStep === 'infrastructure' && (
+                                    <>
+                                        <p className="mb-2 text-xs text-muted-foreground">
+                                            Place up to 2 Infrastructure tokens
+                                            from your pool (optional — click a
+                                            type, then a highlighted space on
+                                            the board).
+                                        </p>
+                                        <p className="mb-1 text-sm font-medium">
+                                            Infrastructure (
+                                            {
+                                                state.infrastructure_placed_this_turn
+                                            }
+                                            /2 placed this turn)
+                                        </p>
+                                        <div className="flex flex-col gap-1">
+                                            {(
+                                                Object.keys(
+                                                    INFRASTRUCTURE_LABELS,
+                                                ) as InfrastructureType[]
+                                            ).map((type) => (
+                                                <button
+                                                    key={type}
+                                                    type="button"
+                                                    disabled={
+                                                        state
+                                                            .infrastructure_pool[
+                                                            type
+                                                        ] <= 0 ||
+                                                        state.infrastructure_placed_this_turn >=
+                                                            2
+                                                    }
+                                                    onClick={() =>
+                                                        setSelectedInfrastructureType(
+                                                            selectedInfrastructureType ===
+                                                                type
+                                                                ? null
+                                                                : type,
+                                                        )
+                                                    }
+                                                    className={`flex items-center justify-between rounded-md border p-2 text-left text-xs disabled:opacity-40 ${
+                                                        selectedInfrastructureType ===
+                                                        type
+                                                            ? 'border-primary bg-primary/10'
+                                                            : ''
+                                                    }`}
+                                                >
+                                                    <span>
+                                                        {
+                                                            INFRASTRUCTURE_LABELS[
+                                                                type
+                                                            ]
+                                                        }
+                                                    </span>
+                                                    <span className="text-muted-foreground">
+                                                        {
+                                                            state
+                                                                .infrastructure_pool[
+                                                                type
+                                                            ]
+                                                        }{' '}
+                                                        left
+                                                    </span>
+                                                </button>
+                                            ))}
+                                        </div>
+
+                                        <div className="mt-3 flex gap-2">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => {
+                                                    setSelectedInfrastructureType(
+                                                        null,
+                                                    );
+                                                    setEmperorStep('location');
+                                                }}
+                                            >
+                                                ← Back
+                                            </Button>
+                                            <Button
+                                                className="flex-1"
+                                                size="sm"
+                                                onClick={() => {
+                                                    setSelectedInfrastructureType(
+                                                        null,
+                                                    );
+                                                    setEmperorStep('discard');
+                                                }}
+                                            >
+                                                Next: Discard →
+                                            </Button>
+                                        </div>
+                                    </>
+                                )}
+
+                                {emperorStep === 'discard' && (
+                                    <>
+                                        <p className="mb-2 text-xs text-muted-foreground">
+                                            Discard as many cards from your hand
+                                            as you want, then draw back up to 5.
+                                            Mark the ones to discard (or none),
+                                            then confirm below — this ends your
+                                            turn.
+                                        </p>
+                                        <div className="flex flex-col gap-1">
+                                            {state.location_hand.map((key) => {
+                                                const loc =
+                                                    locationCatalog[key];
+                                                const marked =
+                                                    discardKeys.has(key);
+                                                return (
+                                                    <div
+                                                        key={key}
+                                                        className={`flex items-center gap-2 rounded-md border p-2 text-xs ${
+                                                            marked
+                                                                ? 'opacity-50'
+                                                                : ''
+                                                        }`}
+                                                    >
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                setHandInfoKey(
+                                                                    key,
+                                                                )
+                                                            }
+                                                            className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted hover:bg-muted-foreground/20"
+                                                            aria-label={`Inspect ${loc.name}`}
+                                                        >
+                                                            ℹ️
+                                                        </button>
+                                                        <label className="flex flex-1 items-center gap-1.5">
+                                                            <Checkbox
+                                                                checked={marked}
+                                                                onCheckedChange={(
+                                                                    checked,
+                                                                ) => {
+                                                                    setDiscardKeys(
+                                                                        (
+                                                                            prev,
+                                                                        ) => {
+                                                                            const next =
+                                                                                new Set(
+                                                                                    prev,
+                                                                                );
+                                                                            if (
+                                                                                checked
+                                                                            ) {
+                                                                                next.add(
+                                                                                    key,
+                                                                                );
+                                                                            } else {
+                                                                                next.delete(
+                                                                                    key,
+                                                                                );
+                                                                            }
+                                                                            return next;
+                                                                        },
+                                                                    );
+                                                                }}
+                                                            />
+                                                            <span className="font-medium">
+                                                                {
+                                                                    loc.produces_emoji
+                                                                }{' '}
+                                                                {loc.name}
+                                                            </span>
+                                                        </label>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        <div className="mt-3 flex gap-2">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() =>
+                                                    setEmperorStep(
+                                                        'infrastructure',
+                                                    )
+                                                }
+                                            >
+                                                ← Back
+                                            </Button>
+                                            <Button
+                                                className="flex-1"
+                                                size="sm"
+                                                variant={
+                                                    discardKeys.size === 0
+                                                        ? 'outline'
+                                                        : 'default'
+                                                }
+                                                disabled={processing}
+                                                onClick={() => {
+                                                    setDiscardKeys(new Set());
+                                                    submitMove('emperor', {
+                                                        type: 'end_emperor_phase',
+                                                        discard: [],
+                                                    });
+                                                }}
+                                            >
+                                                Keep all, end turn
+                                            </Button>
+                                            <Button
+                                                className="flex-1"
+                                                size="sm"
+                                                disabled={
+                                                    processing ||
+                                                    discardKeys.size === 0
+                                                }
+                                                onClick={() => {
+                                                    const toDiscard =
+                                                        Array.from(discardKeys);
+                                                    setDiscardKeys(new Set());
+                                                    submitMove('emperor', {
+                                                        type: 'end_emperor_phase',
+                                                        discard: toDiscard,
+                                                    });
+                                                }}
+                                            >
+                                                Discard {discardKeys.size}, end
+                                                turn
+                                            </Button>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         )}
 
                     {state.phase === 'emperor' &&
                         !myRoles.includes('emperor') && (
                             <div className="rounded-md border bg-card px-3 py-2 text-sm text-muted-foreground">
-                                Waiting for the Emperor...
+                                Waiting for the Emperor... (
+                                {state.location_hand_count} cards in hand)
                             </div>
                         )}
 
@@ -763,6 +972,22 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                     label: ROLE_LABELS[otherRole as RoleKey],
                                 }));
 
+                            if (!isActive) {
+                                return (
+                                    <WandererSummaryRow
+                                        key={role}
+                                        role={role}
+                                        wanderer={wanderer}
+                                        relicCatalog={game.relic_catalog}
+                                        canAct={canAct}
+                                        processing={processing}
+                                        onSubmit={(move) =>
+                                            submitMove(role, move)
+                                        }
+                                    />
+                                );
+                            }
+
                             return (
                                 <WandererRelicPanel
                                     key={role}
@@ -835,8 +1060,21 @@ export default function GameShow({ game }: { game: GameSummary }) {
                 entry={
                     newRelic ? game.relic_catalog[newRelic.relicKey] : undefined
                 }
+                equipped={
+                    newRelic ? state.wanderers[newRelic.role].equipped : null
+                }
+                relicCatalog={game.relic_catalog}
                 processing={processing}
                 onSubmit={(move) => newRelic && submitMove(newRelic.role, move)}
+            />
+
+            <LocationDetailDialog
+                open={handInfoKey !== null}
+                onOpenChange={(open) => !open && setHandInfoKey(null)}
+                location={
+                    handInfoKey ? locationCatalog[handInfoKey] : undefined
+                }
+                cellData={undefined}
             />
         </>
     );

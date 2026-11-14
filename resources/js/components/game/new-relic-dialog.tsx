@@ -24,11 +24,19 @@ const RELIC_SLOT_TO_EQUIP_SLOTS: Record<string, EquipSlot[]> = {
     Hand: ['hand_left', 'hand_right'],
 };
 
+function isStatusToken(
+    value: string | null,
+): value is 'shame_token' | 'scar_token' {
+    return value === 'shame_token' || value === 'scar_token';
+}
+
 export function NewRelicDialog({
     open,
     onOpenChange,
     relicKey,
     entry,
+    equipped,
+    relicCatalog = {},
     processing,
     onSubmit,
 }: {
@@ -36,6 +44,8 @@ export function NewRelicDialog({
     onOpenChange: (open: boolean) => void;
     relicKey: string | null;
     entry: RelicCatalogEntry | undefined;
+    equipped?: Record<EquipSlot, string | null> | null;
+    relicCatalog?: Record<string, RelicCatalogEntry>;
     processing: boolean;
     onSubmit: (move: Record<string, unknown>) => void;
 }) {
@@ -57,7 +67,8 @@ export function NewRelicDialog({
                     <DialogDescription>
                         {entry?.is_bound &&
                             'Bound — once equipped, this can only be removed by trashing. '}
-                        Equip it now, or drop it face-up here for someone else.
+                        Equip it now (this drops whatever is in that slot), or
+                        drop it face-up here instead.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -67,24 +78,57 @@ export function NewRelicDialog({
                     </p>
                 )}
 
+                <div className="space-y-2">
+                    {equipSlots.map((slot) => {
+                        const current = equipped?.[slot] ?? null;
+                        const currentEntry = current
+                            ? relicCatalog[current]
+                            : undefined;
+
+                        return (
+                            <div
+                                key={slot}
+                                className="flex items-center justify-between gap-3 rounded-md border p-2 text-sm"
+                            >
+                                <div className="min-w-0">
+                                    <p className="font-medium">
+                                        {SLOT_LABELS[slot]}
+                                    </p>
+                                    <p className="truncate text-xs text-muted-foreground">
+                                        {current === null && 'Currently empty.'}
+                                        {isStatusToken(current) &&
+                                            `Blocked by a ${current === 'shame_token' ? 'Shame' : 'Scar'} token.`}
+                                        {current !== null &&
+                                            !isStatusToken(current) &&
+                                            `Currently: ${currentEntry?.name ?? current}${
+                                                currentEntry?.effect
+                                                    ? ` — ${currentEntry.effect}`
+                                                    : ''
+                                            }`}
+                                    </p>
+                                </div>
+                                <Button
+                                    size="sm"
+                                    disabled={
+                                        processing || isStatusToken(current)
+                                    }
+                                    onClick={() => {
+                                        onSubmit({
+                                            type: 'equip_relic',
+                                            relic_key: relicKey,
+                                            slot,
+                                        });
+                                        onOpenChange(false);
+                                    }}
+                                >
+                                    Equip
+                                </Button>
+                            </div>
+                        );
+                    })}
+                </div>
+
                 <DialogFooter className="flex-wrap sm:justify-start">
-                    {equipSlots.map((slot) => (
-                        <Button
-                            key={slot}
-                            size="sm"
-                            disabled={processing}
-                            onClick={() => {
-                                onSubmit({
-                                    type: 'equip_relic',
-                                    relic_key: relicKey,
-                                    slot,
-                                });
-                                onOpenChange(false);
-                            }}
-                        >
-                            Equip to {SLOT_LABELS[slot]}
-                        </Button>
-                    ))}
                     <Button
                         size="sm"
                         variant="outline"
@@ -98,13 +142,6 @@ export function NewRelicDialog({
                         }}
                     >
                         Drop it face-up
-                    </Button>
-                    <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => onOpenChange(false)}
-                    >
-                        Decide later
                     </Button>
                 </DialogFooter>
             </DialogContent>

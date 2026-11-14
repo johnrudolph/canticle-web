@@ -168,6 +168,11 @@ export function WandererRelicPanel({
                                             onSubmit={onSubmit}
                                         />
                                     </div>
+                                    {relicCatalog[relicKey]?.effect && (
+                                        <p className="text-[10px] text-muted-foreground">
+                                            {relicCatalog[relicKey].effect}
+                                        </p>
+                                    )}
                                     {canAct && (
                                         <div className="flex flex-wrap gap-1">
                                             <Button
@@ -228,44 +233,51 @@ export function WandererRelicPanel({
                         return (
                             <div
                                 key={relicKey}
-                                className="flex items-center justify-between gap-1 rounded border px-1.5 py-1"
+                                className="rounded border px-1.5 py-1"
                             >
-                                <span className="truncate">
-                                    {relicLabel(relicKey, relicCatalog)}
-                                </span>
-                                <div className="flex gap-1">
-                                    {equipSlots.map((slot) => (
-                                        <Button
-                                            key={slot}
-                                            size="sm"
-                                            variant="outline"
-                                            className="h-5 px-1.5 text-[10px]"
+                                <div className="flex items-center justify-between gap-1">
+                                    <span className="truncate">
+                                        {relicLabel(relicKey, relicCatalog)}
+                                    </span>
+                                    <div className="flex gap-1">
+                                        {equipSlots.map((slot) => (
+                                            <Button
+                                                key={slot}
+                                                size="sm"
+                                                variant="outline"
+                                                className="h-5 px-1.5 text-[10px]"
+                                                disabled={processing}
+                                                onClick={() =>
+                                                    onSubmit({
+                                                        type: 'equip_relic',
+                                                        relic_key: relicKey,
+                                                        slot,
+                                                    })
+                                                }
+                                            >
+                                                Equip {SLOT_LABELS[slot]}
+                                            </Button>
+                                        ))}
+                                        <button
+                                            type="button"
                                             disabled={processing}
+                                            className="text-muted-foreground hover:text-destructive"
                                             onClick={() =>
                                                 onSubmit({
-                                                    type: 'equip_relic',
+                                                    type: 'drop_relic',
                                                     relic_key: relicKey,
-                                                    slot,
                                                 })
                                             }
                                         >
-                                            Equip {SLOT_LABELS[slot]}
-                                        </Button>
-                                    ))}
-                                    <button
-                                        type="button"
-                                        disabled={processing}
-                                        className="text-muted-foreground hover:text-destructive"
-                                        onClick={() =>
-                                            onSubmit({
-                                                type: 'drop_relic',
-                                                relic_key: relicKey,
-                                            })
-                                        }
-                                    >
-                                        drop
-                                    </button>
+                                            drop
+                                        </button>
+                                    </div>
                                 </div>
+                                {entry?.effect && (
+                                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                                        {entry.effect}
+                                    </p>
+                                )}
                             </div>
                         );
                     })}

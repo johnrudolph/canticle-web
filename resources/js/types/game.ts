@@ -57,6 +57,7 @@ export interface GameStateDto {
     board: Record<string, BoardCell>;
     location_deck_count: number;
     location_hand: string[];
+    location_hand_count: number;
     location_discard: string[];
     wanderers: Record<string, WandererState>;
     golem: GolemState;

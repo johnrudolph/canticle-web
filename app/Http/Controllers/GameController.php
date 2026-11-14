@@ -122,6 +122,20 @@ class GameController extends Controller
             ->pluck('role_key')
             ->values();
 
+        $state = null;
+        if (in_array($game->status, ['active', 'finished', 'abandoned'], true) && $game->state !== null) {
+            $state = GameStateRepository::load($game)->toArray();
+
+            // The Emperor's hand is hidden information — rules.md never
+            // has Wanderers see it, only "read the Location aloud" once
+            // it's actually played. Redact it for anyone not piloting
+            // the Emperor; location_hand_count alone is harmless and
+            // already useful (e.g. "the Emperor has 5 cards").
+            if (! $myRoles->contains('emperor')) {
+                $state['location_hand'] = [];
+            }
+        }
+
         return [
             'status' => $game->status,
             'wanderer_count' => $game->wanderer_count,
@@ -134,9 +148,7 @@ class GameController extends Controller
                 'user_name' => $role->user?->name,
                 'is_mine' => $role->user_id === Auth::id(),
             ]),
-            'state' => in_array($game->status, ['active', 'finished', 'abandoned'], true) && $game->state !== null
-                ? GameStateRepository::load($game)->toArray()
-                : null,
+            'state' => $state,
             'location_catalog' => $this->locationCatalog(),
             'relic_catalog' => $this->relicCatalog(),
             'golem_card_catalog' => $this->golemCardCatalog(),

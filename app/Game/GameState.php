@@ -232,6 +232,7 @@ final readonly class GameState
             'board' => $this->board,
             'location_deck_count' => count($this->locationDeck),
             'location_hand' => $this->locationHand,
+            'location_hand_count' => count($this->locationHand),
             'location_discard' => $this->locationDiscard,
             'wanderers' => $this->wanderers,
             'golem' => [
