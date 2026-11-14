@@ -10,6 +10,17 @@ test('Cabalist brand discards chosen Glyphs, makes the Golem play 3 cards, then 
     $state = startedGame();
     $golem = $state->golem;
     $golem['glyphs'] = ['enchanted', 'fearful'];
+    // Pin the revealed row AND the draw pile it refills from to
+    // ordinary cards (none Double Down/Time Paradox) so exactly 3 get
+    // discarded — each pop triggers a refill from draw_pile, so a real
+    // shuffled deck could draw Time Paradox there and discard 5,
+    // making this flaky even with just the revealed row pinned.
+    $golem['revealed'] = [
+        ['key' => 'storm', 'tapped' => false],
+        ['key' => 'spew', 'tapped' => false],
+        ['key' => 'scar', 'tapped' => false],
+    ];
+    $golem['draw_pile'] = array_fill(0, 10, ['key' => 'storm', 'tapped' => false]);
     $state = $state->with(['golem' => $golem]);
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'cabalist-brand'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);

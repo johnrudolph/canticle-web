@@ -414,16 +414,35 @@ final class GameEngine
         $board = $state->board;
         $board[$cellKey] = [...$board[$cellKey], 'relics' => [...$board[$cellKey]['relics'], $relicKey]];
 
+        $tuckedCards = $wanderer['tucked_cards'];
+        $lostCards = $tuckedCards[$relicKey] ?? [];
+        unset($tuckedCards[$relicKey]);
+
         $wanderers = $state->wanderersWith($actorRole, [
             'equipped' => $equipped,
             'holding' => array_values(array_diff($wanderer['holding'], [$relicKey])),
+            'tucked_cards' => $tuckedCards,
         ]);
 
         $state = $state->with(['board' => $board, 'wanderers' => $wanderers]);
 
-        return [$state, [
+        $events = [
             ['type' => 'relic_dropped', 'role_key' => $actorRole, 'payload' => ['relic_key' => $relicKey]],
-        ]];
+        ];
+
+        if ($lostCards !== [] && $relicKey === 'golem-log') {
+            // "If you drop this Relic, return the cards to its discard
+            // pile and lose your progress." (Defanging tool's own text
+            // doesn't return its tucked card anywhere — it's just lost.)
+            $golem = $state->golem;
+            $golem['discard_pile'] = [...$golem['discard_pile'], ...$lostCards];
+            $state = $state->with(['golem' => $golem]);
+            $events[] = ['type' => 'golem_log_progress_lost', 'role_key' => $actorRole, 'payload' => ['cards' => $lostCards]];
+        } elseif ($lostCards !== []) {
+            $events[] = ['type' => 'tucked_progress_lost', 'role_key' => $actorRole, 'payload' => ['relic_key' => $relicKey, 'cards' => $lostCards]];
+        }
+
+        return [$state, $events];
     }
 
     /**
@@ -571,6 +590,11 @@ final class GameEngine
             'jericho-inscription' => self::relicJerichoInscription($state, $actorRole),
             'past-troubles' => self::relicPastTroubles($state),
             'pray' => self::relicPray($state, $actorRole),
+            're-creation' => self::relicReCreation($state, $actorRole),
+            'cabalist-brew' => self::relicCabalistBrew($state, $actorRole, $move),
+            'defanging-tool' => self::relicDefangingTool($state, $actorRole),
+            'golem-log' => self::relicGolemLog($state, $actorRole, $move),
+            'merchants-gloves' => [...self::relicMerchantsGloves($state, $actorRole, $move), false],
             default => [$state, [], false],
         };
     }
@@ -1924,17 +1948,14 @@ final class GameEngine
      */
     private static function relicImmolationRags(GameState $state, string $actorRole): array
     {
-        $equipped = $state->wanderers[$actorRole]['equipped'];
         $trashedKeys = [];
 
-        foreach ($equipped as $slot => $value) {
+        foreach ($state->wanderers[$actorRole]['equipped'] as $value) {
             if ($value !== null && ! self::isStatusToken($value)) {
                 $trashedKeys[] = $value;
-                $equipped[$slot] = null;
+                $state = self::trashEquippedRelic($state, $actorRole, $value);
             }
         }
-
-        $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['equipped' => $equipped])]);
 
         $events = array_map(
             fn (string $key) => ['type' => 'relic_trashed', 'role_key' => $actorRole, 'payload' => ['relic_key' => $key]],
@@ -2332,6 +2353,267 @@ final class GameEngine
     }
 
     /**
+     * Re-creation: "Recover 1 trashed Relic, and trash this." Draws
+     * randomly from the new global trashedRelics pool (every Relic
+     * ever trashed, not dropped — see trashEquippedRelic).
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function relicReCreation(GameState $state, string $actorRole): array
+    {
+        $pool = $state->trashedRelics;
+
+        if ($pool === []) {
+            return [$state, [], false];
+        }
+
+        $index = array_rand($pool);
+        $recovered = $pool[$index];
+        unset($pool[$index]);
+        $pool = array_values($pool);
+
+        $wanderer = $state->wanderers[$actorRole];
+        $state = $state->with([
+            'wanderers' => $state->wanderersWith($actorRole, ['holding' => [...$wanderer['holding'], $recovered]]),
+            'trashedRelics' => $pool,
+        ]);
+
+        return [$state, [['type' => 'relic_recovered', 'role_key' => $actorRole, 'payload' => ['relic_key' => $recovered]]], true];
+    }
+
+    /**
+     * Cabalist brew: "Lose 2 Health, and trash this. Then, you or any
+     * Ally immediately plays a 🌿 Relic that gets triple strength.
+     * Gain 📜." Runs the chosen Relic's own resolveRelicAction exactly
+     * like Warlock's robes does, then snapshots the HP change it caused
+     * across every Wanderer and applies 2x more of that same delta —
+     * tripling the effect without needing to know each heal Relic's
+     * hardcoded amount. $move['target_role'] picks the performer (an
+     * Ally, or omitted for the caster themselves);
+     * $move['other_relic_key'] picks which of the performer's equipped
+     * Relics to triple.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function relicCabalistBrew(GameState $state, string $actorRole, array $move): array
+    {
+        $hp = max(0, $state->wanderers[$actorRole]['hp'] - 2);
+        $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['hp' => $hp])]);
+        $events = [['type' => 'wanderer_damaged', 'role_key' => $actorRole, 'payload' => ['amount' => 2]]];
+
+        $performerRole = self::resolveAllyTarget($state, $actorRole, $move) ?? $actorRole;
+        $otherRelicKey = (string) ($move['other_relic_key'] ?? '');
+        $otherBaseKey = (string) preg_replace('/-\d+$/', '', $otherRelicKey);
+
+        if ($otherBaseKey === '' || $otherBaseKey === 'cabalist-brew' || ! in_array($otherRelicKey, $state->wanderers[$performerRole]['equipped'], true)) {
+            return [$state, $events, true];
+        }
+
+        $hpBefore = array_map(fn (array $w) => $w['hp'], $state->wanderers);
+
+        [$state, $innerEvents, $innerTrash] = self::resolveRelicAction($state, $performerRole, $otherBaseKey, $otherRelicKey, $move);
+        $events = [...$events, ...$innerEvents];
+
+        foreach ($state->wanderers as $role => $wanderer) {
+            $gained = $wanderer['hp'] - $hpBefore[$role];
+
+            if ($gained > 0) {
+                $tripled = min(15, $wanderer['hp'] + 2 * $gained);
+                $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $tripled])]);
+                $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $tripled]];
+            }
+        }
+
+        if ($innerTrash) {
+            $state = self::trashEquippedRelic($state, $performerRole, $otherRelicKey);
+            $events[] = ['type' => 'relic_trashed', 'role_key' => $performerRole, 'payload' => ['relic_key' => $otherRelicKey]];
+        }
+
+        return [$state, $events, true];
+    }
+
+    /**
+     * Defanging tool: "If you are on the Golem's space, tuck the next
+     * card from the Golem's draw pile under this. Then, the Golem
+     * plays 3 cards. After doing this 3 times, trash this and
+     * gain 📜📜📜. If you remove this card from your mat, all progress
+     * is lost" (see dropRelic). Progress is tracked in the caster's
+     * new tucked_cards map, keyed by this Relic's own key.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function relicDefangingTool(GameState $state, string $actorRole): array
+    {
+        if (! self::golemSharesCellWith($state, $actorRole)) {
+            return [$state, [], false];
+        }
+
+        $golem = $state->golem;
+
+        if ($golem['draw_pile'] === []) {
+            if ($golem['discard_pile'] === []) {
+                return [$state, [], false];
+            }
+
+            $golem['draw_pile'] = array_map(
+                fn (string $key) => ['key' => $key, 'tapped' => false],
+                $golem['discard_pile']
+            );
+            shuffle($golem['draw_pile']);
+            $golem['discard_pile'] = [];
+        }
+
+        $tuckedCard = array_shift($golem['draw_pile']);
+        $state = $state->with(['golem' => $golem]);
+
+        $tuckedCards = $state->wanderers[$actorRole]['tucked_cards'];
+        $tuckedCards['defanging-tool'] = [...($tuckedCards['defanging-tool'] ?? []), $tuckedCard['key']];
+        $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['tucked_cards' => $tuckedCards])]);
+
+        [$state, $playEvents] = self::golemPlayCards($state, 3);
+        $events = [
+            ['type' => 'card_tucked', 'role_key' => $actorRole, 'payload' => ['relic_key' => 'defanging-tool', 'card_key' => $tuckedCard['key']]],
+            ...$playEvents,
+        ];
+
+        return [$state, $events, count($tuckedCards['defanging-tool']) >= 3];
+    }
+
+    /**
+     * Golem log: "If you are in the Golem's space: look at the top 3
+     * cards of its draw pile, then tuck one of them here. When there
+     * are 3 cards tucked here, move them to the Golem discard pile,
+     * trash this, and gain 📜. If you drop this Relic, return the
+     * cards to its discard pile and lose your progress" (see
+     * dropRelic). $move['card_key'] picks which of the revealed top 3.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function relicGolemLog(GameState $state, string $actorRole, array $move): array
+    {
+        if (! self::golemSharesCellWith($state, $actorRole)) {
+            return [$state, [], false];
+        }
+
+        $drawPile = $state->golem['draw_pile'];
+        $topThree = array_slice($drawPile, 0, 3);
+        $chosenKey = (string) ($move['card_key'] ?? '');
+
+        $pileIndex = null;
+        foreach ($topThree as $i => $cardEntry) {
+            if ($cardEntry['key'] === $chosenKey) {
+                $pileIndex = $i;
+                break;
+            }
+        }
+
+        $events = [[
+            'type' => 'golem_draw_pile_revealed', 'role_key' => $actorRole,
+            'payload' => ['card_keys' => array_map(fn (array $c) => $c['key'], $topThree)],
+        ]];
+
+        if ($pileIndex === null) {
+            return [$state, $events, false];
+        }
+
+        unset($drawPile[$pileIndex]);
+        $drawPile = array_values($drawPile);
+        $state = $state->with(['golem' => $state->golemWith(['draw_pile' => $drawPile])]);
+
+        $tuckedCards = $state->wanderers[$actorRole]['tucked_cards'];
+        $tuckedCards['golem-log'] = [...($tuckedCards['golem-log'] ?? []), $chosenKey];
+        $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['tucked_cards' => $tuckedCards])]);
+        $events[] = ['type' => 'card_tucked', 'role_key' => $actorRole, 'payload' => ['relic_key' => 'golem-log', 'card_key' => $chosenKey]];
+
+        if (count($tuckedCards['golem-log']) < 3) {
+            return [$state, $events, false];
+        }
+
+        $golem = $state->golem;
+        $golem['discard_pile'] = [...$golem['discard_pile'], ...$tuckedCards['golem-log']];
+        $state = $state->with(['golem' => $golem]);
+
+        return [$state, $events, true];
+    }
+
+    /**
+     * Merchant's gloves: "If you are on a space that produces 🪙, you
+     * may freely exchange any number of Relics with Allies, even if
+     * they are on other spaces." Unlike every other "Ally" clause in
+     * this engine, this one explicitly drops the same-space
+     * requirement — $move['exchanges'] is a list of
+     * {from_role, to_role, relic_key}, each moving one Relic from one
+     * Wanderer (equipped or held) into another's holding, regardless
+     * of position. A Bound Relic can't change hands this way either,
+     * same as it can't be dropped.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicMerchantsGloves(GameState $state, string $actorRole, array $move): array
+    {
+        $casterCell = $state->wanderers[$actorRole]['cell'];
+        $location = LocationCatalog::find($state->board[Board::key($casterCell)]['location_key']);
+
+        if ($location === null || $location->producesEmoji !== '🪙') {
+            return [$state, []];
+        }
+
+        $exchanges = $move['exchanges'] ?? [];
+
+        if (! is_array($exchanges)) {
+            return [$state, []];
+        }
+
+        $events = [];
+
+        foreach ($exchanges as $exchange) {
+            if (! is_array($exchange)) {
+                continue;
+            }
+
+            $fromRole = $exchange['from_role'] ?? null;
+            $toRole = $exchange['to_role'] ?? null;
+            $relicKey = $exchange['relic_key'] ?? null;
+
+            if (! is_string($fromRole) || ! is_string($toRole) || ! is_string($relicKey)
+                || ! isset($state->wanderers[$fromRole]) || ! isset($state->wanderers[$toRole])) {
+                continue;
+            }
+
+            $fromWanderer = $state->wanderers[$fromRole];
+            $fromSlot = array_search($relicKey, $fromWanderer['equipped'], true);
+
+            if ($fromSlot !== false) {
+                if (RelicCatalog::find($relicKey)?->isBound === true) {
+                    continue;
+                }
+
+                $equipped = $fromWanderer['equipped'];
+                $equipped[$fromSlot] = null;
+                $state = $state->with(['wanderers' => $state->wanderersWith($fromRole, ['equipped' => $equipped])]);
+            } elseif (in_array($relicKey, $fromWanderer['holding'], true)) {
+                $state = $state->with(['wanderers' => $state->wanderersWith($fromRole, [
+                    'holding' => array_values(array_diff($fromWanderer['holding'], [$relicKey])),
+                ])]);
+            } else {
+                continue;
+            }
+
+            $toWanderer = $state->wanderers[$toRole];
+            $state = $state->with(['wanderers' => $state->wanderersWith($toRole, [
+                'holding' => [...$toWanderer['holding'], $relicKey],
+            ])]);
+
+            $events[] = ['type' => 'relic_exchanged', 'role_key' => null, 'payload' => ['relic_key' => $relicKey, 'from' => $fromRole, 'to' => $toRole]];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
      * Dispatches each "Inscribe" card on its full disambiguated key —
      * see resolveRelicAction's docblock for why. All 12 add a specific
      * Glyph type under a specific condition; all but inscribe-12 then
@@ -2511,7 +2793,10 @@ final class GameEngine
 
         $equipped[$slot] = null;
 
-        return $state->with(['wanderers' => $state->wanderersWith($actorRole, ['equipped' => $equipped])]);
+        return $state->with([
+            'wanderers' => $state->wanderersWith($actorRole, ['equipped' => $equipped]),
+            'trashedRelics' => [...$state->trashedRelics, $relicKey],
+        ]);
     }
 
     /**
@@ -3145,12 +3430,9 @@ final class GameEngine
      */
     private static function trashFirstEquippedRelic(GameState $state, string $role): array
     {
-        $equipped = $state->wanderers[$role]['equipped'];
-
-        foreach ($equipped as $slot => $value) {
+        foreach ($state->wanderers[$role]['equipped'] as $value) {
             if ($value !== null && ! self::isStatusToken($value)) {
-                $equipped[$slot] = null;
-                $state = $state->with(['wanderers' => $state->wanderersWith($role, ['equipped' => $equipped])]);
+                $state = self::trashEquippedRelic($state, $role, $value);
 
                 return [$state, [['type' => 'relic_trashed', 'role_key' => $role, 'payload' => ['relic_key' => $value]]]];
             }

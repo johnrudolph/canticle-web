@@ -48,6 +48,9 @@ test('inscribe-4 requires the Prison, 0 Shame, and 3+ Golem Shame, then adds a â
 
 test('inscribe-4 does nothing outside the Prison', function () {
     $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'artists-hovel']; // not the Prison
+    $state = $state->with(['board' => $board]);
     $state = $state->with(['golem' => $state->golemWith(['shame' => 3])]);
 
     [$state, $events] = equipAndUseRelic($state, 'inscribe-4');

@@ -39,6 +39,7 @@ namespace App\Game;
  *     'holding' => list<string>,       // searched but not yet equipped or dropped
  *     'free_move_available' => bool,   // set after arriving on a Road — next move is free
  *     'move_blocked_this_turn' => bool, // Incarceration — cleared when this Wanderer's next turn starts
+ *     'tucked_cards' => array<string, list<string>>, // keyed by the equipped Relic (Defanging tool/Golem log) tracking its own progress; dropping that Relic loses the progress (rules.md)
  * ]
  *
  * infrastructurePool = ['monolith_shard' => int, 'road' => int, 'walls' => int, 'fruit_tree' => int]
@@ -84,6 +85,7 @@ final readonly class GameState
      * @param  list<string>  $pendingSetupWanderers
      * @param  list<string>  $wandererOrder
      * @param  list<string>  $glyphDiscardPile
+     * @param  list<string>  $trashedRelics
      */
     public function __construct(
         public int $wandererCount,
@@ -106,6 +108,7 @@ final readonly class GameState
         public ?int $activeWandererIndex = null,
         public array $glyphDiscardPile = [],
         public bool $golemSkipped = false, // Poof: "Skip the Golem phase for the rest of the game."
+        public array $trashedRelics = [], // every Relic ever trashed (not dropped) — Re-creation draws from this
     ) {}
 
     /**

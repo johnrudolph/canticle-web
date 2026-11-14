@@ -18,6 +18,12 @@ function resolveEventRelicForTest(GameState $state, string $actorRole, string $r
 
 test('Time jump makes the Golem play 1 extra card', function () {
     $state = startedGame();
+    // Pin the revealed row's rightmost (next-to-resolve) card to an
+    // ordinary one — a real shuffled deck could otherwise draw Double
+    // Down/Time Paradox there and play more than 1, making this flaky.
+    $golem = $state->golem;
+    $golem['revealed'][array_key_last($golem['revealed'])] = ['key' => 'storm', 'tapped' => false];
+    $state = $state->with(['golem' => $golem]);
     $discardCountBefore = count($state->golem['discard_pile']);
 
     [$state, $events] = resolveEventRelicForTest($state, 'wanderer_a', 'time-jump');
@@ -44,6 +50,10 @@ test('Sharp objects grants 1 Scar token', function () {
 
 test('Incarceration blocks movement for the rest of the turn, then clears on the Wanderer\'s next turn', function () {
     $state = startedGame();
+    // Skip the Golem phase for this test so a real, randomly-drawn
+    // Golem card can't itself move wanderer_a mid-round and make the
+    // final NE move's validity depend on where they happened to land.
+    $state = $state->with(['golemSkipped' => true]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
     [$state] = resolveEventRelicForTest($state, 'wanderer_a', 'incarceration');
