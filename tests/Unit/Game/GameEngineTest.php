@@ -28,9 +28,13 @@ function startedGame(): GameState
     //     healing Relic used there — and the Golem and both Wanderers
     //     start on the same hub cell by default, so this would hijack
     //     any other heal-Relic test that happens to land on the hub.
+    //   - House of Cryptids tucks a Golem card every time the Wanderer
+    //     phase ends while all Wanderers share the Golem's space —
+    //     true by default at the hub, so this would silently consume
+    //     draw_pile cards in any test ending a turn there.
     $board = $state->board;
     foreach ($board as $key => $entry) {
-        if (in_array($entry['location_key'], ['catacombs', 'beds-of-poison', 'golem-sanctuary'], true)) {
+        if (in_array($entry['location_key'], ['catacombs', 'beds-of-poison', 'golem-sanctuary', 'house-of-cryptids'], true)) {
             $board[$key] = [...$entry, 'location_key' => 'artists-hovel'];
         }
     }

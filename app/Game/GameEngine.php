@@ -3156,9 +3156,76 @@ final class GameEngine
             ]];
         }
 
+        [$state, $houseOfCryptidsEvents] = self::tuckAtHouseOfCryptids($state);
+        $events = [...$events, ...$houseOfCryptidsEvents];
+
         [$state, $endRoundEvents] = self::endRound($state);
 
         return [$state, [...$events, ...$endRoundEvents]];
+    }
+
+    /**
+     * House of Cryptids: "Ongoing: If all Wanderers are on the Golem's
+     * space when the Wanderer phase ends, tuck a Golem card here. When
+     * 4 cards are tucked here, return them to the Golem discard pile
+     * and gain 📜📜." Checked right as the Wanderer phase actually
+     * ends (the last Wanderer's endWandererTurn, before the Golem
+     * phase resolves). Tucks from the top of the draw pile.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function tuckAtHouseOfCryptids(GameState $state): array
+    {
+        $golemCell = $state->golem['cell'];
+
+        if ($golemCell === null) {
+            return [$state, []];
+        }
+
+        $houseKey = null;
+        foreach ($state->board as $key => $entry) {
+            if ($entry['location_key'] === 'house-of-cryptids') {
+                $houseKey = $key;
+                break;
+            }
+        }
+
+        if ($houseKey === null) {
+            return [$state, []];
+        }
+
+        $golemCellKey = Board::key($golemCell);
+        foreach (self::activeWanderers($state) as $cell) {
+            if (Board::key($cell) !== $golemCellKey) {
+                return [$state, []];
+            }
+        }
+
+        $drawPile = $state->golem['draw_pile'];
+
+        if ($drawPile === []) {
+            return [$state, []];
+        }
+
+        $cardEntry = array_shift($drawPile);
+        $state = $state->with(['golem' => $state->golemWith(['draw_pile' => $drawPile])]);
+
+        $board = $state->board;
+        $tucked = [...$board[$houseKey]['tucked'], $cardEntry['key']];
+        $events = [['type' => 'golem_card_tucked', 'role_key' => null, 'payload' => ['card_key' => $cardEntry['key']]]];
+
+        if (count($tucked) >= 4) {
+            $golem = $state->golem;
+            $golem['discard_pile'] = [...$golem['discard_pile'], ...$tucked];
+            $state = $state->with(['golem' => $golem]);
+            $tucked = [];
+            $events[] = ['type' => 'house_of_cryptids_cards_returned', 'role_key' => null, 'payload' => []];
+        }
+
+        $board[$houseKey] = [...$board[$houseKey], 'tucked' => $tucked];
+        $state = $state->with(['board' => $board]);
+
+        return [$state, $events];
     }
 
     /**
