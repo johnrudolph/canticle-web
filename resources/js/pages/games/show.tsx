@@ -8,7 +8,6 @@ import { LocationDetailDialog } from '@/components/game/location-detail-dialog';
 import { NewRelicDialog } from '@/components/game/new-relic-dialog';
 import { WandererRelicPanel } from '@/components/game/wanderer-relic-panel';
 import { WandererSummaryRow } from '@/components/game/wanderer-summary-row';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -248,56 +247,23 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                             </span>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            {role.user_name && (
-                                                <Badge
-                                                    variant={
-                                                        role.is_ready
-                                                            ? 'default'
-                                                            : 'secondary'
+                                            {role.is_mine ? (
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    disabled={processing}
+                                                    onClick={() =>
+                                                        post(
+                                                            roles.release({
+                                                                game: game.code,
+                                                                roleKey:
+                                                                    role.role_key,
+                                                            }).url,
+                                                        )
                                                     }
                                                 >
-                                                    {role.is_ready
-                                                        ? 'Ready'
-                                                        : 'Not ready'}
-                                                </Badge>
-                                            )}
-                                            {role.is_mine ? (
-                                                <>
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        disabled={processing}
-                                                        onClick={() =>
-                                                            post(
-                                                                roles.ready({
-                                                                    game: game.code,
-                                                                    roleKey:
-                                                                        role.role_key,
-                                                                }).url,
-                                                            )
-                                                        }
-                                                    >
-                                                        {role.is_ready
-                                                            ? 'Unready'
-                                                            : "I'm ready"}
-                                                    </Button>
-                                                    <Button
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        disabled={processing}
-                                                        onClick={() =>
-                                                            post(
-                                                                roles.release({
-                                                                    game: game.code,
-                                                                    roleKey:
-                                                                        role.role_key,
-                                                                }).url,
-                                                            )
-                                                        }
-                                                    >
-                                                        Release
-                                                    </Button>
-                                                </>
+                                                    Release
+                                                </Button>
                                             ) : (
                                                 !role.user_name && (
                                                     <Button

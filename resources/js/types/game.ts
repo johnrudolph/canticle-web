@@ -9,7 +9,6 @@ export type EquipSlot = 'body' | 'mind' | 'hand_left' | 'hand_right' | 'bag';
 
 export interface RoleSummary {
     role_key: RoleKey;
-    is_ready: boolean;
     user_name: string | null;
     is_mine: boolean;
 }

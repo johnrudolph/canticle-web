@@ -33,15 +33,7 @@ class GameRoleController extends Controller
     {
         $role = $game->roles()->where('role_key', $roleKey)->where('user_id', Auth::id())->first();
 
-        $role?->update(['user_id' => null, 'is_ready' => false]);
-
-        return back();
-    }
-
-    public function ready(Game $game, string $roleKey): RedirectResponse
-    {
-        $role = $game->roles()->where('role_key', $roleKey)->where('user_id', Auth::id())->firstOrFail();
-        $role->update(['is_ready' => ! $role->is_ready]);
+        $role?->update(['user_id' => null]);
 
         return back();
     }
@@ -60,10 +52,6 @@ class GameRoleController extends Controller
 
         if ($game->roles->contains(fn ($role) => $role->user_id === null)) {
             throw ValidationException::withMessages(['roles' => 'Every role must be claimed before starting.']);
-        }
-
-        if ($game->roles->contains(fn ($role) => ! $role->is_ready)) {
-            throw ValidationException::withMessages(['roles' => 'Not everyone is ready yet.']);
         }
 
         $state = GameSetup::create($game->wanderer_count);

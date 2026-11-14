@@ -163,7 +163,6 @@ class GameController extends Controller
             'my_roles' => $myRoles,
             'roles' => $game->roles->map(fn ($role) => [
                 'role_key' => $role->role_key,
-                'is_ready' => $role->is_ready,
                 'user_name' => $role->user?->name,
                 'is_mine' => $role->user_id === Auth::id(),
             ]),
