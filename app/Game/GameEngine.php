@@ -4658,8 +4658,29 @@ final class GameEngine
                 return true;
             }
 
+            // Library: "This location produces every resource that the
+            // city already produces."
+            if ($entry['location_key'] === 'library' && self::cityProducesAnywhere($state, $branch)) {
+                return true;
+            }
+
             if (in_array('road', $entry['infrastructure'], true)
                 && in_array($branch, self::roadNetworkProduces($state, $neighbor), true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Whether any built Location anywhere on the board produces
+     * $branch — Library's own dynamic production.
+     */
+    private static function cityProducesAnywhere(GameState $state, string $branch): bool
+    {
+        foreach ($state->board as $entry) {
+            if (LocationCatalog::find($entry['location_key'])?->produces === $branch) {
                 return true;
             }
         }
