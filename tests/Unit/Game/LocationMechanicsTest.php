@@ -111,3 +111,45 @@ test('Scriptorium returns every Monolith Shard on the board to the Emperor\'s po
         ->and($state->infrastructurePool['monolith_shard'])->toBe($poolBefore + 6)
         ->and(collect($events)->pluck('type'))->toContain('infrastructure_returned');
 });
+
+test('Defenders\' Guild tucks an attack Golem card that dealt 0 damage, and returns + gains Prophecy at 4', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'defenders-guild'];
+    $state = $state->with(['board' => $board]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'maybeTuckAtDefendersGuild');
+    $reflection->setAccessible(true);
+    $hpBefore = array_map(fn (array $w) => $w['hp'], $state->wanderers);
+
+    [$state, $events] = $reflection->invoke(null, $state, 'charge', $hpBefore);
+    expect($state->board['1,0']['tucked'])->toBe(['charge'])
+        ->and(collect($events)->pluck('type'))->toContain('golem_card_tucked');
+
+    foreach (['charge', 'charge'] as $cardKey) {
+        [$state] = $reflection->invoke(null, $state, $cardKey, $hpBefore);
+    }
+    expect($state->board['1,0']['tucked'])->toHaveCount(3);
+
+    [$state, $events] = $reflection->invoke(null, $state, 'charge', $hpBefore);
+    expect($state->board['1,0']['tucked'])->toBe([])
+        ->and($state->golem['discard_pile'])->toContain('charge')
+        ->and($state->prophecy)->toBe(2)
+        ->and(collect($events)->pluck('type'))->toContain('defenders_guild_cards_returned');
+});
+
+test('Defenders\' Guild does not tuck an attack card that actually dealt damage', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'defenders-guild'];
+    $state = $state->with(['board' => $board]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'maybeTuckAtDefendersGuild');
+    $reflection->setAccessible(true);
+    $hpBefore = array_map(fn (array $w) => $w['hp'] + 1, $state->wanderers);
+
+    [$state, $events] = $reflection->invoke(null, $state, 'charge', $hpBefore);
+
+    expect($state->board['1,0']['tucked'])->toBe([])
+        ->and($events)->toBe([]);
+});

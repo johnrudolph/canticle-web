@@ -37,9 +37,13 @@ function startedGame(): GameState
     //   - Library satisfies any build cost from anywhere on the board
     //     (not just adjacency), so its mere presence breaks any test
     //     asserting a cost-based rejection.
+    //   - Defenders' Guild tucks Golem cards itself — any test that
+    //     plants its own Defenders' Guild at a specific cell (to test
+    //     that mechanic directly) needs to be the ONLY one on the board,
+    //     since the engine always tucks at the first one found.
     $board = $state->board;
     foreach ($board as $key => $entry) {
-        if (in_array($entry['location_key'], ['catacombs', 'exile', 'beds-of-poison', 'golem-sanctuary', 'house-of-cryptids', 'library'], true)) {
+        if (in_array($entry['location_key'], ['catacombs', 'exile', 'beds-of-poison', 'golem-sanctuary', 'house-of-cryptids', 'library', 'defenders-guild'], true)) {
             $board[$key] = [...$entry, 'location_key' => 'artists-hovel'];
         }
     }

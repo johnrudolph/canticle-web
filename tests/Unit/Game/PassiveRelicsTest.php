@@ -357,3 +357,107 @@ test('Telekinesis requires actually being on a Monolith Shard space', function (
     expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'telekinesis_move', 'cell' => [0, 1]]))
         ->toThrow(InvalidMoveException::class);
 });
+
+test('The Monolith within makes its holder\'s space count as having a Monolith Shard', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'mind' => 'the-monolith-within'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'hasMonolithShardFor');
+    $reflection->setAccessible(true);
+
+    expect($reflection->invoke(null, $state, 'wanderer_a', [1, 0]))->toBeTrue()
+        ->and($reflection->invoke(null, $state, 'wanderer_b', [1, 0]))->toBeFalse();
+});
+
+test('Golem insight heals 1 before a Golem attack, once per round', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'bag' => 'golem-insight'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 10])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyDamage');
+    $reflection->setAccessible(true);
+    [$state] = $reflection->invoke(null, $state, 'wanderer_a', 3, true);
+
+    // +1 healed before the hit, then -3 => net 8.
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(8)
+        ->and($state->wanderers['wanderer_a']['golem_insight_used_this_round'])->toBeTrue();
+
+    // Already used this round — no second heal.
+    [$state] = $reflection->invoke(null, $state, 'wanderer_a', 3, true);
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(5);
+});
+
+test('Ephemeral protection negates a Golem attack while on a Monolith Shard, then trashes itself and the Shard', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'infrastructure' => ['monolith_shard']];
+    $state = $state->with(['board' => $board]);
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'ephemeral-protection'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 10])]);
+    $poolBefore = $state->infrastructurePool['monolith_shard'];
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyDamage');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state, 'wanderer_a', 5, true);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(10)
+        ->and($state->wanderers['wanderer_a']['equipped']['body'])->toBeNull()
+        ->and($state->board['1,0']['infrastructure'])->not->toContain('monolith_shard')
+        ->and($state->infrastructurePool['monolith_shard'])->toBe($poolBefore + 1)
+        ->and($state->prophecy)->toBe(1)
+        ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
+});
+
+test('Ephemeral protection does nothing off a Monolith Shard', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'ephemeral-protection'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 10])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyDamage');
+    $reflection->setAccessible(true);
+    [$state] = $reflection->invoke(null, $state, 'wanderer_a', 5, true);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(5)
+        ->and($state->wanderers['wanderer_a']['equipped']['body'])->toBe('ephemeral-protection');
+});
+
+test('Divine sack cloth of sacrifice redirects half an Ally\'s damage to its holder', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_b']['equipped'], 'body' => 'divine-sack-cloth-of-sacrifice'];
+    $wanderers = $state->wanderersWith('wanderer_b', ['equipped' => $equipped, 'hp' => 10]);
+    $wanderers['wanderer_a']['hp'] = 10;
+    $state = $state->with(['wanderers' => $wanderers]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyDamage');
+    $reflection->setAccessible(true);
+    [$state] = $reflection->invoke(null, $state, 'wanderer_a', 6);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(7) // -3
+        ->and($state->wanderers['wanderer_b']['hp'])->toBe(7); // -3
+});
+
+test('Guide rope brings other Wanderers along for free when moving', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'guide-rope'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['cell' => [1, 0]])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => 'S']);
+
+    expect($state->wanderers['wanderer_a']['cell'])->toBe($state->wanderers['wanderer_b']['cell']);
+});
+
+test('Rally heals every Ally by 1 after its holder moves', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'mind' => 'rally'];
+    $wanderers = $state->wanderersWith('wanderer_a', ['equipped' => $equipped]);
+    $wanderers['wanderer_b']['hp'] = 10;
+    $state = $state->with(['wanderers' => $wanderers]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => 'S']);
+
+    expect($state->wanderers['wanderer_b']['hp'])->toBe(11);
+});

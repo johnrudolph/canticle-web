@@ -34,6 +34,23 @@ they're resolved and fold the resolution into my own understanding instead
    some other 🌾-specific interaction, or something not yet in the
    sheet? Left unimplemented pending what "double effect" means here.
 
+4. **Emperor's Timepiece references "all 5 of the Emperor's Relics"
+   with no such set defined anywhere.** Printed as: "If you have all 5
+   of the Emperor's Relics equipped, swap places with the Emperor,
+   then trash this and gain 📜. You are now the Emperor, and they are
+   now a Wanderer." Nothing in rules.md or the synced sheet names a
+   fixed "Emperor's Relics" set (no `location` field groups 5 Relics
+   under an Emperor-flavored heading the way location-locked Relics
+   do) — is this a yet-to-be-named Relic subset, or does "Emperor's
+   Relics" mean something else entirely (Relics the Emperor has
+   personally handed out)? Left unimplemented pending which 5 Relics
+   this actually refers to. Separately, note for whenever this is
+   resolved: the actual role swap ("you are now the Emperor") crosses
+   into the DB layer (GameRole user_id<->role_key assignment), not
+   something GameEngine's pure GameState can express on its own — the
+   engine would validate the condition and emit an event; the
+   controller would do the actual swap.
+
 ## Resolved (for my own reference, not standing asks)
 
 - Silent hunting cloak: sheet fixed to "tap its next 2 untapped cards."

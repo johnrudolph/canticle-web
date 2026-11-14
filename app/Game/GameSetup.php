@@ -57,6 +57,7 @@ final class GameSetup
                 'move_blocked_this_turn' => false,
                 'tucked_cards' => [],
                 'was_ever_exhausted' => false,
+                'golem_insight_used_this_round' => false,
             ];
         }
 

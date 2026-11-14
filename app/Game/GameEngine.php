@@ -1523,7 +1523,7 @@ final class GameEngine
     {
         $casterCell = $state->wanderers[$actorRole]['cell'];
 
-        if (! in_array('monolith_shard', $state->board[Board::key($casterCell)]['infrastructure'], true)) {
+        if (! self::hasMonolithShardFor($state, $actorRole, $casterCell)) {
             return [$state, []];
         }
 
@@ -2998,6 +2998,24 @@ final class GameEngine
     }
 
     /**
+     * The Monolith within: "Your space is considered to have +1 Monolith
+     * Shard on it, even if there is already one there." Only matters for
+     * presence/absence checks (there's no mechanic that counts shards per
+     * space), so this is just an OR against the real board infrastructure
+     * for whichever Wanderer's "their own space" is being checked.
+     *
+     * @param  array{0: int, 1: int}  $cell
+     */
+    private static function hasMonolithShardFor(GameState $state, string $role, array $cell): bool
+    {
+        if (in_array('monolith_shard', $state->board[Board::key($cell)]['infrastructure'], true)) {
+            return true;
+        }
+
+        return in_array('the-monolith-within', $state->wanderers[$role]['equipped'], true);
+    }
+
+    /**
      * Covers Emperor-phase steps 4 (discard) and 5 (draw back to 5) in one
      * action, then hands off to the Wanderer phase. Relic dealing (step 2)
      * happens automatically in playLocation() rather than as a separate
@@ -3121,7 +3139,7 @@ final class GameEngine
             $events[] = ['type' => 'fruit_tree_bonus_action', 'role_key' => $actorRole, 'payload' => []];
         }
 
-        if (in_array('monolith_shard', $destinationInfrastructure, true) && in_array('rejuvenation-gown', $wanderer['equipped'], true)) {
+        if (self::hasMonolithShardFor($state, $actorRole, $to) && in_array('rejuvenation-gown', $wanderer['equipped'], true)) {
             $hp = min(self::maxHpFor($state, $actorRole), $state->wanderers[$actorRole]['hp'] + 2);
             $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['hp' => $hp])]);
             $events[] = ['type' => 'wanderer_healed', 'role_key' => $actorRole, 'payload' => ['hp' => $hp]];
@@ -3135,6 +3153,50 @@ final class GameEngine
             [$state, $damageEvents] = self::applyDamage($state, $actorRole, 5);
             $events = [...$events, ...$damageEvents];
             $events[] = ['type' => 'wanderer_damaged', 'role_key' => $actorRole, 'payload' => ['amount' => 5]];
+        }
+
+        // Guide rope: "When moving from a space with other Wanderers, you
+        // may bring them with you." Always taken (there's no downside to
+        // an Ally), moving every other active Wanderer who shared the
+        // source space for free along with the caster, and applying the
+        // same Monolith Shard/Beds of poison destination effects.
+        if (in_array('guide-rope', $wanderer['equipped'], true) && $wanderer['cell'] !== null) {
+            $sourceKey = Board::key($wanderer['cell']);
+
+            foreach (self::activeWanderers($state) as $otherRole => $otherCell) {
+                if ($otherRole === $actorRole || Board::key($otherCell) !== $sourceKey) {
+                    continue;
+                }
+
+                $state = $state->with(['wanderers' => $state->wanderersWith($otherRole, ['cell' => $to])]);
+                $events[] = ['type' => 'wanderer_moved', 'role_key' => $otherRole, 'payload' => ['to' => $to, 'free' => true]];
+
+                if (self::hasMonolithShardFor($state, $otherRole, $to) && in_array('rejuvenation-gown', $state->wanderers[$otherRole]['equipped'], true)) {
+                    $hp = min(self::maxHpFor($state, $otherRole), $state->wanderers[$otherRole]['hp'] + 2);
+                    $state = $state->with(['wanderers' => $state->wanderersWith($otherRole, ['hp' => $hp])]);
+                    $events[] = ['type' => 'wanderer_healed', 'role_key' => $otherRole, 'payload' => ['hp' => $hp]];
+                }
+
+                if ($state->board[$toKey]['location_key'] === 'beds-of-poison') {
+                    [$state, $damageEvents] = self::applyDamage($state, $otherRole, 5);
+                    $events = [...$events, ...$damageEvents];
+                    $events[] = ['type' => 'wanderer_damaged', 'role_key' => $otherRole, 'payload' => ['amount' => 5]];
+                }
+            }
+        }
+
+        // Rally: "After moving, each Ally may 🦶1." Always taken — a free
+        // heal with no downside.
+        if (in_array('rally', $wanderer['equipped'], true)) {
+            foreach (self::activeWanderers($state) as $otherRole => $otherCell) {
+                if ($otherRole === $actorRole) {
+                    continue;
+                }
+
+                $hp = min(self::maxHpFor($state, $otherRole), $state->wanderers[$otherRole]['hp'] + 1);
+                $state = $state->with(['wanderers' => $state->wanderersWith($otherRole, ['hp' => $hp])]);
+                $events[] = ['type' => 'wanderer_healed', 'role_key' => $otherRole, 'payload' => ['hp' => $hp]];
+            }
         }
 
         return [$state, $events];
@@ -3320,11 +3382,19 @@ final class GameEngine
         }
 
         $nextRound = $state->round + 1;
+
+        // Golem insight: "Once per round" — cleared as the new round begins.
+        $wanderers = $state->wanderers;
+        foreach ($wanderers as $role => $wanderer) {
+            $wanderers[$role] = [...$wanderer, 'golem_insight_used_this_round' => false];
+        }
+
         $state = $state->with([
             'round' => $nextRound,
             'phase' => 'emperor',
             'activeWandererIndex' => null,
             'infrastructurePlacedThisTurn' => 0,
+            'wanderers' => $wanderers,
         ]);
         $events[] = ['type' => 'round_started', 'role_key' => null, 'payload' => ['round' => $nextRound]];
 
@@ -3436,15 +3506,76 @@ final class GameEngine
      */
     private static function resolveOrSkipTappedCard(GameState $state, array $cardEntry): array
     {
-        if ($cardEntry['tapped']) {
-            $card = GolemCardCatalog::find($cardEntry['key']);
+        $card = GolemCardCatalog::find($cardEntry['key']);
+        $isAttackCard = $card !== null && str_contains($card->action, '👊');
+        $hpBefore = $isAttackCard ? array_map(fn (array $w) => $w['hp'], $state->wanderers) : [];
 
-            return [$state, [
+        if ($cardEntry['tapped']) {
+            [$state, $events, $effects] = [$state, [
                 ['type' => 'golem_card_tapped', 'role_key' => null, 'payload' => ['card_key' => $cardEntry['key'], 'name' => $card?->name]],
             ], ['double_next' => false, 'extra_from_bottom' => 0]];
+        } else {
+            [$state, $events, $effects] = self::resolveGolemCard($state, $cardEntry['key']);
         }
 
-        return self::resolveGolemCard($state, $cardEntry['key']);
+        if ($isAttackCard) {
+            [$state, $tuckEvents] = self::maybeTuckAtDefendersGuild($state, $cardEntry['key'], $hpBefore);
+            $events = [...$events, ...$tuckEvents];
+        }
+
+        return [$state, $events, $effects];
+    }
+
+    /**
+     * Defenders' Guild: "Ongoing: When the Golem plays a card (tapped or
+     * untapped) with 👊 but Wanderers lose 0 health, tuck the Golem card
+     * here. When 4 cards are tucked, return them to the Golem discard
+     * pile, and gain 📜📜." Detected generically via an HP-diff snapshot
+     * (same trick as Divine Icon/Golem sanctuary) rather than special-
+     * casing which attack cards can deal 0 — a tapped card, a card with
+     * no Wanderer in range, or Cabalist's Gown immunity all qualify.
+     *
+     * @param  array<string, int>  $hpBefore
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function maybeTuckAtDefendersGuild(GameState $state, string $cardKey, array $hpBefore): array
+    {
+        foreach ($state->wanderers as $role => $wanderer) {
+            if ($wanderer['hp'] < ($hpBefore[$role] ?? $wanderer['hp'])) {
+                return [$state, []];
+            }
+        }
+
+        $guildKey = null;
+        foreach ($state->board as $key => $entry) {
+            if ($entry['location_key'] === 'defenders-guild') {
+                $guildKey = $key;
+                break;
+            }
+        }
+
+        if ($guildKey === null) {
+            return [$state, []];
+        }
+
+        $board = $state->board;
+        $tucked = [...$board[$guildKey]['tucked'], $cardKey];
+        $events = [['type' => 'golem_card_tucked', 'role_key' => null, 'payload' => ['card_key' => $cardKey, 'location' => 'defenders-guild']]];
+
+        if (count($tucked) >= 4) {
+            $golem = $state->golem;
+            $golem['discard_pile'] = [...$golem['discard_pile'], ...$tucked];
+            $tucked = [];
+            $state = $state->with(['golem' => $golem, 'prophecy' => $state->prophecy + 2]);
+            $events[] = ['type' => 'defenders_guild_cards_returned', 'role_key' => null, 'payload' => []];
+            $events[] = ['type' => 'prophecy_gained', 'role_key' => null, 'payload' => ['amount' => 2]];
+        }
+
+        $board = $state->board;
+        $board[$guildKey] = [...$board[$guildKey], 'tucked' => $tucked];
+        $state = $state->with(['board' => $board]);
+
+        return [$state, $events];
     }
 
     /**
@@ -4410,6 +4541,74 @@ final class GameEngine
             }
         }
 
+        $events = [];
+
+        // Golem insight: "Once per round, when the Golem attacks you,
+        // you may 🦶1 before the attack." Always taken — healing before
+        // damage is strictly better, so there's no real decision to model.
+        if ($isGolemAttack && in_array('golem-insight', $equipped, true) && ! $state->wanderers[$role]['golem_insight_used_this_round']) {
+            $hp = min(self::maxHpFor($state, $role), $state->wanderers[$role]['hp'] + 1);
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, [
+                'hp' => $hp,
+                'golem_insight_used_this_round' => true,
+            ])]);
+            $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
+        }
+
+        // Ephemeral protection: "If you are on a space with a Monolith
+        // Shard and the Golem attacks you: you may choose lose 0 Health,
+        // trash this, trash the Monolith shard, and gain 📜." Always
+        // taken — strictly better than taking the hit.
+        if ($isGolemAttack && in_array('ephemeral-protection', $equipped, true) && $cell !== null && self::hasMonolithShardFor($state, $role, $cell)) {
+            $state = self::trashEquippedRelic($state, $role, 'ephemeral-protection');
+            $events[] = ['type' => 'relic_trashed', 'role_key' => $role, 'payload' => ['relic_key' => 'ephemeral-protection']];
+
+            $cellKey = Board::key($cell);
+            $infrastructure = $state->board[$cellKey]['infrastructure'];
+            $shardIndex = array_search('monolith_shard', $infrastructure, true);
+            if ($shardIndex !== false) {
+                unset($infrastructure[$shardIndex]);
+                $board = $state->board;
+                $board[$cellKey] = [...$board[$cellKey], 'infrastructure' => array_values($infrastructure)];
+                $state = $state->with(['board' => $board, 'infrastructurePool' => [
+                    ...$state->infrastructurePool,
+                    'monolith_shard' => $state->infrastructurePool['monolith_shard'] + 1,
+                ]]);
+                $events[] = ['type' => 'infrastructure_removed', 'role_key' => null, 'payload' => ['cell' => $cell, 'infrastructure_type' => 'monolith_shard']];
+            }
+
+            $state = $state->with(['prophecy' => $state->prophecy + 1]);
+            $events[] = ['type' => 'prophecy_gained', 'role_key' => $role, 'payload' => ['amount' => 1]];
+
+            return [$state, $events];
+        }
+
+        // Divine sack cloth of sacrifice: "When Allies lose Health, you
+        // may always incur half of the damage on their behalf." Always
+        // taken on the Ally's behalf (there's no downside to the Ally),
+        // and only the first holder found redirects — avoids chaining
+        // through multiple holders at once.
+        foreach (self::activeWanderers($state) as $otherRole => $otherCell) {
+            if ($otherRole === $role || ! in_array('divine-sack-cloth-of-sacrifice', $state->wanderers[$otherRole]['equipped'], true)) {
+                continue;
+            }
+
+            $sacrificed = intdiv($damage, 2);
+            $damage -= $sacrificed;
+
+            if ($sacrificed > 0) {
+                $holderHp = max(0, $state->wanderers[$otherRole]['hp'] - $sacrificed);
+                $state = $state->with(['wanderers' => $state->wanderersWith($otherRole, ['hp' => $holderHp])]);
+                $events[] = ['type' => 'wanderer_damaged', 'role_key' => $otherRole, 'payload' => ['amount' => $sacrificed]];
+
+                if ($holderHp === 0) {
+                    $state = $state->with(['wanderers' => $state->wanderersWith($otherRole, ['was_ever_exhausted' => true])]);
+                }
+            }
+
+            break;
+        }
+
         $darkCount = count(array_filter(
             $equipped,
             fn (mixed $key) => is_string($key) && str_starts_with((string) RelicCatalog::find($key)?->name, 'Dark')
@@ -4418,7 +4617,6 @@ final class GameEngine
 
         $hpBefore = $state->wanderers[$role]['hp'];
         $hp = max(0, $hpBefore - $damage);
-        $events = [];
 
         if ($hp <= 0 && $hpBefore > 0 && in_array('cabalist-wraps', $equipped, true)) {
             $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => 1])]);
@@ -4941,7 +5139,7 @@ final class GameEngine
             throw new InvalidMoveException('That Ally is not adjacent to you.');
         }
 
-        if (! in_array('monolith_shard', $state->board[$allyCellKey]['infrastructure'], true)) {
+        if (! self::hasMonolithShardFor($state, $targetRole, $ally['cell'])) {
             throw new InvalidMoveException('That Ally\'s space has no Monolith Shard.');
         }
 
@@ -4979,9 +5177,7 @@ final class GameEngine
             throw new InvalidMoveException('Telekinesis is not equipped.');
         }
 
-        $fromCellKey = Board::key($wanderer['cell']);
-
-        if (! in_array('monolith_shard', $state->board[$fromCellKey]['infrastructure'], true)) {
+        if (! self::hasMonolithShardFor($state, $actorRole, $wanderer['cell'])) {
             throw new InvalidMoveException('You must be on a Monolith Shard space to use Telekinesis.');
         }
 
@@ -5025,7 +5221,7 @@ final class GameEngine
             $events[] = ['type' => 'wanderer_damaged', 'role_key' => $actorRole, 'payload' => ['amount' => 5]];
         }
 
-        if (in_array('monolith_shard', $destinationInfrastructure, true) && in_array('rejuvenation-gown', $wanderer['equipped'], true)) {
+        if (self::hasMonolithShardFor($state, $actorRole, $toCell) && in_array('rejuvenation-gown', $wanderer['equipped'], true)) {
             $hp = min(self::maxHpFor($state, $actorRole), $state->wanderers[$actorRole]['hp'] + 2);
             $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['hp' => $hp])]);
             $events[] = ['type' => 'wanderer_healed', 'role_key' => $actorRole, 'payload' => ['hp' => $hp]];
