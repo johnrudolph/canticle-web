@@ -103,7 +103,7 @@ export default function GameShow({ game }: { game: GameSummary }) {
     >([]);
     const holdingSeenRef = useRef<Record<string, Set<string>>>({});
     const seenEventIdRef = useRef<number | null>(null);
-    const emperorStepRoundRef = useRef<number | null>(null);
+    const previousPhaseRef = useRef<string | null>(null);
 
     useEffect(() => {
         setStatus(game.status);
@@ -131,18 +131,25 @@ export default function GameShow({ game }: { game: GameSummary }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [game.status, game.roles, game.my_roles, game.state]);
 
-    // Reset the Emperor's turn back to step 1 at the start of each new
-    // Emperor phase (a fresh round, or coming back from the Wanderer/Golem
-    // phases) — otherwise it'd stay wherever it was left mid-turn.
+    // Reset the Emperor's turn back to step 1 every time the game phase
+    // transitions INTO 'emperor' from something else — not keyed by round
+    // number. Time spasm can move the round counter backward mid-round,
+    // so the same round number can see two distinct Emperor phases (e.g.
+    // round 2's Emperor phase, then Time spasm rewinds to round 1, then
+    // the normal end-of-round increment brings it back to round 2 for a
+    // second, different Emperor phase). Keying off round number caused
+    // the second phase to be mistaken for "already seen," leaving the
+    // stepper stuck wherever the first one ended (reported: starting the
+    // Emperor's turn dumped straight into the discard step).
     useEffect(() => {
         if (
             state?.phase === 'emperor' &&
-            emperorStepRoundRef.current !== state.round
+            previousPhaseRef.current !== 'emperor'
         ) {
-            emperorStepRoundRef.current = state.round;
             setEmperorStep('location');
         }
-    }, [state?.phase, state?.round]);
+        previousPhaseRef.current = state?.phase ?? null;
+    }, [state?.phase]);
 
     function detectNewRelic(nextState: typeof state, roles: RoleKey[]) {
         if (!nextState) return;
@@ -726,17 +733,28 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                 {emperorStep === 'infrastructure' && (
                                     <>
                                         <p className="mb-2 text-xs text-muted-foreground">
-                                            Place up to 2 Infrastructure tokens
+                                            Place up to{' '}
+                                            {state.infrastructure_cap_this_turn}{' '}
+                                            Infrastructure token
+                                            {state.infrastructure_cap_this_turn ===
+                                            1
+                                                ? ''
+                                                : 's'}{' '}
                                             from your pool (optional — click a
                                             type, then a highlighted space on
                                             the board).
+                                            {state.infrastructure_cap_this_turn >
+                                                2 &&
+                                                " Raised by Builder's gloves."}
                                         </p>
                                         <p className="mb-1 text-sm font-medium">
                                             Infrastructure (
                                             {
                                                 state.infrastructure_placed_this_turn
                                             }
-                                            /2 placed this turn)
+                                            /
+                                            {state.infrastructure_cap_this_turn}{' '}
+                                            placed this turn)
                                         </p>
                                         <div className="flex flex-col gap-1">
                                             {(
@@ -754,7 +772,7 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                                                     type
                                                                 ] <= 0 ||
                                                                 state.infrastructure_placed_this_turn >=
-                                                                    2
+                                                                    state.infrastructure_cap_this_turn
                                                             }
                                                             onClick={() =>
                                                                 setSelectedInfrastructureType(

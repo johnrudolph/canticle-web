@@ -73,6 +73,7 @@ export interface GameStateDto {
         cell: [number, number];
         type: InfrastructureType;
     }[];
+    infrastructure_cap_this_turn: number;
     prophecy: number;
     golem_skipped: boolean;
     outcome: 'elite_victory' | 'simple_victory' | 'defeat' | null;

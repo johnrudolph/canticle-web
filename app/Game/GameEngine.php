@@ -362,7 +362,7 @@ final class GameEngine
      * token." Any Wanderer equipping it on such a space raises the
      * normal 2-per-turn cap to 3.
      */
-    private static function infrastructureCapThisTurn(GameState $state): int
+    public static function infrastructureCapThisTurn(GameState $state): int
     {
         foreach (self::activeWanderers($state) as $role => $cell) {
             if (! in_array('builders-gloves', $state->wanderers[$role]['equipped'], true)) {

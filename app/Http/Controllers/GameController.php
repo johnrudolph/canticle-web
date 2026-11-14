@@ -164,6 +164,13 @@ class GameController extends Controller
             } else {
                 $state['active_wanderer_relic_reasons'] = [];
             }
+
+            // Builder's gloves raises the normal 2-per-turn Infrastructure
+            // cap to 3 when a Wanderer wearing it is standing on an ⚙️
+            // space during the Emperor's phase — the frontend can't derive
+            // this itself (it doesn't know Builder's gloves' condition),
+            // so compute and expose it directly rather than hardcoding 2.
+            $state['infrastructure_cap_this_turn'] = GameEngine::infrastructureCapThisTurn($gameState);
         }
 
         return [
