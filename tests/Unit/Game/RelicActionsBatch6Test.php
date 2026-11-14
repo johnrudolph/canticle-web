@@ -1,6 +1,7 @@
 <?php
 
 use App\Game\GameEngine;
+use App\Game\InvalidMoveException;
 
 // startedGame() (GameEngineTest.php) is declared in a sibling file,
 // loaded in the same run. It puts both Wanderers and the Golem on the
@@ -46,7 +47,7 @@ test('Cabalist brand discards chosen Glyphs, makes the Golem play 3 cards, then 
         ->and(count($state->golem['discard_pile']))->toBe($discardCountBefore + 3);
 });
 
-test('Cabalist brand does nothing off the Golem\'s space', function () {
+test('Cabalist brand is rejected outright off the Golem\'s space', function () {
     $state = startedGame();
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'cabalist-brand'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
@@ -55,13 +56,12 @@ test('Cabalist brand does nothing off the Golem\'s space', function () {
 
     $revealedBefore = $state->golem['revealed'];
 
-    [$state, $events] = GameEngine::apply($state, 'wanderer_a', [
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', [
         'type' => 'use_relic', 'relic_key' => 'cabalist-brand', 'glyph_keys' => ['enchanted'],
-    ]);
+    ]))->toThrow(InvalidMoveException::class);
 
     expect($state->golem['revealed'])->toBe($revealedBefore)
-        ->and($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBe('cabalist-brand')
-        ->and(collect($events)->pluck('type'))->not->toContain('relic_trashed');
+        ->and($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBe('cabalist-brand');
 });
 
 test('Cabalist brand allows discarding zero Glyphs', function () {

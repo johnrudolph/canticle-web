@@ -65,6 +65,7 @@ export interface GameStateDto {
     pending_golem_placement: boolean;
     wanderer_order: RoleKey[];
     active_wanderer_role: RoleKey | null;
+    active_wanderer_relic_reasons: Record<string, string | null>;
     actions_per_wanderer_turn: number;
     golem_cards_this_round: number;
     infrastructure_pool: Record<InfrastructureType, number>;

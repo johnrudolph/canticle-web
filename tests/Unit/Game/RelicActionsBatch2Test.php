@@ -1,6 +1,7 @@
 <?php
 
 use App\Game\GameEngine;
+use App\Game\InvalidMoveException;
 
 // startedGame() (GameEngineTest.php) is declared in a sibling file,
 // loaded in the same run. It puts both Wanderers and the Golem on the
@@ -20,16 +21,16 @@ test('Golem Prod moves the Golem 1 space in the chosen direction while sharing i
         ->and($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBe('golem-prod');
 });
 
-test('Golem Prod does nothing off the Golem\'s space', function () {
+test('Golem Prod is rejected outright off the Golem\'s space', function () {
     $state = startedGame();
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'golem-prod'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['cell' => [0, 0]])]);
 
-    [$state] = GameEngine::apply($state, 'wanderer_a', [
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', [
         'type' => 'use_relic', 'relic_key' => 'golem-prod', 'direction' => 'NE',
-    ]);
+    ]))->toThrow(InvalidMoveException::class);
 
     expect($state->golem['cell'])->toBe([1, 0]);
 });
@@ -98,13 +99,14 @@ test('Divine aura heals everyone on/adjacent to a Monolith Shard space by 3', fu
         ->and($state->wanderers['wanderer_b']['hp'])->toBe(13);
 });
 
-test('Divine aura does nothing off a Monolith Shard space', function () {
+test('Divine aura is rejected outright off a Monolith Shard space', function () {
     $state = startedGame();
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'bag' => 'divine-aura'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 10])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
-    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'divine-aura']);
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'divine-aura']))
+        ->toThrow(InvalidMoveException::class);
 
     expect($state->wanderers['wanderer_a']['hp'])->toBe(10);
 });

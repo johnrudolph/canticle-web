@@ -86,6 +86,7 @@ export function WandererRelicPanel({
     canAct,
     isActive = false,
     allies,
+    relicUnusableReasons = {},
 }: {
     role: 'wanderer_a' | 'wanderer_b' | 'wanderer_c';
     wanderer: WandererState;
@@ -98,6 +99,8 @@ export function WandererRelicPanel({
     isActive?: boolean;
     /** Other Wanderers sharing this one's space, for Relics that target an Ally. */
     allies: { role: string; label: string }[];
+    /** Per equip-slot: why that Relic can't be used right now, or null if it can. Only the slots whose condition is checkable without a target are present. */
+    relicUnusableReasons?: Record<string, string | null>;
 }) {
     const [detailOpen, setDetailOpen] = useState(false);
     const label = `Wanderer ${role.replace('wanderer_', '').toUpperCase()}`;
@@ -175,20 +178,45 @@ export function WandererRelicPanel({
                                     )}
                                     {canAct && (
                                         <div className="flex flex-wrap gap-1">
-                                            <Button
-                                                size="sm"
-                                                variant="outline"
-                                                className="h-5 px-1.5 text-[10px]"
-                                                disabled={processing}
-                                                onClick={() =>
-                                                    onSubmit({
-                                                        type: 'use_relic',
-                                                        relic_key: relicKey,
-                                                    })
-                                                }
-                                            >
-                                                Use
-                                            </Button>
+                                            {(() => {
+                                                const reason =
+                                                    relicUnusableReasons[slot];
+                                                const useButton = (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="h-5 px-1.5 text-[10px]"
+                                                        disabled={
+                                                            processing ||
+                                                            !!reason
+                                                        }
+                                                        onClick={() =>
+                                                            onSubmit({
+                                                                type: 'use_relic',
+                                                                relic_key:
+                                                                    relicKey,
+                                                            })
+                                                        }
+                                                    >
+                                                        Use
+                                                    </Button>
+                                                );
+
+                                                if (!reason) return useButton;
+
+                                                return (
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <span>
+                                                                {useButton}
+                                                            </span>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            {reason}
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                );
+                                            })()}
                                             {allies.map((ally) => (
                                                 <Button
                                                     key={ally.role}

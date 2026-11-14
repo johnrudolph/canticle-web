@@ -62,6 +62,19 @@ final class GameEngine
     }
 
     /**
+     * Public read-only wrapper around relicUnmetConditionReason(), for
+     * the controller to compute a "why can't I use this right now"
+     * reason per equipped Relic without duplicating any condition
+     * logic — same chokepoint useRelic() itself throws through.
+     */
+    public static function relicUsabilityReason(GameState $state, string $actorRole, string $relicKey): ?string
+    {
+        $baseKey = (string) preg_replace('/-\d+$/', '', $relicKey);
+
+        return self::relicUnmetConditionReason($state, $actorRole, $baseKey);
+    }
+
+    /**
      * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
@@ -592,6 +605,18 @@ final class GameEngine
         $relic = RelicCatalog::find($relicKey);
         $baseKey = (string) preg_replace('/-\d+$/', '', $relicKey);
 
+        // For Relics whose printed condition is knowable from state alone
+        // (no target/cell choice needed), reject the attempt outright
+        // rather than spending the action on a guaranteed no-op — see
+        // relicUnmetConditionReason(). Relics needing a $move-supplied
+        // target (an ally, a cell, etc.) aren't covered here; their
+        // conditions depend on a choice the player hasn't made yet.
+        $unmetReason = self::relicUnmetConditionReason($state, $actorRole, $baseKey);
+
+        if ($unmetReason !== null) {
+            throw new InvalidMoveException($unmetReason);
+        }
+
         $wanderers = $state->wanderersWith($actorRole, ['actions_remaining' => $wanderer['actions_remaining'] - 1]);
         $state = $state->with(['wanderers' => $wanderers]);
 
@@ -685,6 +710,216 @@ final class GameEngine
         }
 
         return [$state, $events];
+    }
+
+    /**
+     * For Action Relics whose printed condition is entirely determined
+     * by current state (no target cell/Ally the player still has to
+     * pick), returns a human-readable rejection reason if that condition
+     * isn't met right now, or null if it is (or if this Relic isn't one
+     * of the ones covered here, in which case it's always allowed to
+     * attempt — same as before this method existed). Each case here
+     * mirrors a guard clause already inside that Relic's own
+     * resolveXxx() method; this is deliberately the single place both
+     * useRelic() (to reject the attempt outright) and the controller's
+     * per-Relic "usable" flag for the frontend (to disable its Use
+     * button) read from, so the two can't drift apart.
+     *
+     * Relics needing a $move-supplied target (an Ally, a cell, a choice
+     * of Glyphs/cards, etc.) aren't covered — their condition depends on
+     * a choice the player hasn't made yet, so there's nothing to
+     * pre-check before they've made it.
+     */
+    private static function relicUnmetConditionReason(GameState $state, string $actorRole, string $baseKey): ?string
+    {
+        $casterCell = $state->wanderers[$actorRole]['cell'];
+        $casterCellKey = Board::key($casterCell);
+        $golemCell = $state->golem['cell'];
+        $location = LocationCatalog::find($state->board[$casterCellKey]['location_key']);
+        $instruments = ['lute', 'pipe', 'tabor-drum'];
+
+        return match ($baseKey) {
+            'pray' => $golemCell !== null && Board::distance($casterCell, $golemCell, $state->board) === 3
+                ? null
+                : 'Pray requires being exactly 3 spaces from the Golem.',
+
+            'peacemakers-spirit', 'whip-of-justice', 'show-solidarity', 'cabalist-brand', 'golem-intuition', 'golem-prod', 'defanging-tool' => self::golemSharesCellWith($state, $actorRole)
+                ? null
+                : 'This requires sharing the Golem\'s space.',
+
+            'pointed-finger' => self::golemSharesCellWith($state, $actorRole)
+                ? null
+                : 'Pointed finger requires sharing the Golem\'s space.',
+
+            'divine-aura' => self::hasMonolithShardFor($state, $actorRole, $casterCell)
+                ? null
+                : 'Divine aura requires standing on a Monolith Shard.',
+
+            'golem-whistle' => ! in_array($casterCellKey, $state->wallKeys(), true)
+                ? null
+                : 'Golem whistle cannot summon the Golem onto a Walls space.',
+
+            'divine-robes' => $location?->producesEmoji === '📖'
+                ? null
+                : 'Divine robes requires standing on a space that produces 📖.',
+
+            'divine-solidarity' => self::anyAllyAt($state, $actorRole, $casterCellKey)
+                ? null
+                : 'Divine solidarity requires an Ally on your space.',
+
+            'magistrates-robes' => $location?->producesEmoji === '⚖️'
+                ? null
+                : 'Magistrate\'s robes requires standing on a space that produces ⚖️.',
+
+            'silent-hunting-cloak' => $location?->producesEmoji === '🐾' && self::golemSharesCellWith($state, $actorRole)
+                ? null
+                : 'Silent hunting cloak requires sharing the Golem\'s space on a 🐾 space.',
+
+            'soothing-lullaby' => self::golemSharesCellWith($state, $actorRole)
+                && count(array_intersect($instruments, self::equippedAt($state, $casterCellKey))) === count($instruments)
+                ? null
+                : 'Soothing Lullaby requires sharing the Golem\'s space with all 3 🎶 Relics equipped there.',
+
+            'divine-chant' => $state->board[$casterCellKey]['location_key'] === 'cathedral'
+                && $golemCell !== null && Board::distance($casterCell, $golemCell, $state->board) >= 2
+                && count(array_intersect($instruments, self::equippedAt($state, $casterCellKey))) === count($instruments)
+                ? null
+                : 'Divine Chant requires the Cathedral, the Golem 2+ spaces away, and all 3 🎶 Relics equipped on your space.',
+
+            'poof' => self::monolithShardsWithin($state, $casterCell, 2) >= 12
+                ? null
+                : 'Poof requires all 12 Monolith Shards within 2 spaces of you.',
+
+            'scapegoats-catharsis' => count(array_intersect(
+                ['dark-chains', 'dark-limitations', 'dark-sacrifice', 'dark-sigil'],
+                array_values($state->wanderers[$actorRole]['equipped']),
+            )) === 4
+                ? null
+                : 'Scapegoat\'s catharsis requires all 4 Dark Relics equipped.',
+
+            're-creation' => $state->trashedRelics !== []
+                ? null
+                : 'Re-creation requires at least 1 Relic to have been trashed so far.',
+
+            'jericho-inscription' => self::jerichoInscriptionReady($state, $actorRole)
+                ? null
+                : 'Jericho inscription requires a Wall adjacent to you with the Golem on the space beyond it, and all 3 🎶 Relics equipped adjacent to that Wall.',
+
+            'aural-inscription' => self::auralInscriptionReady($state)
+                ? null
+                : 'Aural inscription requires every Wanderer exactly 1 space from the Golem, each on their own space, with all 3 🎶 Relics equipped somewhere among them.',
+
+            default => null,
+        };
+    }
+
+    private static function anyAllyAt(GameState $state, string $actorRole, string $cellKey): bool
+    {
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            if ($role !== $actorRole && Board::key($cell) === $cellKey) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return list<mixed>
+     */
+    private static function equippedAt(GameState $state, string $cellKey): array
+    {
+        $equipped = [];
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            if (Board::key($cell) === $cellKey) {
+                $equipped = [...$equipped, ...array_values($state->wanderers[$role]['equipped'])];
+            }
+        }
+
+        return $equipped;
+    }
+
+    /**
+     * @param  array{0: int, 1: int}  $cell
+     */
+    private static function monolithShardsWithin(GameState $state, array $cell, int $distance): int
+    {
+        $count = 0;
+
+        foreach (array_map(Board::key(...), Board::cellsWithinDistance($cell, $distance, $state->board)) as $key) {
+            $count += count(array_filter($state->board[$key]['infrastructure'], fn (string $i) => $i === 'monolith_shard'));
+        }
+
+        return $count;
+    }
+
+    private static function jerichoInscriptionReady(GameState $state, string $actorRole): bool
+    {
+        $casterCell = $state->wanderers[$actorRole]['cell'];
+        $instruments = ['lute', 'pipe', 'tabor-drum'];
+        $golemCell = $state->golem['cell'];
+
+        foreach (Board::neighbors($casterCell) as $direction => $wallCell) {
+            $wallKey = Board::key($wallCell);
+
+            if (! array_key_exists($wallKey, $state->board) || ! in_array('walls', $state->board[$wallKey]['infrastructure'], true)) {
+                continue;
+            }
+
+            $beyondKey = Board::key(Board::neighbor($wallCell, $direction));
+
+            if ($golemCell === null || Board::key($golemCell) !== $beyondKey) {
+                continue;
+            }
+
+            $wallNeighborKeys = array_map(Board::key(...), Board::occupiedNeighbors($wallCell, $state->board));
+            $equippedNearWall = [];
+
+            foreach (self::activeWanderers($state) as $role => $cell) {
+                if (in_array(Board::key($cell), $wallNeighborKeys, true)) {
+                    $equippedNearWall = [...$equippedNearWall, ...array_values($state->wanderers[$role]['equipped'])];
+                }
+            }
+
+            if (count(array_intersect($instruments, $equippedNearWall)) === count($instruments)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function auralInscriptionReady(GameState $state): bool
+    {
+        $golemCell = $state->golem['cell'];
+
+        if ($golemCell === null) {
+            return false;
+        }
+
+        $cells = self::activeWanderers($state);
+        $seenCellKeys = [];
+        $equippedAnywhere = [];
+
+        foreach ($cells as $role => $cell) {
+            if (Board::distance($golemCell, $cell, $state->board) !== 1) {
+                return false;
+            }
+
+            $cellKey = Board::key($cell);
+
+            if (isset($seenCellKeys[$cellKey])) {
+                return false;
+            }
+
+            $seenCellKeys[$cellKey] = true;
+            $equippedAnywhere = [...$equippedAnywhere, ...array_values($state->wanderers[$role]['equipped'])];
+        }
+
+        $instruments = ['lute', 'pipe', 'tabor-drum'];
+
+        return count(array_intersect($instruments, $equippedAnywhere)) === count($instruments);
     }
 
     /**

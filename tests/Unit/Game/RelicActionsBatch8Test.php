@@ -1,6 +1,7 @@
 <?php
 
 use App\Game\GameEngine;
+use App\Game\InvalidMoveException;
 
 // startedGame() (GameEngineTest.php) is declared in a sibling file,
 // loaded in the same run. It puts both Wanderers and the Golem on the
@@ -24,13 +25,14 @@ test('Re-creation recovers a random trashed Relic into holding, then trashes its
         ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
 });
 
-test('Re-creation does nothing if no Relics have ever been trashed', function () {
+test('Re-creation is rejected outright if no Relics have ever been trashed', function () {
     $state = startedGame();
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'bag' => 're-creation'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
-    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 're-creation']);
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 're-creation']))
+        ->toThrow(InvalidMoveException::class);
 
     expect($state->wanderers['wanderer_a']['equipped']['bag'])->toBe('re-creation')
         ->and($state->wanderers['wanderer_a']['holding'])->toBe([]);
@@ -115,16 +117,16 @@ test('Defanging tool tucks a card from the Golem\'s draw pile and makes it play 
         ->and(collect($events)->pluck('type'))->toContain('card_tucked');
 });
 
-test('Defanging tool does nothing off the Golem\'s space', function () {
+test('Defanging tool is rejected outright off the Golem\'s space', function () {
     $state = startedGame();
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'defanging-tool'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'cell' => [0, 0]])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
-    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'defanging-tool']);
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'defanging-tool']))
+        ->toThrow(InvalidMoveException::class);
 
-    expect($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBe('defanging-tool')
-        ->and(collect($events)->pluck('type'))->not->toContain('card_tucked');
+    expect($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBe('defanging-tool');
 });
 
 test('Dropping Defanging tool loses its tucked progress entirely', function () {

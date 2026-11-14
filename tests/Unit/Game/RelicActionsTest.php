@@ -142,8 +142,12 @@ test('an unimplemented Relic action still costs an action but has no mechanical 
     $state = startedGame();
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
-    $unimplemented = 'poof'; // real Relic, not in the hand-picked batch
-    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => $unimplemented];
+    // Emperor's Knowledge is real and implemented, but as a passive
+    // movement trigger (see moveWanderer) — it has no resolveRelicAction
+    // case at all, so trying to "use" it via use_relic hits the generic
+    // default no-op, same as a Relic with no implementation whatsoever.
+    $unimplemented = 'emperors-knowledge';
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'mind' => $unimplemented];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
 
     [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => $unimplemented]);

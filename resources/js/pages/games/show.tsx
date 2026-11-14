@@ -999,6 +999,9 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                     canAct={canAct}
                                     isActive={isActive}
                                     allies={allies}
+                                    relicUnusableReasons={
+                                        state.active_wanderer_relic_reasons
+                                    }
                                 />
                             );
                         })}

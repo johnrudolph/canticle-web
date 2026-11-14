@@ -1,6 +1,7 @@
 <?php
 
 use App\Game\GameEngine;
+use App\Game\InvalidMoveException;
 
 // startedGame() (GameEngineTest.php) is declared in a sibling file,
 // loaded in the same run. It puts both Wanderers and the Golem on the
@@ -124,15 +125,15 @@ test('Show solidarity ignores a requested trash for a Wanderer not sharing the G
     expect($state->wanderers['wanderer_b']['equipped']['body'])->toBe('golem-whistle');
 });
 
-test('Show solidarity does nothing off the Golem\'s space', function () {
+test('Show solidarity is rejected outright off the Golem\'s space', function () {
     $state = startedGame();
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'show-solidarity'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['cell' => [0, 0]])]);
 
-    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'show-solidarity']);
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'show-solidarity']))
+        ->toThrow(InvalidMoveException::class);
 
-    expect($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBe('show-solidarity')
-        ->and(collect($events)->pluck('type'))->not->toContain('relic_trashed');
+    expect($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBe('show-solidarity');
 });

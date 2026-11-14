@@ -1,6 +1,7 @@
 <?php
 
 use App\Game\GameEngine;
+use App\Game\InvalidMoveException;
 
 // startedGame() (GameEngineTest.php) is declared in a sibling file,
 // loaded in the same run. It puts both Wanderers and the Golem on the
@@ -25,7 +26,7 @@ test('Poof removes the Golem and skips the Golem phase forever, once all 12 Mono
         ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
 });
 
-test('Poof does nothing short of all 12 Monolith Shards nearby', function () {
+test('Poof is rejected outright short of all 12 Monolith Shards nearby', function () {
     $state = startedGame();
     $board = $state->board;
     $cellKeys = array_keys($board);
@@ -38,7 +39,8 @@ test('Poof does nothing short of all 12 Monolith Shards nearby', function () {
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
-    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'poof']);
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'poof']))
+        ->toThrow(InvalidMoveException::class);
 
     expect($state->golem['cell'])->not->toBeNull()
         ->and($state->golemSkipped)->toBeFalse();
@@ -61,7 +63,7 @@ test('Scapegoat\'s catharsis damages Allies and trashes itself plus all 4 Dark R
         ->and(collect($events)->where('type', 'relic_trashed'))->toHaveCount(5);
 });
 
-test('Scapegoat\'s catharsis does nothing without all 4 Dark Relics equipped', function () {
+test('Scapegoat\'s catharsis is rejected outright without all 4 Dark Relics equipped', function () {
     $state = startedGame();
     $equipped = [
         ...$state->wanderers['wanderer_a']['equipped'],
@@ -70,7 +72,8 @@ test('Scapegoat\'s catharsis does nothing without all 4 Dark Relics equipped', f
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
-    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'scapegoats-catharsis']);
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'scapegoats-catharsis']))
+        ->toThrow(InvalidMoveException::class);
 
     expect($state->wanderers['wanderer_a']['equipped']['bag'])->toBe('scapegoats-catharsis')
         ->and($state->wanderers['wanderer_b']['hp'])->toBe(15);
@@ -93,7 +96,7 @@ test('Silent hunting cloak taps the Golem\'s next 2 untapped cards on a 🐾 spa
         ->and($state->wanderers['wanderer_a']['equipped']['body'])->toBe('silent-hunting-cloak');
 });
 
-test('Silent hunting cloak does nothing off a 🐾 space', function () {
+test('Silent hunting cloak is rejected outright off a 🐾 space', function () {
     $state = startedGame();
     $board = $state->board;
     $board['1,0'] = [...$board['1,0'], 'location_key' => 'artists-hovel']; // produces 🎨
@@ -102,7 +105,8 @@ test('Silent hunting cloak does nothing off a 🐾 space', function () {
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
-    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'silent-hunting-cloak']);
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'silent-hunting-cloak']))
+        ->toThrow(InvalidMoveException::class);
 
     $tappedCount = count(array_filter($state->golem['draw_pile'], fn ($c) => $c['tapped']));
     expect($tappedCount)->toBe(0);
@@ -133,7 +137,7 @@ test('Jericho inscription destroys a Wall when the Golem is on the far side and 
         ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
 });
 
-test('Jericho inscription does nothing if the Golem is not on the far side of the Wall', function () {
+test('Jericho inscription is rejected outright if the Golem is not on the far side of the Wall', function () {
     $state = startedGame();
     $board = $state->board;
     $board['2,0'] = [...$board['2,0'], 'infrastructure' => ['walls']];
@@ -145,7 +149,8 @@ test('Jericho inscription does nothing if the Golem is not on the far side of th
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
-    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'jericho-inscription']);
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'jericho-inscription']))
+        ->toThrow(InvalidMoveException::class);
 
     expect($state->board['2,0']['infrastructure'])->toBe(['walls'])
         ->and($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBe('jericho-inscription');

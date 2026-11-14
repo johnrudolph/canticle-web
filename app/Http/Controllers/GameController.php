@@ -124,7 +124,8 @@ class GameController extends Controller
 
         $state = null;
         if (in_array($game->status, ['active', 'finished', 'abandoned'], true) && $game->state !== null) {
-            $state = GameStateRepository::load($game)->toArray();
+            $gameState = GameStateRepository::load($game);
+            $state = $gameState->toArray();
 
             // The Emperor's hand is hidden information — rules.md never
             // has Wanderers see it, only "read the Location aloud" once
@@ -133,6 +134,24 @@ class GameController extends Controller
             // already useful (e.g. "the Emperor has 5 cards").
             if (! $myRoles->contains('emperor')) {
                 $state['location_hand'] = [];
+            }
+
+            // For whichever Wanderer's turn it actually is, tell the
+            // frontend why each of their equipped Relics can't be used
+            // right now (if at all) — same check useRelic() itself
+            // enforces, so the Use button can disable itself instead of
+            // letting a doomed-to-fail attempt spend the action.
+            $activeRole = $state['active_wanderer_role'];
+            if ($activeRole !== null) {
+                $reasons = [];
+                foreach ($gameState->wanderers[$activeRole]['equipped'] as $slot => $relicKey) {
+                    if (is_string($relicKey) && $relicKey !== 'shame_token' && $relicKey !== 'scar_token') {
+                        $reasons[$slot] = GameEngine::relicUsabilityReason($gameState, $activeRole, $relicKey);
+                    }
+                }
+                $state['active_wanderer_relic_reasons'] = $reasons;
+            } else {
+                $state['active_wanderer_relic_reasons'] = [];
             }
         }
 

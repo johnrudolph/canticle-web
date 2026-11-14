@@ -1,6 +1,7 @@
 <?php
 
 use App\Game\GameEngine;
+use App\Game\InvalidMoveException;
 
 // startedGame() (GameEngineTest.php) is declared in a sibling file,
 // loaded in the same run. It puts both Wanderers and the Golem on the
@@ -23,7 +24,7 @@ test('Divine robes heals everyone, regardless of distance, while on a 📖 space
         ->and($state->wanderers['wanderer_b']['hp'])->toBe(10);
 });
 
-test('Divine robes does nothing off a 📖 space', function () {
+test('Divine robes is rejected outright off a 📖 space', function () {
     $state = startedGame();
     $board = $state->board;
     $board['1,0'] = [...$board['1,0'], 'location_key' => 'artists-hovel']; // produces 🎨
@@ -32,7 +33,8 @@ test('Divine robes does nothing off a 📖 space', function () {
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 5])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
-    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'divine-robes']);
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'divine-robes']))
+        ->toThrow(InvalidMoveException::class);
 
     expect($state->wanderers['wanderer_a']['hp'])->toBe(5);
 });
@@ -51,14 +53,15 @@ test('Divine solidarity heals the caster and every Ally sharing their space by 4
         ->and($state->wanderers['wanderer_b']['hp'])->toBe(14);
 });
 
-test('Divine solidarity does nothing alone', function () {
+test('Divine solidarity is rejected outright alone', function () {
     $state = startedGame();
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'mind' => 'divine-solidarity'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 10])]);
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['cell' => [0, 0]])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
-    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'divine-solidarity']);
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'divine-solidarity']))
+        ->toThrow(InvalidMoveException::class);
 
     expect($state->wanderers['wanderer_a']['hp'])->toBe(10);
 });

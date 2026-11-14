@@ -1,6 +1,7 @@
 <?php
 
 use App\Game\GameEngine;
+use App\Game\InvalidMoveException;
 
 // startedGame() and resolveGolemCardForTest() are declared in
 // GameEngineTest.php / StatusTokensTest.php, loaded in the same run.
@@ -80,7 +81,7 @@ test('Whip of Justice taps one card per Golem Shame and trashes itself, only on 
         ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
 });
 
-test('Whip of Justice does nothing (including no trash) off the Golem\'s space', function () {
+test('Whip of Justice is rejected outright off the Golem\'s space', function () {
     $state = startedGame();
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'whip-of-justice'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
@@ -91,7 +92,8 @@ test('Whip of Justice does nothing (including no trash) off the Golem\'s space',
     // default) — force it elsewhere.
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['cell' => [0, 1]])]);
 
-    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'whip-of-justice']);
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'whip-of-justice']))
+        ->toThrow(InvalidMoveException::class);
 
     expect($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBe('whip-of-justice');
 });
@@ -138,8 +140,9 @@ test('Soothing Lullaby requires the Golem\'s space and all 3 instruments equippe
     $state = $state->with(['wanderers' => $wanderers]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
-    // No instruments equipped yet — no-op, no trash.
-    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'soothing-lullaby']);
+    // No instruments equipped yet — rejected outright, no trash.
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'soothing-lullaby']))
+        ->toThrow(InvalidMoveException::class);
     expect($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBe('soothing-lullaby');
 
     // Equip all 3 instruments across both Wanderers sharing the caster's space.

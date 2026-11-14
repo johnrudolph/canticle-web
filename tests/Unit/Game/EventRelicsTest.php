@@ -234,13 +234,17 @@ test('Pray adds a 📖 Glyph exactly 3 spaces from the Golem, then trashes', fun
         ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
 });
 
-test('Pray does nothing at the wrong distance', function () {
+test('Pray is rejected outright at the wrong distance, without spending the action', function () {
     $state = startedGame();
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'pray'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+    $actionsBefore = $state->wanderers['wanderer_a']['actions_remaining'];
 
-    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'pray']);
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'pray']))
+        ->toThrow(InvalidMoveException::class, 'Pray requires being exactly 3 spaces from the Golem.');
 
-    expect($state->golem['glyphs'])->toBe([]);
+    expect($state->golem['glyphs'])->toBe([])
+        ->and($state->wanderers['wanderer_a']['actions_remaining'])->toBe($actionsBefore)
+        ->and($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBe('pray');
 });

@@ -1,6 +1,7 @@
 <?php
 
 use App\Game\GameEngine;
+use App\Game\InvalidMoveException;
 
 // startedGame() (GameEngineTest.php) is declared in a sibling file,
 // loaded in the same run. It puts both Wanderers and the Golem on the
@@ -58,16 +59,16 @@ test('Aural inscription requires every Wanderer adjacent to the Golem on their o
         ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
 });
 
-test('Aural inscription does nothing if two Wanderers share a space', function () {
+test('Aural inscription is rejected outright if two Wanderers share a space', function () {
     $state = startedGame(); // both Wanderers share the hub, distance 0 from the Golem too
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'bag' => 'aural-inscription'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
-    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'aural-inscription']);
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'aural-inscription']))
+        ->toThrow(InvalidMoveException::class);
 
-    expect($state->golem['glyphs'])->toBe([])
-        ->and(collect($events)->pluck('type'))->not->toContain('relic_trashed');
+    expect($state->golem['glyphs'])->toBe([]);
 });
 
 test('Divine Chant requires the Cathedral, the Golem 2+ away, and all 3 instruments in the caster\'s space, then heals everyone to full', function () {
@@ -95,7 +96,7 @@ test('Divine Chant requires the Cathedral, the Golem 2+ away, and all 3 instrume
         ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
 });
 
-test('Divine Chant does nothing if the Golem is less than 2 spaces away', function () {
+test('Divine Chant is rejected outright if the Golem is less than 2 spaces away', function () {
     $state = startedGame();
     $board = $state->board;
     $board['1,0'] = [...$board['1,0'], 'location_key' => 'cathedral'];
@@ -107,7 +108,8 @@ test('Divine Chant does nothing if the Golem is less than 2 spaces away', functi
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 5])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
-    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'divine-chant']);
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'divine-chant']))
+        ->toThrow(InvalidMoveException::class);
 
     expect($state->wanderers['wanderer_a']['hp'])->toBe(5);
 });
@@ -155,7 +157,7 @@ test('Magistrate\'s robes caps the destination at 3 Shame tokens', function () {
     expect($state->golem['shame'])->toBe(3);
 });
 
-test('Magistrate\'s robes does nothing off a ⚖️ space', function () {
+test('Magistrate\'s robes is rejected outright off a ⚖️ space', function () {
     $state = startedGame();
     $board = $state->board;
     $board['1,0'] = [...$board['1,0'], 'location_key' => 'artists-hovel']; // produces 🎨, not ⚖️
@@ -164,9 +166,9 @@ test('Magistrate\'s robes does nothing off a ⚖️ space', function () {
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
-    [$state] = GameEngine::apply($state, 'wanderer_a', [
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', [
         'type' => 'use_relic', 'relic_key' => 'magistrates-robes', 'from_role' => 'wanderer_b', 'to_role' => 'golem',
-    ]);
+    ]))->toThrow(InvalidMoveException::class);
 
     expect($state->golem['shame'])->toBe(0);
 });

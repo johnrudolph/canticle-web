@@ -29,6 +29,9 @@ final class GameStateRepository
             pendingGolemPlacement: $data['pending_golem_placement'] ?? false,
             wandererOrder: $data['wanderer_order'] ?? [],
             activeWandererIndex: $data['active_wanderer_index'] ?? null,
+            glyphDiscardPile: $data['glyph_discard_pile'] ?? [],
+            golemSkipped: $data['golem_skipped'] ?? false,
+            trashedRelics: $data['trashed_relics'] ?? [],
         );
     }
 
@@ -56,6 +59,9 @@ final class GameStateRepository
                 'pending_golem_placement' => $state->pendingGolemPlacement,
                 'wanderer_order' => $state->wandererOrder,
                 'active_wanderer_index' => $state->activeWandererIndex,
+                'glyph_discard_pile' => $state->glyphDiscardPile,
+                'golem_skipped' => $state->golemSkipped,
+                'trashed_relics' => $state->trashedRelics,
             ],
         ]);
     }
