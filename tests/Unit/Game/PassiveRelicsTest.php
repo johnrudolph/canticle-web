@@ -781,7 +781,7 @@ test('Pen grants 3 Prophecy at end of game if all 4 active Glyphs are non-👺 a
         ->and(collect($events)->pluck('type'))->toContain('prophecy_gained');
 });
 
-test('Pen does not score if any active Glyph is 👺, even with 4 active', function () {
+test('Pen scores with exactly 3 non-👺 Glyphs active, even alongside a 👺 Glyph', function () {
     $state = startedGame();
     $board = $state->board;
     $board['1,0'] = [...$board['1,0'], 'location_key' => 'pen'];
@@ -792,16 +792,16 @@ test('Pen does not score if any active Glyph is 👺, even with 4 active', funct
     $reflection->setAccessible(true);
     [$state, $events] = $reflection->invoke(null, $state);
 
-    expect($state->prophecy)->toBe(0)
-        ->and($events)->toBe([]);
+    expect($state->prophecy)->toBe(3)
+        ->and(collect($events)->pluck('type'))->toContain('prophecy_gained');
 });
 
-test('Pen does not score if fewer than 4 Glyphs are active', function () {
+test('Pen does not score with only 2 non-👺 Glyphs active', function () {
     $state = startedGame();
     $board = $state->board;
     $board['1,0'] = [...$board['1,0'], 'location_key' => 'pen'];
     $state = $state->with(['board' => $board]);
-    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['inverted', 'paradoxical', 'perplexing']])]);
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['inverted', 'paradoxical', 'mobile', 'legalistic']])]);
 
     $reflection = new ReflectionMethod(GameEngine::class, 'applyEndOfGameScoring');
     $reflection->setAccessible(true);

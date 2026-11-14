@@ -22,6 +22,7 @@ final class Location
         public readonly ?string $producesEmoji,
         public readonly array $costs,
         public readonly int $relicCount,
+        public readonly bool $isStarter,
     ) {}
 
     /**

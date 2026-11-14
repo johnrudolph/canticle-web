@@ -27,14 +27,14 @@ final class GameSetup
         shuffle($deck);
 
         // The 6 starting Locations are placed on the board, not built —
-        // a Location's cost describes what it must be adjacent to in
-        // order to be built later, which is meaningless for a space
-        // that's simply there from the start. Only cost-free Locations
-        // may start on the board; costed ones stay in the deck to be
-        // built normally once their requirement can actually be met.
+        // the sheet's `is_starter` column is the designer's explicit
+        // curated list of which Locations may do that (in practice,
+        // exactly the cost-free ones, since a build cost is meaningless
+        // for a space that's simply there from the start). Locations
+        // not marked as starters stay in the deck to be built normally.
         $freeKeys = array_values(array_filter(
             $deck,
-            fn (string $key) => LocationCatalog::find($key)?->costs === [],
+            fn (string $key) => LocationCatalog::find($key)?->isStarter === true,
         ));
         $startingKeys = array_splice($freeKeys, 0, 6);
         $deck = array_values(array_diff($deck, $startingKeys));

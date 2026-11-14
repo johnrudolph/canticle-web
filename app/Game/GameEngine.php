@@ -3888,12 +3888,13 @@ final class GameEngine
             }
         }
 
-        // Pen: "End of game: If the Golem's mat contains 4 Glyphs that
-        // are not 👺 Glyphs, gain 📜📜📜." The active row only ever holds
-        // up to 4 (GOLEM_MAX_GLYPHS), so "contains 4" means every active
-        // slot is full and none of them is 👺. Gated on Pen actually
-        // being built, same as every other Location-flavored end-of-game
-        // bonus.
+        // Pen: "End of game: If the Golem's mat contains 3+ Glyphs that
+        // are not 👺 Glyphs, gain 📜📜📜." Counts non-👺 Glyphs among
+        // whatever's active (up to GOLEM_MAX_GLYPHS) — a 👺 Glyph can
+        // still be active alongside 3 non-👺 ones and this still scores,
+        // since the threshold is "3+ non-👺", not "all active are
+        // non-👺". Gated on Pen actually being built, same as every
+        // other Location-flavored end-of-game bonus.
         $penBuilt = false;
         foreach ($state->board as $entry) {
             if ($entry['location_key'] === 'pen') {
@@ -3902,16 +3903,13 @@ final class GameEngine
             }
         }
 
-        if ($penBuilt && count($state->golem['glyphs']) === self::GOLEM_MAX_GLYPHS) {
-            $allNonSelfInscription = true;
-            foreach ($state->golem['glyphs'] as $glyphKey) {
-                if (GlyphCatalog::find($glyphKey)?->type === '👺') {
-                    $allNonSelfInscription = false;
-                    break;
-                }
-            }
+        if ($penBuilt) {
+            $nonSelfInscriptionCount = count(array_filter(
+                $state->golem['glyphs'],
+                fn (string $glyphKey) => GlyphCatalog::find($glyphKey)?->type !== '👺',
+            ));
 
-            if ($allNonSelfInscription) {
+            if ($nonSelfInscriptionCount >= 3) {
                 $state = $state->with(['prophecy' => $state->prophecy + 3]);
                 $events[] = ['type' => 'prophecy_gained', 'role_key' => null, 'payload' => ['amount' => 3, 'reason' => 'pen']];
             }

@@ -49,11 +49,12 @@ final class LocationCatalog
                 key: $key,
                 name: $name,
                 lore: trim((string) ($row['lore'] ?? '')),
-                backText: self::nullableText($row['back_text'] ?? null),
+                backText: self::nullableText($row['rule'] ?? null),
                 produces: self::nullableText($row['produces'] ?? null),
                 producesEmoji: self::nullableText($row['produces_emoji'] ?? null),
                 costs: $costs,
                 relicCount: self::leadingInt($row['Relics'] ?? null),
+                isStarter: ($row['is_starter'] ?? null) === 'Show',
             );
         }
 
