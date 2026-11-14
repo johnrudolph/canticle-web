@@ -461,3 +461,37 @@ test('Rally heals every Ally by 1 after its holder moves', function () {
 
     expect($state->wanderers['wanderer_b']['hp'])->toBe(11);
 });
+
+test('Laborer\'s Jacket moves every Ally to any space, once per round, while on a 🤝 space', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'town-square'];
+    $state = $state->with(['board' => $board]);
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'laborers-jacket'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', [
+        'type' => 'laborers_jacket_move_allies',
+        'destinations' => ['wanderer_b' => [0, 0]],
+    ]);
+
+    expect($state->wanderers['wanderer_b']['cell'])->toBe([0, 0])
+        ->and($state->wanderers['wanderer_a']['laborers_jacket_used_this_round'])->toBeTrue()
+        ->and(collect($events)->pluck('type'))->toContain('wanderer_moved');
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', [
+        'type' => 'laborers_jacket_move_allies',
+        'destinations' => ['wanderer_b' => [1, 1]],
+    ]))->toThrow(InvalidMoveException::class);
+});
+
+test('Laborer\'s Jacket requires standing on a space that produces 🤝', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'laborers-jacket'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', [
+        'type' => 'laborers_jacket_move_allies',
+        'destinations' => ['wanderer_b' => [0, 0]],
+    ]))->toThrow(InvalidMoveException::class);
+});

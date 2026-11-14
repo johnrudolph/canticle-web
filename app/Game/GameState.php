@@ -43,6 +43,7 @@ namespace App\Game;
  *     'tucked_cards' => array<string, list<string>>, // keyed by the equipped Relic (Defanging tool/Golem log) tracking its own progress; dropping that Relic loses the progress (rules.md)
  *     'was_ever_exhausted' => bool, // set once hp hits 0 for real (not saved by Cabalist wraps) — the Catacombs Location requires this to enter
  *     'golem_insight_used_this_round' => bool, // Golem insight — "once per round" — cleared at the start of each new round
+ *     'laborers_jacket_used_this_round' => bool, // Laborer's Jacket — modeled as usable once per round rather than strictly "at the start of the Wanderer phase" (no clean architectural seam for that exact timing) — cleared at the start of each new round
  * ]
  *
  * infrastructurePool = ['monolith_shard' => int, 'road' => int, 'walls' => int, 'fruit_tree' => int]

@@ -55,6 +55,7 @@ final class GameEngine
             'cleanse_at_purification_pools' => self::cleanseAtPurificationPools($state, $actorRole),
             'magnetic_mail_move' => self::magneticMailMove($state, $actorRole, $move),
             'telekinesis_move' => self::telekinesisMove($state, $actorRole, $move),
+            'laborers_jacket_move_allies' => self::laborersJacketMoveAllies($state, $actorRole, $move),
             'end_wanderer_turn' => self::endWandererTurn($state, $actorRole),
             default => throw new InvalidMoveException('Unknown move type.'),
         };
@@ -3383,10 +3384,15 @@ final class GameEngine
 
         $nextRound = $state->round + 1;
 
-        // Golem insight: "Once per round" — cleared as the new round begins.
+        // Golem insight/Laborer's Jacket: "Once per round" — cleared as
+        // the new round begins.
         $wanderers = $state->wanderers;
         foreach ($wanderers as $role => $wanderer) {
-            $wanderers[$role] = [...$wanderer, 'golem_insight_used_this_round' => false];
+            $wanderers[$role] = [
+                ...$wanderer,
+                'golem_insight_used_this_round' => false,
+                'laborers_jacket_used_this_round' => false,
+            ];
         }
 
         $state = $state->with([
@@ -5226,6 +5232,83 @@ final class GameEngine
             $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['hp' => $hp])]);
             $events[] = ['type' => 'wanderer_healed', 'role_key' => $actorRole, 'payload' => ['hp' => $hp]];
         }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Laborer's Jacket: "While you are on a space that produces 🤝 at
+     * the start of the Wanderer phase, you move each Ally to any
+     * space." Modeled as usable once per round rather than strictly
+     * gated to "the start of the Wanderer phase" specifically — there's
+     * no clean seam for that exact timing (the phase transition is one
+     * atomic engine call, not a window other moves can land inside),
+     * and the printed condition (on a 🤝 space) still has to hold at the
+     * moment of use. $move['destinations'] maps ally role => destination
+     * cell; entries for unknown roles or invalid cells are silently
+     * skipped rather than rejecting the whole move.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function laborersJacketMoveAllies(GameState $state, string $actorRole, array $move): array
+    {
+        self::requireWandererWithCell($state, $actorRole);
+
+        $wanderer = $state->wanderers[$actorRole];
+
+        if (! in_array('laborers-jacket', $wanderer['equipped'], true)) {
+            throw new InvalidMoveException('Laborer\'s Jacket is not equipped.');
+        }
+
+        if ($wanderer['laborers_jacket_used_this_round']) {
+            throw new InvalidMoveException('Laborer\'s Jacket has already been used this round.');
+        }
+
+        $location = LocationCatalog::find($state->board[Board::key($wanderer['cell'])]['location_key']);
+
+        if ($location?->producesEmoji !== '🤝') {
+            throw new InvalidMoveException('Laborer\'s Jacket requires standing on a space that produces 🤝.');
+        }
+
+        $destinations = $move['destinations'] ?? [];
+        $events = [];
+
+        foreach (self::activeWanderers($state) as $role => $allyCell) {
+            if ($role === $actorRole || ! is_array($destinations) || ! array_key_exists($role, $destinations)) {
+                continue;
+            }
+
+            $toCell = $destinations[$role];
+
+            if (! is_array($toCell) || count($toCell) !== 2) {
+                continue;
+            }
+
+            $toCell = [(int) $toCell[0], (int) $toCell[1]];
+            $toKey = Board::key($toCell);
+
+            if (! array_key_exists($toKey, $state->board)) {
+                continue;
+            }
+
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['cell' => $toCell])]);
+            $events[] = ['type' => 'wanderer_moved', 'role_key' => $role, 'payload' => ['to' => $toCell, 'free' => true]];
+
+            if (self::hasMonolithShardFor($state, $role, $toCell) && in_array('rejuvenation-gown', $state->wanderers[$role]['equipped'], true)) {
+                $hp = min(self::maxHpFor($state, $role), $state->wanderers[$role]['hp'] + 2);
+                $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
+                $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
+            }
+
+            if ($state->board[$toKey]['location_key'] === 'beds-of-poison') {
+                [$state, $damageEvents] = self::applyDamage($state, $role, 5);
+                $events = [...$events, ...$damageEvents];
+                $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => 5]];
+            }
+        }
+
+        $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['laborers_jacket_used_this_round' => true])]);
 
         return [$state, $events];
     }
