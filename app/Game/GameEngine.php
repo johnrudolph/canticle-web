@@ -3132,6 +3132,14 @@ final class GameEngine
             $actionsRemaining++;
         }
 
+        // Emperor's Knowledge: "When moving, move an additional space for
+        // every 2 Relics you have equipped that start with 'Emperor's
+        // __.'" Modeled as refunding the action this move cost, the same
+        // way Fruit tree/Road already grant a move for free, rather than
+        // literally chaining a second step (there's no second direction
+        // to move in from a single move_wanderer call).
+        $actionsRemaining += intdiv(self::countEmperorsRelics(array_values($wanderer['equipped'])), 2);
+
         $wanderers = $state->wanderersWith($actorRole, [
             'cell' => $to,
             'actions_remaining' => $actionsRemaining,
@@ -3353,8 +3361,9 @@ final class GameEngine
             : self::resolveGolemPhase($state);
 
         if ($state->round >= self::ROUND_LIMIT) {
+            [$state, $scoringEvents] = self::applyEndOfGameScoring($state);
             $state = $state->with(['phase' => 'finished', 'activeWandererIndex' => null]);
-            $events[] = ['type' => 'game_finished', 'role_key' => null, 'payload' => []];
+            $events = [...$events, ...$scoringEvents, ['type' => 'game_finished', 'role_key' => null, 'payload' => []]];
 
             return [$state, $events];
         }
@@ -3381,8 +3390,9 @@ final class GameEngine
             }
 
             if ($everyoneInExile) {
+                [$state, $scoringEvents] = self::applyEndOfGameScoring($state);
                 $state = $state->with(['phase' => 'finished', 'activeWandererIndex' => null]);
-                $events[] = ['type' => 'game_finished', 'role_key' => null, 'payload' => ['reason' => 'exile']];
+                $events = [...$events, ...$scoringEvents, ['type' => 'game_finished', 'role_key' => null, 'payload' => ['reason' => 'exile']]];
 
                 return [$state, $events];
             }
@@ -3409,6 +3419,45 @@ final class GameEngine
             'wanderers' => $wanderers,
         ]);
         $events[] = ['type' => 'round_started', 'role_key' => null, 'payload' => ['round' => $nextRound]];
+
+        return [$state, $events];
+    }
+
+    /**
+     * Icon of the resurrected: "If every slot on your mat has a Bound
+     * item at the end of the game, gain 📜📜." Checked against the
+     * physical mat's 5 base slots (body/mind/hand_left/hand_right/bag)
+     * only — An expansive mind's extra mind_2/mind_3 aren't part of the
+     * physical mat the card refers to. Runs at every point the game can
+     * transition to 'finished'.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function applyEndOfGameScoring(GameState $state): array
+    {
+        $events = [];
+        $slots = ['body', 'mind', 'hand_left', 'hand_right', 'bag'];
+
+        foreach ($state->wanderers as $role => $wanderer) {
+            if (! in_array('icon-of-the-resurrected', $wanderer['equipped'], true)) {
+                continue;
+            }
+
+            $allBound = true;
+            foreach ($slots as $slot) {
+                $relicKey = $wanderer['equipped'][$slot];
+
+                if (! is_string($relicKey) || RelicCatalog::find($relicKey)?->isBound !== true) {
+                    $allBound = false;
+                    break;
+                }
+            }
+
+            if ($allBound) {
+                $state = $state->with(['prophecy' => $state->prophecy + 2]);
+                $events[] = ['type' => 'prophecy_gained', 'role_key' => $role, 'payload' => ['amount' => 2, 'reason' => 'icon-of-the-resurrected']];
+            }
+        }
 
         return [$state, $events];
     }
@@ -3522,6 +3571,16 @@ final class GameEngine
         $isAttackCard = $card !== null && str_contains($card->action, '👊');
         $hpBefore = $isAttackCard ? array_map(fn (array $w) => $w['hp'], $state->wanderers) : [];
 
+        // Poison Charm: promote any queued reduction to "active" right as
+        // this card starts resolving, so it's this card's damage (not the
+        // one that armed it, nor some later one) that gets reduced.
+        if ($isAttackCard) {
+            $state = $state->with(['golem' => $state->golemWith([
+                'active_attack_reduction' => $state->golem['armed_attack_reduction'],
+                'armed_attack_reduction' => 0,
+            ])]);
+        }
+
         if ($cardEntry['tapped']) {
             [$state, $events, $effects] = [$state, [
                 ['type' => 'golem_card_tapped', 'role_key' => null, 'payload' => ['card_key' => $cardEntry['key'], 'name' => $card?->name]],
@@ -3533,6 +3592,7 @@ final class GameEngine
         if ($isAttackCard) {
             [$state, $tuckEvents] = self::maybeTuckAtDefendersGuild($state, $cardEntry['key'], $hpBefore);
             $events = [...$events, ...$tuckEvents];
+            $state = $state->with(['golem' => $state->golemWith(['active_attack_reduction' => 0])]);
         }
 
         return [$state, $events, $effects];
@@ -4027,7 +4087,10 @@ final class GameEngine
             $events = [...$events, ...$damageEvents];
             $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => 3]];
 
-            if ($hpBefore > 0) {
+            // "Each Wanderer who lost Health as a result" — checked
+            // against actual HP lost, not just hpBefore > 0, since Dark
+            // Relics/Poison Charm can reduce this hit's real damage to 0.
+            if ($state->wanderers[$role]['hp'] < $hpBefore) {
                 [$state, $e] = self::trashFirstEquippedRelic($state, $role);
                 $events = [...$events, ...$e];
             }
@@ -4057,7 +4120,11 @@ final class GameEngine
             $events = [...$events, ...$damageEvents];
             $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => 5]];
 
-            if ($hpBefore > 0) {
+            // "Give a Scar token to all Wanderers who lost Health" —
+            // checked against actual HP lost, not just hpBefore > 0, since
+            // Dark Relics/Poison Charm can reduce this hit's real damage
+            // to 0.
+            if ($state->wanderers[$role]['hp'] < $hpBefore) {
                 [$state, $e] = self::applyStatusToken($state, $role, 'scar_token');
                 $events = [...$events, ...$e];
             }
@@ -4627,6 +4694,12 @@ final class GameEngine
         ));
         $damage = max(0, $damage - $darkCount);
 
+        // Poison Charm: the Golem's current attack card is -3, for
+        // everyone it hits.
+        if ($isGolemAttack) {
+            $damage = max(0, $damage - $state->golem['active_attack_reduction']);
+        }
+
         $hpBefore = $state->wanderers[$role]['hp'];
         $hp = max(0, $hpBefore - $damage);
 
@@ -4695,6 +4768,16 @@ final class GameEngine
             $hp = min(self::maxHpFor($state, $role), $state->wanderers[$role]['hp'] + 2);
             $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
             $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
+        }
+
+        // Poison Charm: "After the Golem 👊 you, the next 👊 card it
+        // plays this round is -3." Queued here, not applied immediately
+        // — promoted to active_attack_reduction when the next attack
+        // card actually starts resolving (see resolveOrSkipTappedCard),
+        // so it reduces that whole card's damage rather than this one's
+        // (which already finished applying its own damage by this point).
+        if (in_array('poison-charm', $equipped, true)) {
+            $state = $state->with(['golem' => $state->golemWith(['armed_attack_reduction' => 3])]);
         }
 
         if (in_array('inscribe-7', $equipped, true)) {

@@ -487,6 +487,12 @@ test('Laborer\'s Jacket moves every Ally to any space, once per round, while on 
 
 test('Laborer\'s Jacket requires standing on a space that produces 🤝', function () {
     $state = startedGame();
+    $board = $state->board;
+    // Pin the hub to a non-🤝 Location explicitly — a real random board
+    // could otherwise deal Town square or Golem sanctuary there, both of
+    // which produce 🤝 and would make this negative test flaky.
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'artists-hovel'];
+    $state = $state->with(['board' => $board]);
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'laborers-jacket'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
 
@@ -514,4 +520,80 @@ test('mind_2/mind_3 reject equipping without An expansive mind occupying mind', 
 
     expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'equip_relic', 'relic_key' => 'shamlessness', 'slot' => 'mind_2']))
         ->toThrow(InvalidMoveException::class);
+});
+
+test('Emperor\'s Knowledge refunds the move\'s action for every 2 equipped Emperor\'s Relics', function () {
+    $state = startedGame();
+    $equipped = [
+        ...$state->wanderers['wanderer_a']['equipped'],
+        'body' => 'emperors-robes', 'mind' => 'emperors-diary',
+    ];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+    $actionsBefore = $state->wanderers['wanderer_a']['actions_remaining'];
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => 'S']);
+
+    // 2 Emperor's Relics equipped => +1 refunded action, net unchanged.
+    expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe($actionsBefore);
+});
+
+test('Poison Charm reduces the Golem\'s next attack card by 3, for every Wanderer it hits', function () {
+    $state = startedGame(); // both Wanderers + Golem share the hub
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'poison-charm'];
+    $wanderers = $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 10]);
+    $wanderers['wanderer_b']['hp'] = 10;
+    $state = $state->with(['wanderers' => $wanderers]);
+
+    $damage = new ReflectionMethod(GameEngine::class, 'applyDamage');
+    $damage->setAccessible(true);
+    [$state] = $damage->invoke(null, $state, 'wanderer_a', 1, true);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(9) // this hit itself isn't reduced
+        ->and($state->golem['armed_attack_reduction'])->toBe(3);
+
+    // Fire storm: flat 👊3 to everyone on/adjacent to the Golem, no
+    // movement involved — a deterministic next card to verify the -3
+    // reduction actually lands on.
+    $resolve = new ReflectionMethod(GameEngine::class, 'resolveOrSkipTappedCard');
+    $resolve->setAccessible(true);
+    [$state] = $resolve->invoke(null, $state, ['key' => 'fire-storm', 'tapped' => false]);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(9) // 3 - 3 reduction = 0 damage
+        ->and($state->wanderers['wanderer_b']['hp'])->toBe(10) // same
+        ->and($state->golem['active_attack_reduction'])->toBe(0); // cleared once the card finished
+});
+
+test('Icon of the resurrected grants 2 Prophecy if every mat slot is Bound at game end', function () {
+    $state = startedGame();
+    $equipped = [
+        'body' => 'burial-robes', 'mind' => 'dark-limitations',
+        'hand_left' => 'dark-sacrifice', 'hand_right' => 'dark-sigil',
+        'bag' => 'icon-of-the-resurrected',
+    ];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyEndOfGameScoring');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state);
+
+    expect($state->prophecy)->toBe(2)
+        ->and(collect($events)->pluck('type'))->toContain('prophecy_gained');
+});
+
+test('Icon of the resurrected does not score if any slot is unbound', function () {
+    $state = startedGame();
+    $equipped = [
+        'body' => 'burial-robes', 'mind' => null,
+        'hand_left' => 'dark-sacrifice', 'hand_right' => 'dark-sigil',
+        'bag' => 'icon-of-the-resurrected',
+    ];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyEndOfGameScoring');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state);
+
+    expect($state->prophecy)->toBe(0)
+        ->and($events)->toBe([]);
 });

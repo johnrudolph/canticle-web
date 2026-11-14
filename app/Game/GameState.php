@@ -67,6 +67,8 @@ namespace App\Game;
  *     'draw_pile' => list<array{key: string, tapped: bool}>,
  *     'revealed' => list<array{key: string, tapped: bool}>, // up to 3, face up, resolved right-to-left
  *     'discard_pile' => list<string>, // tapped state doesn't matter once discarded
+ *     'armed_attack_reduction' => int, // Poison Charm — queued for the NEXT 👊 card, promoted to active_attack_reduction when that card starts resolving
+ *     'active_attack_reduction' => int, // Poison Charm — applies to every hit dealt by the 👊 card currently resolving; cleared once that card finishes
  * ]
  *
  * glyphDiscardPile = list<string> — Glyphs bumped off the 4 active slots

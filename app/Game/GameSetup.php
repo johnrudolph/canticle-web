@@ -93,6 +93,8 @@ final class GameSetup
                 'draw_pile' => $golemDeck,
                 'revealed' => $revealed,
                 'discard_pile' => [],
+                'armed_attack_reduction' => 0,
+                'active_attack_reduction' => 0,
             ],
             glyphDeck: $glyphDeck,
             infrastructurePool: [
