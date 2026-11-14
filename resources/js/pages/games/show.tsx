@@ -450,10 +450,18 @@ export default function GameShow({ game }: { game: GameSummary }) {
                     <HexBoard
                         board={state.board}
                         locationCatalog={locationCatalog}
+                        relicCatalog={game.relic_catalog}
                         wanderers={state.wanderers}
                         golemCell={state.golem.cell}
                         highlightedCells={highlightedCells}
                         onCellClick={onCellClick}
+                        myRoles={myRoles}
+                        onPickupRelic={(role, relicKey) =>
+                            submitMove(role as RoleKey, {
+                                type: 'pickup_relic',
+                                relic_key: relicKey,
+                            })
+                        }
                     />
                 </div>
 

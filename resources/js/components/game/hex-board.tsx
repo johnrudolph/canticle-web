@@ -11,6 +11,7 @@ import {
 import type {
     BoardCell,
     LocationCatalogEntry,
+    RelicCatalogEntry,
     WandererState,
 } from '@/types/game';
 import { LocationDetailDialog } from './location-detail-dialog';
@@ -23,20 +24,55 @@ const INFRASTRUCTURE_ICONS: Record<string, string> = {
     fruit_tree: '🌳',
 };
 
+/**
+ * The face-down pile, rendered as an actual card-back shape with the
+ * remaining count on it — not a tiny inline emoji+number, which read as
+ * noise rather than "a stack of cards."
+ */
+function FaceDownPileBadge({ count }: { count: number }) {
+    return (
+        <div
+            className="flex h-6 w-5 shrink-0 items-center justify-center rounded-sm border border-amber-800 bg-amber-700 text-xs font-bold text-white dark:border-amber-600 dark:bg-amber-800"
+            title={`${count} face-down Relic${count === 1 ? '' : 's'}`}
+        >
+            {count}
+        </div>
+    );
+}
+
+/**
+ * One known, face-up Relic — same card shape as the face-down pile but
+ * light/"flipped," showing its branch symbol instead of a count, so the
+ * two states read as clearly different at a glance.
+ */
+function FaceUpRelicBadge({ symbol }: { symbol: string }) {
+    return (
+        <div className="flex h-6 w-5 shrink-0 items-center justify-center rounded-sm border bg-background text-xs">
+            {symbol}
+        </div>
+    );
+}
+
 export function HexBoard({
     board,
     locationCatalog,
+    relicCatalog,
     wanderers,
     golemCell,
     highlightedCells,
     onCellClick,
+    myRoles = [],
+    onPickupRelic,
 }: {
     board: Record<string, BoardCell>;
     locationCatalog: Record<string, LocationCatalogEntry>;
+    relicCatalog: Record<string, RelicCatalogEntry>;
     wanderers: Record<string, WandererState>;
     golemCell?: Cell | null;
     highlightedCells?: Set<string>;
     onCellClick?: (cell: Cell) => void;
+    myRoles?: string[];
+    onPickupRelic?: (role: string, relicKey: string) => void;
 }) {
     const [infoKey, setInfoKey] = useState<string | null>(null);
 
@@ -87,54 +123,78 @@ export function HexBoard({
                                 type="button"
                                 disabled={!onCellClick}
                                 onClick={() => onCellClick?.(cell)}
-                                className={`flex size-full flex-col items-start justify-between p-1.5 text-left ${
+                                className={`flex size-full flex-col items-start gap-1 p-1.5 text-left ${
                                     isHighlighted ? 'hover:bg-primary/20' : ''
                                 }`}
                             >
-                                <span className="text-lg">
-                                    {location?.produces_emoji}
-                                </span>
-                                <span className="text-xs leading-tight font-semibold">
-                                    {location?.name ?? cellData.location_key}
-                                </span>
+                                <div className="flex items-baseline gap-1">
+                                    <span className="text-lg">
+                                        {location?.produces_emoji}
+                                    </span>
+                                    <span className="text-xs leading-tight font-semibold">
+                                        {location?.name ??
+                                            cellData.location_key}
+                                    </span>
+                                </div>
+
                                 {location?.back_text && (
                                     <span className="line-clamp-3 text-[9px] leading-tight text-muted-foreground">
                                         {location.back_text}
                                     </span>
                                 )}
-                                {cellData.relics.length > 0 && (
-                                    <span className="text-sm font-bold text-amber-600 dark:text-amber-400">
-                                        🎴 {cellData.relics.length}
-                                    </span>
-                                )}
-                                {cellData.infrastructure.length > 0 && (
-                                    <span className="text-xs">
-                                        {[...new Set(cellData.infrastructure)]
-                                            .map(
-                                                (type) =>
-                                                    INFRASTRUCTURE_ICONS[type],
-                                            )
-                                            .join(' ')}
-                                    </span>
-                                )}
-                                <div className="flex gap-1">
-                                    {golemCell &&
-                                        cellKey(golemCell) === key && (
-                                            <RoleAvatar role="golem" />
-                                        )}
-                                    {(wandererByCell.get(key) ?? []).map(
-                                        (role) => (
-                                            <RoleAvatar
-                                                key={role}
-                                                role={
-                                                    role as
-                                                        | 'wanderer_a'
-                                                        | 'wanderer_b'
-                                                        | 'wanderer_c'
+
+                                <div className="mt-auto flex w-full flex-wrap items-end gap-1">
+                                    {cellData.relics.length > 0 && (
+                                        <FaceDownPileBadge
+                                            count={cellData.relics.length}
+                                        />
+                                    )}
+                                    {cellData.relics_face_up.map(
+                                        (relicKey, i) => (
+                                            <FaceUpRelicBadge
+                                                key={`${relicKey}-${i}`}
+                                                symbol={
+                                                    relicCatalog[relicKey]
+                                                        ?.symbol ?? '🎴'
                                                 }
                                             />
                                         ),
                                     )}
+                                    {cellData.infrastructure.length > 0 && (
+                                        <span className="text-xs">
+                                            {[
+                                                ...new Set(
+                                                    cellData.infrastructure,
+                                                ),
+                                            ]
+                                                .map(
+                                                    (type) =>
+                                                        INFRASTRUCTURE_ICONS[
+                                                            type
+                                                        ],
+                                                )
+                                                .join(' ')}
+                                        </span>
+                                    )}
+                                    <div className="flex gap-1">
+                                        {golemCell &&
+                                            cellKey(golemCell) === key && (
+                                                <RoleAvatar role="golem" />
+                                            )}
+                                        {(wandererByCell.get(key) ?? []).map(
+                                            (role) => (
+                                                <RoleAvatar
+                                                    key={role}
+                                                    role={
+                                                        role as
+                                                            | 'wanderer_a'
+                                                            | 'wanderer_b'
+                                                            | 'wanderer_c'
+                                                    }
+                                                />
+                                            ),
+                                        )}
+                                    </div>
                                 </div>
                             </button>
 
@@ -188,6 +248,7 @@ export function HexBoard({
                         : undefined
                 }
                 cellData={infoKey ? board[infoKey] : undefined}
+                relicCatalog={relicCatalog}
                 wanderersHere={
                     infoKey ? (wandererByCell.get(infoKey) ?? []) : []
                 }
@@ -196,6 +257,14 @@ export function HexBoard({
                     !!golemCell &&
                     cellKey(golemCell) === infoKey
                 }
+                myRoleHere={
+                    infoKey
+                        ? ((wandererByCell.get(infoKey) ?? []).find((role) =>
+                              myRoles.includes(role),
+                          ) ?? null)
+                        : null
+                }
+                onPickupRelic={onPickupRelic}
             />
         </>
     );

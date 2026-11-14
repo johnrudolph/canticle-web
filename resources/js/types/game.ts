@@ -24,6 +24,7 @@ export interface BoardCell {
     location_key: string;
     placed_round: number;
     relics: string[];
+    relics_face_up: string[];
     infrastructure: InfrastructureType[];
 }
 
