@@ -357,15 +357,16 @@ final class GameEngine
         $cellKey = Board::key($wanderer['cell']);
         $pile = $state->board[$cellKey]['relics'];
 
-        $found = null;
-        if ($pile !== []) {
-            $index = array_rand($pile);
-            $found = $pile[$index];
-            unset($pile[$index]);
-            $pile = array_values($pile);
+        if ($pile === []) {
+            throw new InvalidMoveException('There are no face-down Relics left here to search for.');
         }
 
-        $foundRelic = $found !== null ? RelicCatalog::find($found) : null;
+        $index = array_rand($pile);
+        $found = $pile[$index];
+        unset($pile[$index]);
+        $pile = array_values($pile);
+
+        $foundRelic = RelicCatalog::find($found);
         $isEvent = $foundRelic !== null && $foundRelic->isEvent;
 
         $board = $state->board;
@@ -377,7 +378,7 @@ final class GameEngine
         // but finding an Event doesn't cost the Wanderer their turn.
         $wanderers = $state->wanderersWith($actorRole, [
             'actions_remaining' => $isEvent ? $wanderer['actions_remaining'] : $wanderer['actions_remaining'] - 1,
-            'holding' => $found !== null && ! $isEvent ? [...$wanderer['holding'], $found] : $wanderer['holding'],
+            'holding' => $isEvent ? $wanderer['holding'] : [...$wanderer['holding'], $found],
         ]);
 
         $state = $state->with(['board' => $board, 'wanderers' => $wanderers]);

@@ -263,7 +263,7 @@ test('outcome() thresholds match the confirmed design (12 = victory, 16 = elite)
 
 // --- Relics: search / equip / drop / pickup ---
 
-test('searching an empty-pile space still costs an action and finds nothing', function () {
+test('searching an empty-pile space is rejected outright, without spending the action', function () {
     $state = startedGame();
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
@@ -272,11 +272,12 @@ test('searching an empty-pile space still costs an action and finds nothing', fu
     $board = $state->board;
     $board[$cellKey]['relics'] = [];
     $state = $state->with(['board' => $board]);
+    $actionsBefore = $state->wanderers['wanderer_a']['actions_remaining'];
 
-    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'search_location']);
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'search_location']))
+        ->toThrow(InvalidMoveException::class, 'There are no face-down Relics left here to search for.');
 
-    expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe(2)
-        ->and($events[0]['payload']['found'])->toBeNull();
+    expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe($actionsBefore);
 });
 
 test('searching a non-empty pile moves a Relic into holding, unless it is an Event (trashed instead)', function () {
@@ -442,14 +443,14 @@ test('search_location only draws from the face-down pile, never the face-up one'
     $state = startedGame();
     $cellKey = Board::key($state->wanderers['wanderer_a']['cell']);
     $board = $state->board;
-    $board[$cellKey] = [...$board[$cellKey], 'relics' => [], 'relics_face_up' => ['burial-robes']];
+    $board[$cellKey] = [...$board[$cellKey], 'relics' => ['last-rites'], 'relics_face_up' => ['burial-robes']];
     $state = $state->with(['board' => $board]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
     [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'search_location']);
 
-    expect($state->wanderers['wanderer_a']['holding'])->toBe([])
-        ->and($events[0]['payload']['found'])->toBeNull()
+    expect($state->wanderers['wanderer_a']['holding'])->toBe(['last-rites'])
+        ->and($events[0]['payload']['found'])->toBe('last-rites')
         ->and($state->board[$cellKey]['relics_face_up'])->toBe(['burial-robes']);
 });
 

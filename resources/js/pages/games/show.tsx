@@ -11,6 +11,11 @@ import { WandererSummaryRow } from '@/components/game/wanderer-summary-row';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useClipboard } from '@/hooks/use-clipboard';
 import { useGamePolling } from '@/hooks/use-game-polling';
 import {
@@ -182,7 +187,10 @@ export default function GameShow({ game }: { game: GameSummary }) {
         );
     }
 
-    async function submitMove(roleKey: RoleKey, move: Record<string, unknown>) {
+    async function submitMove(
+        roleKey: RoleKey,
+        move: Record<string, unknown>,
+    ): Promise<boolean> {
         setProcessing(true);
         try {
             const response = await postJson<GamePollResponse>(
@@ -195,10 +203,12 @@ export default function GameShow({ game }: { game: GameSummary }) {
             applyPoll(response);
             setSelectedLocationKey(null);
             setDiscardKeys(new Set());
+            return true;
         } catch (err) {
             toast.error(
                 err instanceof Error ? err.message : 'That move was rejected.',
             );
+            return false;
         } finally {
             setProcessing(false);
         }
@@ -391,12 +401,19 @@ export default function GameShow({ game }: { game: GameSummary }) {
                 )
                 .map(cellKey),
         );
-        onCellClick = (cell) =>
+        onCellClick = (cell) => {
             submitMove('emperor', {
                 type: 'play_location',
                 location_key: selectedLocationKey,
                 cell,
+            }).then((ok) => {
+                // You only ever play exactly 1 Location per turn, so a
+                // successful play always means this step is done —
+                // unlike Infrastructure (0-2, so it stays manual) or
+                // Discard (a deliberate final choice).
+                if (ok) setEmperorStep('infrastructure');
             });
+        };
     } else if (
         state.phase === 'emperor' &&
         myRoles.includes('emperor') &&
@@ -419,12 +436,22 @@ export default function GameShow({ game }: { game: GameSummary }) {
                 )
                 .map(([key]) => key),
         );
-        onCellClick = (cell) =>
+        const placedBefore = state.infrastructure_placed_this_turn;
+        onCellClick = (cell) => {
             submitMove('emperor', {
                 type: 'place_infrastructure',
                 infrastructure_type: selectedInfrastructureType,
                 cell,
+            }).then((ok) => {
+                // A successful placement always increments by exactly 1
+                // — once that reaches the cap of 2, there's nothing left
+                // to do in this step either.
+                if (ok && placedBefore + 1 >= 2) {
+                    setSelectedInfrastructureType(null);
+                    setEmperorStep('discard');
+                }
             });
+        };
     } else if (
         state.phase === 'wanderer' &&
         state.active_wanderer_role &&
@@ -897,26 +924,57 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                     state.active_wanderer_role,
                                 ) && (
                                     <div className="mt-2 flex gap-2">
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            disabled={
-                                                processing ||
+                                        {(() => {
+                                            const mine =
                                                 state.wanderers[
-                                                    state.active_wanderer_role
-                                                ].actions_remaining <= 0
+                                                    state.active_wanderer_role as RoleKey
+                                                ];
+                                            const relicsHere = mine.cell
+                                                ? state.board[
+                                                      cellKey(mine.cell)
+                                                  ].relics.length
+                                                : 0;
+                                            const searchButton = (
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    disabled={
+                                                        processing ||
+                                                        mine.actions_remaining <=
+                                                            0 ||
+                                                        relicsHere === 0
+                                                    }
+                                                    onClick={() =>
+                                                        submitMove(
+                                                            state.active_wanderer_role as RoleKey,
+                                                            {
+                                                                type: 'search_location',
+                                                            },
+                                                        )
+                                                    }
+                                                >
+                                                    🔎 Search
+                                                </Button>
+                                            );
+
+                                            if (relicsHere > 0) {
+                                                return searchButton;
                                             }
-                                            onClick={() =>
-                                                submitMove(
-                                                    state.active_wanderer_role as RoleKey,
-                                                    {
-                                                        type: 'search_location',
-                                                    },
-                                                )
-                                            }
-                                        >
-                                            🔎 Search
-                                        </Button>
+
+                                            return (
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <span>
+                                                            {searchButton}
+                                                        </span>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        No face-down Relics left
+                                                        here to search for.
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            );
+                                        })()}
                                         <Button
                                             size="sm"
                                             variant="outline"
