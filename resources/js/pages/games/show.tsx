@@ -139,6 +139,25 @@ export default function GameShow({ game }: { game: GameSummary }) {
             if (fresh) {
                 setNewRelic({ role, relicKey: fresh });
             }
+
+            // The dialog has no "decide later" dismiss of its own — it
+            // only closes once polled state confirms the equip/drop
+            // actually went through (the Relic left holding for real).
+            // If a submit from inside it failed server-side, holding
+            // still contains the key, so this intentionally does not
+            // close it — the player sees the error toast and can retry
+            // from the same dialog instead of being left with it stuck,
+            // undecided, and no way back in.
+            setNewRelic((current) => {
+                if (
+                    current?.role === role &&
+                    !wanderer.holding.includes(current.relicKey)
+                ) {
+                    return null;
+                }
+
+                return current;
+            });
         }
     }
 
@@ -1035,6 +1054,11 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                 v.name,
                             ]),
                         )}
+                        golemCardNames={Object.fromEntries(
+                            Object.entries(game.golem_card_catalog).map(
+                                ([k, v]) => [k, v.name],
+                            ),
+                        )}
                     />
 
                     {game.is_host && status === 'active' && (
@@ -1058,7 +1082,6 @@ export default function GameShow({ game }: { game: GameSummary }) {
 
             <NewRelicDialog
                 open={newRelic !== null}
-                onOpenChange={(open) => !open && setNewRelic(null)}
                 relicKey={newRelic?.relicKey ?? null}
                 entry={
                     newRelic ? game.relic_catalog[newRelic.relicKey] : undefined

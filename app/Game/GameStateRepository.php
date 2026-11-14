@@ -6,9 +6,64 @@ use App\Models\Game;
 
 final class GameStateRepository
 {
+    /**
+     * New fields get added to board/wanderer/golem sub-structures over
+     * time as new mechanics land — but a game that started playing
+     * before that commit deployed has its JSON blob persisted without
+     * them, forever, since nothing ever re-writes an old row's shape.
+     * Confirmed in production (game CYTGGM): equipping over an already-
+     * equipped slot spreads board[cell]['relics_face_up'] — added after
+     * that game started — which doesn't exist on its persisted board,
+     * so the missing key reads as null and spreading it is a fatal
+     * TypeError. Every field added after initial launch needs an
+     * explicit default here, not just in GameSetup (which only ever
+     * runs for brand-new games).
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private static function normalize(array $data): array
+    {
+        $board = $data['board'];
+        foreach ($board as $key => $entry) {
+            $board[$key] = [
+                ...$entry,
+                'relics_face_up' => $entry['relics_face_up'] ?? [],
+                'tucked' => $entry['tucked'] ?? [],
+                'infrastructure' => $entry['infrastructure'] ?? [],
+            ];
+        }
+
+        $wanderers = $data['wanderers'];
+        foreach ($wanderers as $role => $wanderer) {
+            $wanderers[$role] = [
+                ...$wanderer,
+                'move_blocked_this_turn' => $wanderer['move_blocked_this_turn'] ?? false,
+                'tucked_cards' => $wanderer['tucked_cards'] ?? [],
+                'was_ever_exhausted' => $wanderer['was_ever_exhausted'] ?? false,
+                'golem_insight_used_this_round' => $wanderer['golem_insight_used_this_round'] ?? false,
+                'laborers_jacket_used_this_round' => $wanderer['laborers_jacket_used_this_round'] ?? false,
+                'holding' => $wanderer['holding'] ?? [],
+                'equipped' => [
+                    ...$wanderer['equipped'],
+                    'mind_2' => $wanderer['equipped']['mind_2'] ?? null,
+                    'mind_3' => $wanderer['equipped']['mind_3'] ?? null,
+                ],
+            ];
+        }
+
+        $golem = [
+            ...$data['golem'],
+            'armed_attack_reduction' => $data['golem']['armed_attack_reduction'] ?? 0,
+            'active_attack_reduction' => $data['golem']['active_attack_reduction'] ?? 0,
+        ];
+
+        return [...$data, 'board' => $board, 'wanderers' => $wanderers, 'golem' => $golem];
+    }
+
     public static function load(Game $game): GameState
     {
-        $data = $game->state;
+        $data = self::normalize($game->state);
 
         return new GameState(
             wandererCount: $data['wanderer_count'],

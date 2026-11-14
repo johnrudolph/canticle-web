@@ -371,8 +371,12 @@ final class GameEngine
         $board = $state->board;
         $board[$cellKey] = [...$board[$cellKey], 'relics' => $pile];
 
+        // Discovering an Event refunds the action that paid for the
+        // search — confirmed with the designer 2026-11-14: the search
+        // itself still happens (the face-down pile shrinks either way),
+        // but finding an Event doesn't cost the Wanderer their turn.
         $wanderers = $state->wanderersWith($actorRole, [
-            'actions_remaining' => $wanderer['actions_remaining'] - 1,
+            'actions_remaining' => $isEvent ? $wanderer['actions_remaining'] : $wanderer['actions_remaining'] - 1,
             'holding' => $found !== null && ! $isEvent ? [...$wanderer['holding'], $found] : $wanderer['holding'],
         ]);
 

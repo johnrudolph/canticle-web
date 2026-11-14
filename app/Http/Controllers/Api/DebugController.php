@@ -38,6 +38,8 @@ class DebugController extends Controller
     {
         $game->load(['creator', 'roles.user']);
 
-        return response()->json(['game' => $game]);
+        $events = $game->events()->latest('id')->limit(300)->get()->reverse()->values();
+
+        return response()->json(['game' => $game, 'events' => $events]);
     }
 }

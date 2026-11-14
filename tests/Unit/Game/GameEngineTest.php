@@ -298,11 +298,15 @@ test('searching a non-empty pile moves a Relic into holding, unless it is an Eve
     $board2 = $state->board;
     $board2[$cellKey]['relics'] = [$eventRelic->key];
     $state = $state->with(['board' => $board2, 'wanderers' => $state->wanderersWith('wanderer_a', ['holding' => []])]);
+    $actionsBefore = $state->wanderers['wanderer_a']['actions_remaining'];
 
     [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'search_location']);
 
+    // Finding an Event refunds the action that paid for the search —
+    // confirmed with the designer 2026-11-14.
     expect($state->wanderers['wanderer_a']['holding'])->toBe([])
-        ->and($events[0]['payload']['trashed_as_event'])->toBeTrue();
+        ->and($events[0]['payload']['trashed_as_event'])->toBeTrue()
+        ->and($state->wanderers['wanderer_a']['actions_remaining'])->toBe($actionsBefore);
 });
 
 test('equipping a held Relic into a matching slot works and rejects a mismatched slot', function () {

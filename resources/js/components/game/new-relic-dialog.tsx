@@ -32,7 +32,6 @@ function isStatusToken(
 
 export function NewRelicDialog({
     open,
-    onOpenChange,
     relicKey,
     entry,
     equipped,
@@ -41,7 +40,6 @@ export function NewRelicDialog({
     onSubmit,
 }: {
     open: boolean;
-    onOpenChange: (open: boolean) => void;
     relicKey: string | null;
     entry: RelicCatalogEntry | undefined;
     equipped?: Record<EquipSlot, string | null> | null;
@@ -56,8 +54,21 @@ export function NewRelicDialog({
         : [];
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-lg">
+        // No onOpenChange — there's no "decide later." The parent fully
+        // controls `open`, closing this only once polled state confirms
+        // the Relic actually left `holding` (the equip/drop genuinely
+        // succeeded). Escape/backdrop/the built-in X button are disabled
+        // below; without that, any of them would close this optimistically
+        // even when the submit fails server-side, leaving the Relic stuck
+        // in holding with no further prompt — exactly the bug reported in
+        // game CYTGGM (a failed equip attempt left Artist's insight in
+        // limbo with no way back to this dialog).
+        <Dialog open={open} onOpenChange={() => {}}>
+            <DialogContent
+                className="sm:max-w-lg [&>button]:hidden"
+                onEscapeKeyDown={(e) => e.preventDefault()}
+                onPointerDownOutside={(e) => e.preventDefault()}
+            >
                 <DialogHeader>
                     <DialogTitle className="text-2xl">
                         ✨ You found{' '}
@@ -112,14 +123,13 @@ export function NewRelicDialog({
                                     disabled={
                                         processing || isStatusToken(current)
                                     }
-                                    onClick={() => {
+                                    onClick={() =>
                                         onSubmit({
                                             type: 'equip_relic',
                                             relic_key: relicKey,
                                             slot,
-                                        });
-                                        onOpenChange(false);
-                                    }}
+                                        })
+                                    }
                                 >
                                     Equip
                                 </Button>
@@ -133,13 +143,12 @@ export function NewRelicDialog({
                         size="sm"
                         variant="outline"
                         disabled={processing}
-                        onClick={() => {
+                        onClick={() =>
                             onSubmit({
                                 type: 'drop_relic',
                                 relic_key: relicKey,
-                            });
-                            onOpenChange(false);
-                        }}
+                            })
+                        }
                     >
                         Drop it face-up
                     </Button>
