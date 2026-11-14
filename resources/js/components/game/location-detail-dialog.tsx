@@ -6,19 +6,17 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import {
+    INFRASTRUCTURE_DESCRIPTIONS,
+    INFRASTRUCTURE_LABELS,
+} from '@/lib/infrastructure';
 import type {
     BoardCell,
+    InfrastructureType,
     LocationCatalogEntry,
     RelicCatalogEntry,
 } from '@/types/game';
 import { RoleAvatar } from './role-avatar';
-
-const INFRASTRUCTURE_LABELS: Record<string, string> = {
-    monolith_shard: '✨ Monolith Shard',
-    road: '🧱 Road',
-    walls: '🏰 Walls',
-    fruit_tree: '🌳 Fruit tree',
-};
 
 function wandererLabel(role: string): string {
     return `Wanderer ${role.replace('wanderer_', '').toUpperCase()}`;
@@ -126,14 +124,27 @@ export function LocationDetailDialog({
                         )}
 
                         {cellData && cellData.infrastructure.length > 0 && (
-                            <p>
-                                {[...new Set(cellData.infrastructure)]
-                                    .map(
-                                        (type) =>
-                                            INFRASTRUCTURE_LABELS[type] ?? type,
-                                    )
-                                    .join(' · ')}
-                            </p>
+                            <div className="space-y-1.5">
+                                {[...new Set(cellData.infrastructure)].map(
+                                    (type) => (
+                                        <p key={type}>
+                                            <span className="font-medium">
+                                                {INFRASTRUCTURE_LABELS[
+                                                    type as InfrastructureType
+                                                ] ?? type}
+                                                :
+                                            </span>{' '}
+                                            <span className="text-muted-foreground">
+                                                {
+                                                    INFRASTRUCTURE_DESCRIPTIONS[
+                                                        type as InfrastructureType
+                                                    ]
+                                                }
+                                            </span>
+                                        </p>
+                                    ),
+                                )}
+                            </div>
                         )}
                     </div>
 

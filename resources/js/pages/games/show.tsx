@@ -26,6 +26,10 @@ import {
 } from '@/lib/hex';
 import type { Cell } from '@/lib/hex';
 import { postJson } from '@/lib/http';
+import {
+    INFRASTRUCTURE_DESCRIPTIONS,
+    INFRASTRUCTURE_LABELS,
+} from '@/lib/infrastructure';
 import { home } from '@/routes';
 import games from '@/routes/games';
 import roles from '@/routes/games/roles';
@@ -37,13 +41,6 @@ import type {
     RoleKey,
     RoleSummary,
 } from '@/types/game';
-
-const INFRASTRUCTURE_LABELS: Record<InfrastructureType, string> = {
-    monolith_shard: '✨ Monolith Shard',
-    road: '🧱 Road',
-    walls: '🏰 Walls',
-    fruit_tree: '🌳 Fruit tree',
-};
 
 const ROLE_LABELS: Record<RoleKey, string> = {
     emperor: 'Emperor',
@@ -689,49 +686,59 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                                     INFRASTRUCTURE_LABELS,
                                                 ) as InfrastructureType[]
                                             ).map((type) => (
-                                                <button
-                                                    key={type}
-                                                    type="button"
-                                                    disabled={
-                                                        state
-                                                            .infrastructure_pool[
-                                                            type
-                                                        ] <= 0 ||
-                                                        state.infrastructure_placed_this_turn >=
-                                                            2
-                                                    }
-                                                    onClick={() =>
-                                                        setSelectedInfrastructureType(
-                                                            selectedInfrastructureType ===
+                                                <Tooltip key={type}>
+                                                    <TooltipTrigger asChild>
+                                                        <button
+                                                            type="button"
+                                                            disabled={
+                                                                state
+                                                                    .infrastructure_pool[
+                                                                    type
+                                                                ] <= 0 ||
+                                                                state.infrastructure_placed_this_turn >=
+                                                                    2
+                                                            }
+                                                            onClick={() =>
+                                                                setSelectedInfrastructureType(
+                                                                    selectedInfrastructureType ===
+                                                                        type
+                                                                        ? null
+                                                                        : type,
+                                                                )
+                                                            }
+                                                            className={`flex items-center justify-between rounded-md border p-2 text-left text-xs disabled:opacity-40 ${
+                                                                selectedInfrastructureType ===
                                                                 type
-                                                                ? null
-                                                                : type,
-                                                        )
-                                                    }
-                                                    className={`flex items-center justify-between rounded-md border p-2 text-left text-xs disabled:opacity-40 ${
-                                                        selectedInfrastructureType ===
-                                                        type
-                                                            ? 'border-primary bg-primary/10'
-                                                            : ''
-                                                    }`}
-                                                >
-                                                    <span>
+                                                                    ? 'border-primary bg-primary/10'
+                                                                    : ''
+                                                            }`}
+                                                        >
+                                                            <span>
+                                                                {
+                                                                    INFRASTRUCTURE_LABELS[
+                                                                        type
+                                                                    ]
+                                                                }
+                                                            </span>
+                                                            <span className="text-muted-foreground">
+                                                                {
+                                                                    state
+                                                                        .infrastructure_pool[
+                                                                        type
+                                                                    ]
+                                                                }{' '}
+                                                                left
+                                                            </span>
+                                                        </button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
                                                         {
-                                                            INFRASTRUCTURE_LABELS[
+                                                            INFRASTRUCTURE_DESCRIPTIONS[
                                                                 type
                                                             ]
                                                         }
-                                                    </span>
-                                                    <span className="text-muted-foreground">
-                                                        {
-                                                            state
-                                                                .infrastructure_pool[
-                                                                type
-                                                            ]
-                                                        }{' '}
-                                                        left
-                                                    </span>
-                                                </button>
+                                                    </TooltipContent>
+                                                </Tooltip>
                                             ))}
                                         </div>
 
