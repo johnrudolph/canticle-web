@@ -87,7 +87,18 @@ class GameController extends Controller
             $game->update(['status' => 'finished']);
         }
 
-        return response()->json($this->summarize($game->fresh()));
+        $response = $this->summarize($game->fresh());
+
+        // An insight from the future needs to show the acting Wanderer
+        // what's actually in the (normally hidden) Emperor's Location
+        // deck so they can choose one — this is the only place that
+        // information is ever exposed, and only in the direct response
+        // to the Wanderer who asked for it, never via the shared poll.
+        if (($validated['move']['type'] ?? null) === 'peek_location_deck') {
+            $response['revealed_location_deck'] = $state->locationDeck;
+        }
+
+        return response()->json($response);
     }
 
     /**

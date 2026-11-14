@@ -23,7 +23,29 @@ test('An insight from the future pulls a chosen Location card into the Emperor\'
     expect($state->locationHand)->toContain($picked)
         ->and($state->locationDeck)->toHaveCount(count($deckBefore) - 1)
         ->and($state->wanderers['wanderer_a']['equipped']['bag'])->toBeNull()
-        ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
+        ->and($state->prophecy)->toBe(1)
+        ->and(collect($events)->pluck('type'))->toContain('relic_trashed', 'prophecy_gained');
+});
+
+test('peek_location_deck reveals the deck without changing state or costing an action, gated on holding the Relic', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'bag' => 'an-insight-from-the-future'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+    $actionsBefore = $state->wanderers['wanderer_a']['actions_remaining'];
+    $deckBefore = $state->locationDeck;
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', [
+        'type' => 'peek_location_deck', 'relic_key' => 'an-insight-from-the-future',
+    ]);
+
+    expect($state->locationDeck)->toBe($deckBefore)
+        ->and($state->wanderers['wanderer_a']['actions_remaining'])->toBe($actionsBefore)
+        ->and($events)->toBe([]);
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_b', [
+        'type' => 'peek_location_deck', 'relic_key' => 'an-insight-from-the-future',
+    ]))->toThrow(InvalidMoveException::class, 'That Relic is not equipped.');
 });
 
 test('An insight from the future does nothing for a card not in the deck', function () {

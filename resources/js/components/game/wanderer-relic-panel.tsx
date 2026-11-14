@@ -39,6 +39,10 @@ function relicLabel(
     return entry ? `${entry.slot_emoji} ${entry.name}` : key;
 }
 
+function baseRelicKey(key: string): string {
+    return key.replace(/-\d+$/, '');
+}
+
 function DropButton({
     relicKey,
     entry,
@@ -87,6 +91,7 @@ export function WandererRelicPanel({
     isActive = false,
     allies,
     relicUnusableReasons = {},
+    onUseInsightFromTheFuture,
 }: {
     role: 'wanderer_a' | 'wanderer_b' | 'wanderer_c';
     wanderer: WandererState;
@@ -101,6 +106,14 @@ export function WandererRelicPanel({
     allies: { role: string; label: string }[];
     /** Per equip-slot: why that Relic can't be used right now, or null if it can. Only the slots whose condition is checkable without a target are present. */
     relicUnusableReasons?: Record<string, string | null>;
+    /**
+     * An insight from the future needs to search the Emperor's hidden
+     * Location deck before it can resolve — there's no way to supply
+     * that choice through the generic "Use" submit, so its button
+     * routes here instead (see InsightFromTheFutureDialog in show.tsx)
+     * rather than firing use_relic directly.
+     */
+    onUseInsightFromTheFuture?: (relicKey: string) => void;
 }) {
     const [detailOpen, setDetailOpen] = useState(false);
     const label = `Wanderer ${role.replace('wanderer_', '').toUpperCase()}`;
@@ -191,11 +204,19 @@ export function WandererRelicPanel({
                                                             !!reason
                                                         }
                                                         onClick={() =>
-                                                            onSubmit({
-                                                                type: 'use_relic',
-                                                                relic_key:
-                                                                    relicKey,
-                                                            })
+                                                            baseRelicKey(
+                                                                relicKey,
+                                                            ) ===
+                                                                'an-insight-from-the-future' &&
+                                                            onUseInsightFromTheFuture
+                                                                ? onUseInsightFromTheFuture(
+                                                                      relicKey,
+                                                                  )
+                                                                : onSubmit({
+                                                                      type: 'use_relic',
+                                                                      relic_key:
+                                                                          relicKey,
+                                                                  })
                                                         }
                                                     >
                                                         Use

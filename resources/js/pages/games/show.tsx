@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { ActivityLog } from '@/components/game/activity-log';
 import { GolemPanel } from '@/components/game/golem-panel';
 import { HexBoard } from '@/components/game/hex-board';
+import { InsightFromTheFutureDialog } from '@/components/game/insight-from-the-future-dialog';
 import { LocationDetailDialog } from '@/components/game/location-detail-dialog';
 import { NewRelicDialog } from '@/components/game/new-relic-dialog';
 import { WandererRelicPanel } from '@/components/game/wanderer-relic-panel';
@@ -90,6 +91,11 @@ export default function GameShow({ game }: { game: GameSummary }) {
     const [newRelic, setNewRelic] = useState<{
         role: RoleKey;
         relicKey: string;
+    } | null>(null);
+    const [insightPeek, setInsightPeek] = useState<{
+        role: RoleKey;
+        relicKey: string;
+        deck: string[];
     } | null>(null);
     const holdingSeenRef = useRef<Record<string, Set<string>>>({});
     const emperorStepRoundRef = useRef<number | null>(null);
@@ -187,7 +193,7 @@ export default function GameShow({ game }: { game: GameSummary }) {
     async function submitMove(
         roleKey: RoleKey,
         move: Record<string, unknown>,
-    ): Promise<boolean> {
+    ): Promise<GamePollResponse | null> {
         setProcessing(true);
         try {
             const response = await postJson<GamePollResponse>(
@@ -200,14 +206,29 @@ export default function GameShow({ game }: { game: GameSummary }) {
             applyPoll(response);
             setSelectedLocationKey(null);
             setDiscardKeys(new Set());
-            return true;
+            return response;
         } catch (err) {
             toast.error(
                 err instanceof Error ? err.message : 'That move was rejected.',
             );
-            return false;
+            return null;
         } finally {
             setProcessing(false);
+        }
+    }
+
+    async function peekInsightFromTheFuture(role: RoleKey, relicKey: string) {
+        const response = await submitMove(role, {
+            type: 'peek_location_deck',
+            relic_key: relicKey,
+        });
+
+        if (response?.revealed_location_deck) {
+            setInsightPeek({
+                role,
+                relicKey,
+                deck: response.revealed_location_deck,
+            });
         }
     }
 
@@ -403,12 +424,12 @@ export default function GameShow({ game }: { game: GameSummary }) {
                 type: 'play_location',
                 location_key: selectedLocationKey,
                 cell,
-            }).then((ok) => {
+            }).then((response) => {
                 // You only ever play exactly 1 Location per turn, so a
                 // successful play always means this step is done —
                 // unlike Infrastructure (0-2, so it stays manual) or
                 // Discard (a deliberate final choice).
-                if (ok) setEmperorStep('infrastructure');
+                if (response) setEmperorStep('infrastructure');
             });
         };
     } else if (
@@ -439,11 +460,11 @@ export default function GameShow({ game }: { game: GameSummary }) {
                 type: 'place_infrastructure',
                 infrastructure_type: selectedInfrastructureType,
                 cell,
-            }).then((ok) => {
+            }).then((response) => {
                 // A successful placement always increments by exactly 1
                 // — once that reaches the cap of 2, there's nothing left
                 // to do in this step either.
-                if (ok && placedBefore + 1 >= 2) {
+                if (response && placedBefore + 1 >= 2) {
                     setSelectedInfrastructureType(null);
                     setEmperorStep('discard');
                 }
@@ -1091,6 +1112,9 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                     relicUnusableReasons={
                                         state.active_wanderer_relic_reasons
                                     }
+                                    onUseInsightFromTheFuture={(relicKey) =>
+                                        peekInsightFromTheFuture(role, relicKey)
+                                    }
                                 />
                             );
                         })}
@@ -1171,6 +1195,23 @@ export default function GameShow({ game }: { game: GameSummary }) {
                     handInfoKey ? locationCatalog[handInfoKey] : undefined
                 }
                 cellData={undefined}
+            />
+
+            <InsightFromTheFutureDialog
+                open={insightPeek !== null}
+                onOpenChange={(open) => !open && setInsightPeek(null)}
+                deck={insightPeek?.deck ?? []}
+                locationCatalog={locationCatalog}
+                processing={processing}
+                onChoose={(locationKey) => {
+                    if (!insightPeek) return;
+                    submitMove(insightPeek.role, {
+                        type: 'use_relic',
+                        relic_key: insightPeek.relicKey,
+                        location_key: locationKey,
+                    });
+                    setInsightPeek(null);
+                }}
             />
         </>
     );

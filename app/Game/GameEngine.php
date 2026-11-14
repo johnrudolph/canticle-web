@@ -51,6 +51,7 @@ final class GameEngine
             'drop_relic' => self::dropRelic($state, $actorRole, $move),
             'pickup_relic' => self::pickupRelic($state, $actorRole, $move),
             'use_relic' => self::useRelic($state, $actorRole, $move),
+            'peek_location_deck' => self::peekLocationDeck($state, $actorRole, $move),
             'rest' => self::rest($state, $actorRole),
             'tuck_relic_at_bazaar' => self::tuckRelicAtBazaar($state, $actorRole, $move),
             'cleanse_at_purification_pools' => self::cleanseAtPurificationPools($state, $actorRole),
@@ -718,6 +719,36 @@ final class GameEngine
         }
 
         return [$state, $events];
+    }
+
+    /**
+     * An insight from the future's own use_relic call needs a
+     * location_key the player can't possibly supply without first
+     * seeing what's actually in the Emperor's (hidden) Location deck —
+     * there was no way to satisfy that before this move existed, so
+     * the Relic was a guaranteed silent no-op every single time it was
+     * used (confirmed in production, game OT0TCT: action spent, no
+     * trash, no Prophecy). Free, no action cost, no state change at
+     * all — purely a permission check (the caller must actually have
+     * this Relic equipped) that lets the controller attach the real
+     * deck contents to its own response, visible only to the Wanderer
+     * who asked. The follow-up use_relic call (with location_key now
+     * filled in) is what actually resolves the effect.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function peekLocationDeck(GameState $state, string $actorRole, array $move): array
+    {
+        self::requireWandererWithCell($state, $actorRole);
+
+        $relicKey = (string) ($move['relic_key'] ?? '');
+
+        if (self::isStatusToken($relicKey) || ! in_array($relicKey, $state->wanderers[$actorRole]['equipped'], true)) {
+            throw new InvalidMoveException('That Relic is not equipped.');
+        }
+
+        return [$state, []];
     }
 
     /**
@@ -2343,9 +2374,12 @@ final class GameEngine
         shuffle($deck);
 
         $hand = [...$state->locationHand, $locationKey];
-        $state = $state->with(['locationDeck' => $deck, 'locationHand' => $hand]);
+        $state = $state->with(['locationDeck' => $deck, 'locationHand' => $hand, 'prophecy' => $state->prophecy + 1]);
 
-        return [$state, [['type' => 'location_drawn', 'role_key' => null, 'payload' => ['location_key' => $locationKey]]], true];
+        return [$state, [
+            ['type' => 'location_drawn', 'role_key' => null, 'payload' => ['location_key' => $locationKey]],
+            ['type' => 'prophecy_gained', 'role_key' => null, 'payload' => ['amount' => 1, 'reason' => 'an-insight-from-the-future']],
+        ], true];
     }
 
     /**

@@ -148,4 +148,6 @@ export interface GamePollResponse {
     golem_card_catalog: Record<string, GolemCardCatalogEntry>;
     glyph_catalog: Record<string, GlyphCatalogEntry>;
     events: GameLogEntry[];
+    /** Only present in the direct response to a peek_location_deck move — never via polling. */
+    revealed_location_deck?: string[];
 }
