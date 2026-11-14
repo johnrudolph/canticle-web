@@ -22,7 +22,9 @@ function startedGame(): GameState
     // own mechanic would make an unrelated test nondeterministic for a
     // neutral stand-in. Tests that specifically want one of these set
     // board[...]['location_key'] explicitly anyway.
-    //   - Catacombs blocks entry outright.
+    //   - Catacombs and Exile both block entry outright (Exile unless
+    //     the Wanderer already has 3 Shame tokens, which is never true
+    //     by default).
     //   - Beds of poison deals surprise damage on entry.
     //   - Golem sanctuary silently tucks (instead of trashing) any
     //     healing Relic used there — and the Golem and both Wanderers
@@ -34,7 +36,7 @@ function startedGame(): GameState
     //     draw_pile cards in any test ending a turn there.
     $board = $state->board;
     foreach ($board as $key => $entry) {
-        if (in_array($entry['location_key'], ['catacombs', 'beds-of-poison', 'golem-sanctuary', 'house-of-cryptids'], true)) {
+        if (in_array($entry['location_key'], ['catacombs', 'exile', 'beds-of-poison', 'golem-sanctuary', 'house-of-cryptids'], true)) {
             $board[$key] = [...$entry, 'location_key' => 'artists-hovel'];
         }
     }

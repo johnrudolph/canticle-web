@@ -3081,6 +3081,12 @@ final class GameEngine
             throw new InvalidMoveException('Catacombs: only a Wanderer who has been exhausted before may enter.');
         }
 
+        // Exile: "Wanderers may only enter this space if they have 3
+        // Shame tokens."
+        if ($state->board[$toKey]['location_key'] === 'exile' && self::countStatusTokens($wanderer['equipped'], 'shame_token') < 3) {
+            throw new InvalidMoveException('Exile: only a Wanderer with 3 Shame tokens may enter.');
+        }
+
         $destinationInfrastructure = $state->board[$toKey]['infrastructure'];
         $actionsRemaining = $wanderer['actions_remaining'] - ($freeMove ? 0 : 1);
 
@@ -3269,6 +3275,35 @@ final class GameEngine
             $events[] = ['type' => 'game_finished', 'role_key' => null, 'payload' => []];
 
             return [$state, $events];
+        }
+
+        // Exile: "If all Wanderers are on this location at the end of
+        // any round prior to the final round, the game ends
+        // immediately." (The round-8 case is already covered above —
+        // the game was ending this round regardless.)
+        $exileKey = null;
+        foreach ($state->board as $key => $entry) {
+            if ($entry['location_key'] === 'exile') {
+                $exileKey = $key;
+                break;
+            }
+        }
+
+        if ($exileKey !== null) {
+            $everyoneInExile = true;
+            foreach (self::activeWanderers($state) as $cell) {
+                if (Board::key($cell) !== $exileKey) {
+                    $everyoneInExile = false;
+                    break;
+                }
+            }
+
+            if ($everyoneInExile) {
+                $state = $state->with(['phase' => 'finished', 'activeWandererIndex' => null]);
+                $events[] = ['type' => 'game_finished', 'role_key' => null, 'payload' => ['reason' => 'exile']];
+
+                return [$state, $events];
+            }
         }
 
         $nextRound = $state->round + 1;

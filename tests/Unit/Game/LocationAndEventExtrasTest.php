@@ -188,3 +188,50 @@ test('House of Cryptids does nothing if any Wanderer is off the Golem\'s space',
 
     expect($state->board['0,0']['tucked'])->toBe([]);
 });
+
+test('Exile can only be entered by a Wanderer with 3 Shame tokens', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['2,0'] = [...$board['2,0'], 'location_key' => 'exile'];
+    $state = $state->with(['board' => $board]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => 'NE']))
+        ->toThrow(InvalidMoveException::class, 'Exile');
+
+    $equipped = ['body' => 'shame_token', 'mind' => 'shame_token', 'hand_left' => 'shame_token', 'hand_right' => null, 'bag' => null];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => 'NE']);
+
+    expect($state->wanderers['wanderer_a']['cell'])->toBe([2, 0]);
+});
+
+test('The game ends immediately if every Wanderer is in Exile at the end of a round before the last', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'exile'];
+    $state = $state->with(['board' => $board, 'golemSkipped' => true, 'round' => 3]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'end_wanderer_turn']);
+    [$state, $events] = GameEngine::apply($state, 'wanderer_b', ['type' => 'end_wanderer_turn']);
+
+    expect($state->phase)->toBe('finished')
+        ->and(collect($events)->pluck('type'))->toContain('game_finished');
+});
+
+test('Exile does not end the game early if any Wanderer is elsewhere', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'exile'];
+    $state = $state->with(['board' => $board, 'golemSkipped' => true, 'round' => 3]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['cell' => [2, 0]])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'end_wanderer_turn']);
+    [$state] = GameEngine::apply($state, 'wanderer_b', ['type' => 'end_wanderer_turn']);
+
+    expect($state->phase)->toBe('emperor')
+        ->and($state->round)->toBe(4);
+});
