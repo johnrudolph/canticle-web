@@ -520,7 +520,7 @@ export default function GameShow({ game }: { game: GameSummary }) {
         myRoles.includes(state.active_wanderer_role)
     ) {
         const mine = state.wanderers[state.active_wanderer_role];
-        if (mine.cell && mine.actions_remaining > 0) {
+        if (mine.cell && mine.actions_remaining > 0 && mine.hp > 0) {
             highlightedCells = new Set(
                 occupiedNeighbors(mine.cell, state.board).map(cellKey),
             );
@@ -1046,6 +1046,27 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                                       cellKey(mine.cell)
                                                   ].relics.length
                                                 : 0;
+                                            const exhausted = mine.hp <= 0;
+                                            const restButton = (
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    disabled={
+                                                        processing ||
+                                                        mine.actions_remaining <=
+                                                            0 ||
+                                                        mine.hp >= 15
+                                                    }
+                                                    onClick={() =>
+                                                        submitMove(
+                                                            state.active_wanderer_role as RoleKey,
+                                                            { type: 'rest' },
+                                                        )
+                                                    }
+                                                >
+                                                    🌿 Rest (+2 Health)
+                                                </Button>
+                                            );
                                             const searchButton = (
                                                 <Button
                                                     size="sm"
@@ -1054,7 +1075,8 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                                         processing ||
                                                         mine.actions_remaining <=
                                                             0 ||
-                                                        relicsHere === 0
+                                                        relicsHere === 0 ||
+                                                        exhausted
                                                     }
                                                     onClick={() =>
                                                         submitMove(
@@ -1069,22 +1091,29 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                                 </Button>
                                             );
 
-                                            if (relicsHere > 0) {
-                                                return searchButton;
-                                            }
+                                            const searchWithTooltip =
+                                                relicsHere > 0 && !exhausted ? (
+                                                    searchButton
+                                                ) : (
+                                                    <Tooltip>
+                                                        <TooltipTrigger asChild>
+                                                            <span>
+                                                                {searchButton}
+                                                            </span>
+                                                        </TooltipTrigger>
+                                                        <TooltipContent>
+                                                            {exhausted
+                                                                ? 'At 0 Health, resting is the only action you can take.'
+                                                                : 'No face-down Relics left here to search for.'}
+                                                        </TooltipContent>
+                                                    </Tooltip>
+                                                );
 
                                             return (
-                                                <Tooltip>
-                                                    <TooltipTrigger asChild>
-                                                        <span>
-                                                            {searchButton}
-                                                        </span>
-                                                    </TooltipTrigger>
-                                                    <TooltipContent>
-                                                        No face-down Relics left
-                                                        here to search for.
-                                                    </TooltipContent>
-                                                </Tooltip>
+                                                <>
+                                                    {restButton}
+                                                    {searchWithTooltip}
+                                                </>
                                             );
                                         })()}
                                         <Button

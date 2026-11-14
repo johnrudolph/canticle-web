@@ -71,6 +71,14 @@ final class GameEngine
      */
     public static function relicUsabilityReason(GameState $state, string $actorRole, string $relicKey): ?string
     {
+        // rules.md: "if you are at 0 HP, resting is the only action you
+        // can perform" — applies to every Relic use, not just the ones
+        // with their own condition, so check it before falling through
+        // to relic-specific conditions.
+        if ($state->wanderers[$actorRole]['hp'] <= 0) {
+            return 'At 0 Health, resting is the only action you can take.';
+        }
+
         $baseKey = (string) preg_replace('/-\d+$/', '', $relicKey);
 
         return self::relicUnmetConditionReason($state, $actorRole, $baseKey);
