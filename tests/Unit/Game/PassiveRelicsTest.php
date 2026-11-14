@@ -495,3 +495,23 @@ test('Laborer\'s Jacket requires standing on a space that produces 🤝', functi
         'destinations' => ['wanderer_b' => [0, 0]],
     ]))->toThrow(InvalidMoveException::class);
 });
+
+test('An expansive mind grants two extra Mind slots, usable only while it occupies mind itself', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'mind' => 'an-expansive-mind'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', [
+        'equipped' => $equipped, 'holding' => ['shamlessness'],
+    ])]);
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'equip_relic', 'relic_key' => 'shamlessness', 'slot' => 'mind_2']);
+
+    expect($state->wanderers['wanderer_a']['equipped']['mind_2'])->toBe('shamlessness');
+});
+
+test('mind_2/mind_3 reject equipping without An expansive mind occupying mind', function () {
+    $state = startedGame();
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['holding' => ['shamlessness']])]);
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'equip_relic', 'relic_key' => 'shamlessness', 'slot' => 'mind_2']))
+        ->toThrow(InvalidMoveException::class);
+});

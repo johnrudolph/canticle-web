@@ -14,7 +14,10 @@ final class GameSetup
 
     private const STARTING_HP = 15;
 
-    private const EQUIP_SLOTS = ['body', 'mind', 'hand_left', 'hand_right', 'bag'];
+    // mind_2/mind_3 only ever usable while An expansive mind occupies
+    // 'mind' itself (see GameEngine::equipRelic) — "You can add two more
+    // Mind cards to this slot."
+    private const EQUIP_SLOTS = ['body', 'mind', 'hand_left', 'hand_right', 'bag', 'mind_2', 'mind_3'];
 
     private const GOLEM_REVEALED_SIZE = 3;
 

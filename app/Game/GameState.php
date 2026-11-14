@@ -36,6 +36,10 @@ namespace App\Game;
  *         'body' => ?string, 'mind' => ?string,
  *         'hand_left' => ?string, 'hand_right' => ?string,
  *         'bag' => ?string,
+ *         // mind_2/mind_3 only ever equippable while 'mind' itself holds
+ *         // 'an-expansive-mind' — "You can add two more Mind cards to
+ *         // this slot" (GameEngine::equipRelic enforces this gate).
+ *         'mind_2' => ?string, 'mind_3' => ?string,
  *     ],
  *     'holding' => list<string>,       // searched but not yet equipped or dropped
  *     'free_move_available' => bool,   // set after arriving on a Road — next move is free

@@ -407,6 +407,12 @@ final class GameEngine
             throw new InvalidMoveException('That Relic does not fit that slot.');
         }
 
+        // An expansive mind: "You can add two more Mind cards to this
+        // slot." mind_2/mind_3 only exist while it occupies 'mind' itself.
+        if (($slot === 'mind_2' || $slot === 'mind_3') && $wanderer['equipped']['mind'] !== 'an-expansive-mind') {
+            throw new InvalidMoveException('That slot requires An expansive mind to be equipped first.');
+        }
+
         $displaced = $wanderer['equipped'][$slot];
 
         if (self::isStatusToken($displaced)) {
@@ -5335,7 +5341,7 @@ final class GameEngine
     {
         return match ($slot) {
             'body' => $relicSlot === 'Body',
-            'mind' => $relicSlot === 'Mind',
+            'mind', 'mind_2', 'mind_3' => $relicSlot === 'Mind',
             'bag' => $relicSlot === 'Bag',
             'hand_left', 'hand_right' => $relicSlot === 'Hand',
             default => false,
