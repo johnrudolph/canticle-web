@@ -2,7 +2,6 @@ import { Button } from '@/components/ui/button';
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
@@ -55,11 +54,6 @@ export function LocationDetailDialog({
                     <DialogTitle className="text-2xl">
                         {location.produces_emoji} {location.name}
                     </DialogTitle>
-                    {location.produces && (
-                        <DialogDescription>
-                            Produces {location.produces}
-                        </DialogDescription>
-                    )}
                 </DialogHeader>
 
                 <div className="space-y-4 text-sm">
@@ -78,13 +72,6 @@ export function LocationDetailDialog({
                                 {location.back_text}
                             </p>
                         </div>
-                    )}
-
-                    {location.costs.length > 0 && (
-                        <p>
-                            <span className="font-medium">Build cost:</span>{' '}
-                            adjacent to {location.costs.join(', ')}
-                        </p>
                     )}
 
                     <div className="rounded-md border p-3">
@@ -154,9 +141,8 @@ export function LocationDetailDialog({
                         </p>
 
                         <p className="text-muted-foreground">
-                            Deals {location.relic_count} face-down Relic
-                            {location.relic_count === 1 ? '' : 's'} when built —{' '}
-                            {faceDownCount} still face-down here.
+                            {faceDownCount} face-down Relic
+                            {faceDownCount === 1 ? '' : 's'} here.
                         </p>
 
                         {faceUpRelics.length > 0 && (
