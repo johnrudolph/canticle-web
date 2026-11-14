@@ -302,3 +302,58 @@ test('Cabalist\'s Gown does not block damage off a 🌑 space', function () {
 
     expect($state->wanderers['wanderer_a']['hp'])->toBe(2);
 });
+
+test('Magnetic mail moves its holder into an adjacent Ally\'s Monolith Shard space, any time', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['2,0'] = [...$board['2,0'], 'infrastructure' => ['monolith_shard']];
+    $state = $state->with(['board' => $board]);
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'magnetic-mail'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['cell' => [2, 0]])]);
+    // Note: no end_emperor_phase/active-turn setup at all — this move
+    // isn't turn-gated.
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', [
+        'type' => 'magnetic_mail_move', 'target_role' => 'wanderer_b',
+    ]);
+
+    expect($state->wanderers['wanderer_a']['cell'])->toBe([2, 0])
+        ->and(collect($events)->pluck('type'))->toContain('wanderer_moved');
+});
+
+test('Magnetic mail requires the Ally\'s space to actually have a Monolith Shard', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'magnetic-mail'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['cell' => [2, 0]])]);
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'magnetic_mail_move', 'target_role' => 'wanderer_b']))
+        ->toThrow(InvalidMoveException::class);
+});
+
+test('Telekinesis moves from a Monolith Shard space to any built space, costing the normal action', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'infrastructure' => ['monolith_shard']];
+    $state = $state->with(['board' => $board]);
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'mind' => 'telekenesis'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'telekinesis_move', 'cell' => [0, 1]]);
+
+    expect($state->wanderers['wanderer_a']['cell'])->toBe([0, 1])
+        ->and($state->wanderers['wanderer_a']['actions_remaining'])->toBe(2)
+        ->and(collect($events)->pluck('type'))->toContain('wanderer_moved');
+});
+
+test('Telekinesis requires actually being on a Monolith Shard space', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'mind' => 'telekenesis'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'telekinesis_move', 'cell' => [0, 1]]))
+        ->toThrow(InvalidMoveException::class);
+});

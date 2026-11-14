@@ -34,9 +34,12 @@ function startedGame(): GameState
     //     phase ends while all Wanderers share the Golem's space —
     //     true by default at the hub, so this would silently consume
     //     draw_pile cards in any test ending a turn there.
+    //   - Library satisfies any build cost from anywhere on the board
+    //     (not just adjacency), so its mere presence breaks any test
+    //     asserting a cost-based rejection.
     $board = $state->board;
     foreach ($board as $key => $entry) {
-        if (in_array($entry['location_key'], ['catacombs', 'exile', 'beds-of-poison', 'golem-sanctuary', 'house-of-cryptids'], true)) {
+        if (in_array($entry['location_key'], ['catacombs', 'exile', 'beds-of-poison', 'golem-sanctuary', 'house-of-cryptids', 'library'], true)) {
             $board[$key] = [...$entry, 'location_key' => 'artists-hovel'];
         }
     }

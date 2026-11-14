@@ -53,6 +53,8 @@ final class GameEngine
             'rest' => self::rest($state, $actorRole),
             'tuck_relic_at_bazaar' => self::tuckRelicAtBazaar($state, $actorRole, $move),
             'cleanse_at_purification_pools' => self::cleanseAtPurificationPools($state, $actorRole),
+            'magnetic_mail_move' => self::magneticMailMove($state, $actorRole, $move),
+            'telekinesis_move' => self::telekinesisMove($state, $actorRole, $move),
             'end_wanderer_turn' => self::endWandererTurn($state, $actorRole),
             default => throw new InvalidMoveException('Unknown move type.'),
         };
@@ -4901,6 +4903,133 @@ final class GameEngine
         }
 
         $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['equipped' => $equipped])]);
+
+        return [$state, $events];
+    }
+
+    /**
+     * Magnetic mail: "If an Ally is adjacent to you on a space with a
+     * Monolith Shard, you may freely move into their space at any
+     * time, even if it is not your turn." Not turn-gated, no action
+     * cost, no requireRole("wanderer")-style active-turn check — the
+     * same "free, any time" category as pickup/drop/equip.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function magneticMailMove(GameState $state, string $actorRole, array $move): array
+    {
+        self::requireWandererWithCell($state, $actorRole);
+
+        $wanderer = $state->wanderers[$actorRole];
+
+        if (! in_array('magnetic-mail', $wanderer['equipped'], true)) {
+            throw new InvalidMoveException('Magnetic mail is not equipped.');
+        }
+
+        $targetRole = (string) ($move['target_role'] ?? '');
+        $ally = $state->wanderers[$targetRole] ?? null;
+
+        if ($ally === null || $ally['cell'] === null) {
+            throw new InvalidMoveException('That Ally is not on the board.');
+        }
+
+        $casterCellKey = Board::key($wanderer['cell']);
+        $allyCellKey = Board::key($ally['cell']);
+
+        if (! in_array($allyCellKey, array_map(Board::key(...), Board::occupiedNeighbors($wanderer['cell'], $state->board)), true)) {
+            throw new InvalidMoveException('That Ally is not adjacent to you.');
+        }
+
+        if (! in_array('monolith_shard', $state->board[$allyCellKey]['infrastructure'], true)) {
+            throw new InvalidMoveException('That Ally\'s space has no Monolith Shard.');
+        }
+
+        $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['cell' => $ally['cell']])]);
+
+        return [$state, [['type' => 'wanderer_moved', 'role_key' => $actorRole, 'payload' => ['to' => $ally['cell'], 'free' => true]]]];
+    }
+
+    /**
+     * Telekinesis: "When moving from a space with a Monolith Shard,
+     * you may move to any space." $move['cell'] picks the destination
+     * directly (any built Location) instead of a direction. Still
+     * costs the normal action, same as an ordinary move.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function telekinesisMove(GameState $state, string $actorRole, array $move): array
+    {
+        self::requireRole($state, $actorRole, $state->activeWandererRole(), 'wanderer');
+
+        $wanderer = $state->wanderers[$actorRole];
+
+        if ($wanderer['actions_remaining'] <= 0) {
+            throw new InvalidMoveException('No actions remaining this turn.');
+        }
+
+        self::requireNotExhausted($wanderer);
+
+        if ($wanderer['move_blocked_this_turn']) {
+            throw new InvalidMoveException('Incarceration: you cannot move for the rest of this turn.');
+        }
+
+        if (! in_array('telekenesis', $wanderer['equipped'], true)) {
+            throw new InvalidMoveException('Telekinesis is not equipped.');
+        }
+
+        $fromCellKey = Board::key($wanderer['cell']);
+
+        if (! in_array('monolith_shard', $state->board[$fromCellKey]['infrastructure'], true)) {
+            throw new InvalidMoveException('You must be on a Monolith Shard space to use Telekinesis.');
+        }
+
+        $toCell = $move['cell'] ?? null;
+
+        if (! is_array($toCell) || count($toCell) !== 2) {
+            throw new InvalidMoveException('A destination cell is required.');
+        }
+
+        $toCell = [(int) $toCell[0], (int) $toCell[1]];
+        $toKey = Board::key($toCell);
+
+        if (! array_key_exists($toKey, $state->board)) {
+            throw new InvalidMoveException('Wanderers must always be on a Location.');
+        }
+
+        $destinationLocationKey = $state->board[$toKey]['location_key'];
+
+        if ($destinationLocationKey === 'catacombs' && ! $wanderer['was_ever_exhausted']) {
+            throw new InvalidMoveException('Catacombs: only a Wanderer who has been exhausted before may enter.');
+        }
+
+        if ($destinationLocationKey === 'exile' && self::countStatusTokens($wanderer['equipped'], 'shame_token') < 3) {
+            throw new InvalidMoveException('Exile: only a Wanderer with 3 Shame tokens may enter.');
+        }
+
+        $destinationInfrastructure = $state->board[$toKey]['infrastructure'];
+
+        $wanderers = $state->wanderersWith($actorRole, [
+            'cell' => $toCell,
+            'actions_remaining' => $wanderer['actions_remaining'] - 1,
+            'free_move_available' => in_array('road', $destinationInfrastructure, true),
+        ]);
+        $state = $state->with(['wanderers' => $wanderers]);
+
+        $events = [['type' => 'wanderer_moved', 'role_key' => $actorRole, 'payload' => ['to' => $toCell, 'free' => false]]];
+
+        if ($destinationLocationKey === 'beds-of-poison') {
+            [$state, $damageEvents] = self::applyDamage($state, $actorRole, 5);
+            $events = [...$events, ...$damageEvents];
+            $events[] = ['type' => 'wanderer_damaged', 'role_key' => $actorRole, 'payload' => ['amount' => 5]];
+        }
+
+        if (in_array('monolith_shard', $destinationInfrastructure, true) && in_array('rejuvenation-gown', $wanderer['equipped'], true)) {
+            $hp = min(self::maxHpFor($state, $actorRole), $state->wanderers[$actorRole]['hp'] + 2);
+            $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['hp' => $hp])]);
+            $events[] = ['type' => 'wanderer_healed', 'role_key' => $actorRole, 'payload' => ['hp' => $hp]];
+        }
 
         return [$state, $events];
     }
