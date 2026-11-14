@@ -705,3 +705,67 @@ test('Farmer\'s insight doubles the Fruit tree action bonus for its holder', fun
     // -1 to move, +2 from the doubled Fruit tree bonus => net +1.
     expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe($actionsBefore + 1);
 });
+
+test('Pen grants 3 Prophecy at end of game if all 4 active Glyphs are non-👺 and Pen is built', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'pen'];
+    $state = $state->with(['board' => $board]);
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['inverted', 'paradoxical', 'perplexing', 'parallel']])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyEndOfGameScoring');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state);
+
+    expect($state->prophecy)->toBe(3)
+        ->and(collect($events)->pluck('type'))->toContain('prophecy_gained');
+});
+
+test('Pen does not score if any active Glyph is 👺, even with 4 active', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'pen'];
+    $state = $state->with(['board' => $board]);
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['inverted', 'paradoxical', 'perplexing', 'mobile']])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyEndOfGameScoring');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state);
+
+    expect($state->prophecy)->toBe(0)
+        ->and($events)->toBe([]);
+});
+
+test('Pen does not score if fewer than 4 Glyphs are active', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'pen'];
+    $state = $state->with(['board' => $board]);
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['inverted', 'paradoxical', 'perplexing']])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyEndOfGameScoring');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state);
+
+    expect($state->prophecy)->toBe(0)
+        ->and($events)->toBe([]);
+});
+
+test('Pen does not score if Pen was never built', function () {
+    $state = startedGame();
+    $board = $state->board;
+    foreach ($board as $key => $entry) {
+        if ($entry['location_key'] === 'pen') {
+            $board[$key] = [...$entry, 'location_key' => 'artists-hovel'];
+        }
+    }
+    $state = $state->with(['board' => $board]);
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['inverted', 'paradoxical', 'perplexing', 'parallel']])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyEndOfGameScoring');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state);
+
+    expect($state->prophecy)->toBe(0)
+        ->and($events)->toBe([]);
+});

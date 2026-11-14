@@ -242,11 +242,11 @@
         "cost_emoji": ""
     },
     {
-        "print": false,
+        "print": true,
         "name": "Pen",
         "Relics": "7 🐾",
         "lore": "Subduing the Golem, and perhaps laying the groundwork to even befriend it",
-        "back_text": "End of game: If the Golem's mat contains 6 Modifiers, gain 📜📜📜.",
+        "back_text": "End of game: If the Golem's mat contains 4 Glyphs that are not 👺 Glyphs, gain 📜📜📜.",
         "cost_1": "",
         "cost_2": "",
         "cost_3": "",
