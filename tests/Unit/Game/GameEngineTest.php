@@ -331,7 +331,7 @@ test('equipping displaces whatever was already in that slot onto the ground', fu
     [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'equip_relic', 'relic_key' => $second, 'slot' => 'body']);
 
     expect($state->wanderers['wanderer_a']['equipped']['body'])->toBe($second)
-        ->and($state->board[$cellKey]['relics'])->toContain($first);
+        ->and($state->board[$cellKey]['relics_face_up'])->toContain($first);
 });
 
 test('relic pickup/drop is not gated by whose turn it is', function () {
@@ -339,7 +339,7 @@ test('relic pickup/drop is not gated by whose turn it is', function () {
     $relic = collect(RelicCatalog::all())->first();
     $cellKey = Board::key($state->wanderers['wanderer_b']['cell']);
     $board = $state->board;
-    $board[$cellKey]['relics'] = [$relic->key];
+    $board[$cellKey]['relics_face_up'] = [$relic->key];
     $state = $state->with(['board' => $board]);
 
     // It's nobody's "turn" yet (still setup phase is over, but we're in
@@ -421,4 +421,43 @@ test('Walls block the Golem\'s pathing', function () {
     // even though a longer route might still exist through [1,1]/[0,1].
     $direct = Board::distance([2, 0], [1, 0], $state->board, $state->wallKeys());
     expect($direct)->toBeNull();
+});
+
+test('pickup_relic only reaches the face-up pile, never the face-down one', function () {
+    $state = startedGame();
+    $cellKey = Board::key($state->wanderers['wanderer_a']['cell']);
+    $board = $state->board;
+    $board[$cellKey] = [...$board[$cellKey], 'relics' => ['burial-robes'], 'relics_face_up' => []];
+    $state = $state->with(['board' => $board]);
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'pickup_relic', 'relic_key' => 'burial-robes']))
+        ->toThrow(InvalidMoveException::class, 'That Relic is not here.');
+});
+
+test('search_location only draws from the face-down pile, never the face-up one', function () {
+    $state = startedGame();
+    $cellKey = Board::key($state->wanderers['wanderer_a']['cell']);
+    $board = $state->board;
+    $board[$cellKey] = [...$board[$cellKey], 'relics' => [], 'relics_face_up' => ['burial-robes']];
+    $state = $state->with(['board' => $board]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'search_location']);
+
+    expect($state->wanderers['wanderer_a']['holding'])->toBe([])
+        ->and($events[0]['payload']['found'])->toBeNull()
+        ->and($state->board[$cellKey]['relics_face_up'])->toBe(['burial-robes']);
+});
+
+test('dropping an equipped Relic puts it in the face-up pile, pickupable right away', function () {
+    $state = startedGame();
+    $cellKey = Board::key($state->wanderers['wanderer_a']['cell']);
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'last-rites'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'drop_relic', 'relic_key' => 'last-rites']);
+    expect($state->board[$cellKey]['relics_face_up'])->toContain('last-rites');
+
+    [$state] = GameEngine::apply($state, 'wanderer_b', ['type' => 'pickup_relic', 'relic_key' => 'last-rites']);
+    expect($state->wanderers['wanderer_b']['holding'])->toContain('last-rites');
 });

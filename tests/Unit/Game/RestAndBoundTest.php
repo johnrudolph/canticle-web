@@ -63,5 +63,5 @@ test('a Bound Relic can still be dropped while merely held, not yet equipped', f
     [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'drop_relic', 'relic_key' => 'burial-robes']);
 
     expect($state->wanderers['wanderer_a']['holding'])->toBe([])
-        ->and($state->board['1,0']['relics'])->toContain('burial-robes');
+        ->and($state->board['1,0']['relics_face_up'])->toContain('burial-robes');
 });

@@ -28,7 +28,7 @@ final class RelicDealer
      * single-branch deal().
      *
      * @param  array<string, list<string>>  $relicDecks
-     * @param  array<string, array{location_key: string, placed_round: int, relics: list<string>, infrastructure: list<string>, tucked: list<string>}>  $board
+     * @param  array<string, array{location_key: string, placed_round: int, relics: list<string>, relics_face_up: list<string>, infrastructure: list<string>, tucked: list<string>}>  $board
      * @return array{0: list<string>, 1: array<string, list<string>>}
      */
     public static function dealForLocation(array $relicDecks, Location $location, array $board): array
@@ -84,7 +84,7 @@ final class RelicDealer
      * deck at all) branch.
      *
      * @param  array<string, list<string>>  $relicDecks
-     * @param  array<string, array{location_key: string, placed_round: int, relics: list<string>, infrastructure: list<string>, tucked: list<string>}>  $board
+     * @param  array<string, array{location_key: string, placed_round: int, relics: list<string>, relics_face_up: list<string>, infrastructure: list<string>, tucked: list<string>}>  $board
      * @return array{0: list<string>, 1: array<string, list<string>>}
      */
     public static function dealBazaar(array $relicDecks, array $board): array

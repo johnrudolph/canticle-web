@@ -208,8 +208,8 @@ test('Teleportation stone does nothing if the destination has no Monolith Shard'
 test('Hands of deliverance moves a face-up Relic from one space to another', function () {
     $state = startedGame();
     $board = $state->board;
-    $board['1,0'] = [...$board['1,0'], 'relics' => ['burial-robes']];
-    $board['0,0'] = [...$board['0,0'], 'relics' => []];
+    $board['1,0'] = [...$board['1,0'], 'relics_face_up' => ['burial-robes']];
+    $board['0,0'] = [...$board['0,0'], 'relics_face_up' => []];
     $state = $state->with(['board' => $board]);
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'hands-of-deliverance'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
@@ -220,7 +220,7 @@ test('Hands of deliverance moves a face-up Relic from one space to another', fun
         'from_cell' => [1, 0], 'to_cell' => [0, 0], 'board_relic_key' => 'burial-robes',
     ]);
 
-    expect($state->board['1,0']['relics'])->toBe([])
-        ->and($state->board['0,0']['relics'])->toBe(['burial-robes'])
+    expect($state->board['1,0']['relics_face_up'])->toBe([])
+        ->and($state->board['0,0']['relics_face_up'])->toBe(['burial-robes'])
         ->and($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBe('hands-of-deliverance');
 });

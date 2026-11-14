@@ -40,6 +40,7 @@ final class GameSetup
                 'location_key' => $startingKeys[$i],
                 'placed_round' => 1,
                 'relics' => $relics,
+                'relics_face_up' => [],
                 'infrastructure' => [],
                 'tucked' => [],
             ];

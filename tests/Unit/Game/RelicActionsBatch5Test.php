@@ -40,7 +40,7 @@ test('Immolation rags does not touch status tokens, only Relics', function () {
 test('Divine Cabalist pyre burns chosen board Relics and heals everyone sharing the space 2 per Relic burned', function () {
     $state = startedGame();
     $board = $state->board;
-    $board['1,0'] = [...$board['1,0'], 'relics' => ['burial-robes', 'last-rites', 'golem-whistle']];
+    $board['1,0'] = [...$board['1,0'], 'relics_face_up' => ['burial-robes', 'last-rites', 'golem-whistle']];
     $state = $state->with(['board' => $board]);
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'bag' => 'divine-cabalist-pyre'];
     $wanderers = $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 5]);
@@ -53,7 +53,7 @@ test('Divine Cabalist pyre burns chosen board Relics and heals everyone sharing 
         'board_relic_keys' => ['burial-robes', 'last-rites'],
     ]);
 
-    expect($state->board['1,0']['relics'])->toBe(['golem-whistle'])
+    expect($state->board['1,0']['relics_face_up'])->toBe(['golem-whistle'])
         ->and($state->wanderers['wanderer_a']['hp'])->toBe(9) // 2 burned => +4
         ->and($state->wanderers['wanderer_b']['hp'])->toBe(9)
         ->and($state->wanderers['wanderer_a']['equipped']['bag'])->toBeNull()

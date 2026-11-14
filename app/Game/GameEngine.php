@@ -195,6 +195,7 @@ final class GameEngine
             'location_key' => $locationKey,
             'placed_round' => $state->round,
             'relics' => $relics,
+            'relics_face_up' => [],
             'infrastructure' => [],
             'tucked' => [],
         ]);
@@ -423,7 +424,10 @@ final class GameEngine
         $board = $state->board;
 
         if ($displaced !== null) {
-            $board[$cellKey] = [...$board[$cellKey], 'relics' => [...$board[$cellKey]['relics'], $displaced]];
+            // A displaced Relic was equipped (known) a moment ago — it
+            // lands face-up, same as a deliberate drop, not back into the
+            // anonymous face-down pile.
+            $board[$cellKey] = [...$board[$cellKey], 'relics_face_up' => [...$board[$cellKey]['relics_face_up'], $displaced]];
         }
 
         $equipped = $wanderer['equipped'];
@@ -488,7 +492,9 @@ final class GameEngine
 
         $cellKey = Board::key($wanderer['cell']);
         $board = $state->board;
-        $board[$cellKey] = [...$board[$cellKey], 'relics' => [...$board[$cellKey]['relics'], $relicKey]];
+        // rules.md: "Dropping a relic leaves it face-up on your current
+        // space."
+        $board[$cellKey] = [...$board[$cellKey], 'relics_face_up' => [...$board[$cellKey]['relics_face_up'], $relicKey]];
 
         $tuckedCards = $wanderer['tucked_cards'];
         $lostCards = $tuckedCards[$relicKey] ?? [];
@@ -535,14 +541,14 @@ final class GameEngine
         $wanderer = $state->wanderers[$actorRole];
         $relicKey = (string) ($move['relic_key'] ?? '');
         $cellKey = Board::key($wanderer['cell']);
-        $pile = $state->board[$cellKey]['relics'];
+        $pile = $state->board[$cellKey]['relics_face_up'];
 
         if (! in_array($relicKey, $pile, true)) {
             throw new InvalidMoveException('That Relic is not here.');
         }
 
         $board = $state->board;
-        $board[$cellKey] = [...$board[$cellKey], 'relics' => array_values(array_diff($pile, [$relicKey]))];
+        $board[$cellKey] = [...$board[$cellKey], 'relics_face_up' => array_values(array_diff($pile, [$relicKey]))];
 
         $wanderers = $state->wanderersWith($actorRole, ['holding' => [...$wanderer['holding'], $relicKey]]);
 
@@ -1051,13 +1057,18 @@ final class GameEngine
             return [$state, []];
         }
 
-        $moved = $state->board[$casterCellKey]['relics'];
+        $movedDown = $state->board[$casterCellKey]['relics'];
+        $movedUp = $state->board[$casterCellKey]['relics_face_up'];
         $board = $state->board;
-        $board[$casterCellKey] = [...$board[$casterCellKey], 'relics' => []];
-        $board[$golemCellKey] = [...$board[$golemCellKey], 'relics' => [...$board[$golemCellKey]['relics'], ...$moved]];
+        $board[$casterCellKey] = [...$board[$casterCellKey], 'relics' => [], 'relics_face_up' => []];
+        $board[$golemCellKey] = [
+            ...$board[$golemCellKey],
+            'relics' => [...$board[$golemCellKey]['relics'], ...$movedDown],
+            'relics_face_up' => [...$board[$golemCellKey]['relics_face_up'], ...$movedUp],
+        ];
         $state = $state->with(['board' => $board]);
 
-        return [$state, [['type' => 'relics_moved_to_golem', 'role_key' => null, 'payload' => ['count' => count($moved)]]]];
+        return [$state, [['type' => 'relics_moved_to_golem', 'role_key' => null, 'payload' => ['count' => count($movedDown) + count($movedUp)]]]];
     }
 
     /**
@@ -1080,14 +1091,24 @@ final class GameEngine
             return [$state, []];
         }
 
-        $relics = $state->board[$casterCellKey]['relics'];
+        $relicsDown = $state->board[$casterCellKey]['relics'];
+        $relicsUp = $state->board[$casterCellKey]['relics_face_up'];
         $board = $state->board;
-        $board[$casterCellKey] = [...$board[$casterCellKey], 'relics' => []];
+        $board[$casterCellKey] = [...$board[$casterCellKey], 'relics' => [], 'relics_face_up' => []];
 
         $landedKeys = [];
-        foreach ($relics as $i => $relicKey) {
+        foreach ($relicsDown as $i => $relicKey) {
             $neighborKey = Board::key($neighbors[$i % count($neighbors)]);
             $board[$neighborKey] = [...$board[$neighborKey], 'relics' => [...$board[$neighborKey]['relics'], $relicKey]];
+            $landedKeys[$neighborKey] = true;
+        }
+
+        // Continue the round-robin offset from where the face-down pile
+        // left off, so the two piles don't always both start on the same
+        // first neighbor.
+        foreach ($relicsUp as $i => $relicKey) {
+            $neighborKey = Board::key($neighbors[(count($relicsDown) + $i) % count($neighbors)]);
+            $board[$neighborKey] = [...$board[$neighborKey], 'relics_face_up' => [...$board[$neighborKey]['relics_face_up'], $relicKey]];
             $landedKeys[$neighborKey] = true;
         }
 
@@ -1803,19 +1824,19 @@ final class GameEngine
         }
 
         $fromEntry = $state->board[$fromKey];
-        $index = array_search($relicKey, $fromEntry['relics'], true);
+        $index = array_search($relicKey, $fromEntry['relics_face_up'], true);
 
         if ($index === false) {
             return [$state, []];
         }
 
-        $fromRelics = $fromEntry['relics'];
+        $fromRelics = $fromEntry['relics_face_up'];
         unset($fromRelics[$index]);
         $fromRelics = array_values($fromRelics);
 
         $board = $state->board;
-        $board[$fromKey] = [...$fromEntry, 'relics' => $fromRelics];
-        $board[$toKey] = [...$board[$toKey], 'relics' => [...$board[$toKey]['relics'], $relicKey]];
+        $board[$fromKey] = [...$fromEntry, 'relics_face_up' => $fromRelics];
+        $board[$toKey] = [...$board[$toKey], 'relics_face_up' => [...$board[$toKey]['relics_face_up'], $relicKey]];
         $state = $state->with(['board' => $board]);
 
         return [$state, [['type' => 'relic_moved', 'role_key' => null, 'payload' => ['relic_key' => $relicKey, 'from' => $fromKey, 'to' => $toKey]]]];
@@ -2232,8 +2253,7 @@ final class GameEngine
      * Divine Cabalist pyre: "Trash any number of face-up Relics on your
      * space, and trash this. 🌿 yourself and Allies on your space 2 for
      * each Relic you burned." $move['board_relic_keys'] picks which (any
-     * number, including zero) from the caster's own cell's face-down...
-     * actually face-up-once-found pile.
+     * number, including zero) from the caster's own cell's face-up pile.
      *
      * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
@@ -2248,7 +2268,7 @@ final class GameEngine
             return [$state, [], true];
         }
 
-        $pile = $state->board[$cellKey]['relics'];
+        $pile = $state->board[$cellKey]['relics_face_up'];
         $burned = [];
 
         foreach ($chosen as $relicKey) {
@@ -2268,7 +2288,7 @@ final class GameEngine
         }
 
         $board = $state->board;
-        $board[$cellKey] = [...$board[$cellKey], 'relics' => $pile];
+        $board[$cellKey] = [...$board[$cellKey], 'relics_face_up' => $pile];
         $state = $state->with(['board' => $board]);
 
         $events = array_map(
