@@ -553,65 +553,75 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                         <p className="mb-2 text-xs text-muted-foreground">
                                             Play 1 Location from your hand
                                             (click it, then click a highlighted
-                                            space on the board). Tap ℹ️ to read
-                                            what a Location actually does before
-                                            committing to it.
+                                            space on the board). Grayed-out ones
+                                            have nowhere on the board they could
+                                            go right now.
                                         </p>
                                         <div className="flex flex-col gap-1">
                                             {state.location_hand.map((key) => {
                                                 const loc =
                                                     locationCatalog[key];
+                                                const playable = placeableCells(
+                                                    state.board,
+                                                ).some((cell) =>
+                                                    locationCostSatisfied(
+                                                        cell,
+                                                        loc,
+                                                        state.board,
+                                                        locationCatalog,
+                                                    ),
+                                                );
                                                 return (
-                                                    <div
+                                                    <button
                                                         key={key}
-                                                        className={`flex items-center gap-2 rounded-md border p-2 text-xs ${
-                                                            selectedLocationKey ===
-                                                            key
-                                                                ? 'border-primary bg-primary/10'
-                                                                : ''
+                                                        type="button"
+                                                        disabled={!playable}
+                                                        onClick={() =>
+                                                            setSelectedLocationKey(
+                                                                selectedLocationKey ===
+                                                                    key
+                                                                    ? null
+                                                                    : key,
+                                                            )
+                                                        }
+                                                        className={`rounded-md border p-2 text-left text-xs ${
+                                                            !playable
+                                                                ? 'cursor-not-allowed bg-muted/50 opacity-50'
+                                                                : selectedLocationKey ===
+                                                                    key
+                                                                  ? 'border-primary bg-primary/10'
+                                                                  : ''
                                                         }`}
                                                     >
-                                                        <button
-                                                            type="button"
-                                                            onClick={() =>
-                                                                setHandInfoKey(
-                                                                    key,
-                                                                )
-                                                            }
-                                                            className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted hover:bg-muted-foreground/20"
-                                                            aria-label={`Inspect ${loc.name}`}
-                                                        >
-                                                            ℹ️
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() =>
-                                                                setSelectedLocationKey(
-                                                                    selectedLocationKey ===
-                                                                        key
-                                                                        ? null
-                                                                        : key,
-                                                                )
-                                                            }
-                                                            className="flex-1 text-left"
-                                                        >
-                                                            <span className="font-medium">
-                                                                {
-                                                                    loc.produces_emoji
-                                                                }{' '}
-                                                                {loc.name}
+                                                        <span className="font-medium">
+                                                            {loc.produces_emoji}{' '}
+                                                            {loc.name}
+                                                        </span>
+                                                        {loc.costs.length >
+                                                            0 && (
+                                                            <span className="block text-muted-foreground">
+                                                                Needs:{' '}
+                                                                {loc.costs.join(
+                                                                    ', ',
+                                                                )}
                                                             </span>
-                                                            {loc.costs.length >
-                                                                0 && (
-                                                                <span className="block text-muted-foreground">
-                                                                    Needs:{' '}
-                                                                    {loc.costs.join(
-                                                                        ', ',
-                                                                    )}
-                                                                </span>
-                                                            )}
-                                                        </button>
-                                                    </div>
+                                                        )}
+                                                        {loc.back_text && (
+                                                            <span className="mt-1 block text-muted-foreground">
+                                                                {loc.back_text}
+                                                            </span>
+                                                        )}
+                                                        <span className="mt-1 block text-muted-foreground">
+                                                            Deals{' '}
+                                                            {loc.relic_count}{' '}
+                                                            face-down Relic
+                                                            {loc.relic_count ===
+                                                            1
+                                                                ? ''
+                                                                : 's'}
+                                                            .
+                                                        </span>
+                                                    </button>
                                                 );
                                             })}
                                         </div>
