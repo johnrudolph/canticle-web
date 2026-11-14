@@ -17,6 +17,23 @@ they're resolved and fold the resolution into my own understanding instead
    the sheet yet? Left unimplemented rather than guessing what a
    Revelation card actually is.
 
+2. **Prohibition of inscribing's grammar is ambiguous about who needs
+   to have it equipped.** Printed as: "Any Wanderer with a Relic or
+   Golem who adds a Glyph to the Golem mat gains 1 Shame token." Does
+   "any Wanderer with a Relic" mean any Wanderer who triggers a
+   Glyph-adding Relic (regardless of whether they have Prohibition of
+   inscribing itself), or does it only apply to Wanderers who have
+   Prohibition of inscribing equipped (which would be an odd way for a
+   card to refer to itself)? Left unimplemented pending which reading
+   is correct, rather than guessing.
+
+3. **Farmer's insight's "double effect" doesn't map onto a concrete
+   mechanic.** Printed as: "Spaces that produce 🌾 have double effect
+   for you." Locations don't have a generic recurring "effect" in the
+   engine beyond satisfying build costs — is this about search draws,
+   some other 🌾-specific interaction, or something not yet in the
+   sheet? Left unimplemented pending what "double effect" means here.
+
 ## Resolved (for my own reference, not standing asks)
 
 - Silent hunting cloak: sheet fixed to "tap its next 2 untapped cards."

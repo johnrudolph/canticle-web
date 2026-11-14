@@ -219,8 +219,8 @@ final class GameEngine
         $cell = self::requireCell($move, 'cell');
         $cellKey = Board::key($cell);
 
-        if ($state->infrastructurePlacedThisTurn >= 2) {
-            throw new InvalidMoveException('Already placed 2 Infrastructure this turn.');
+        if ($state->infrastructurePlacedThisTurn >= self::infrastructureCapThisTurn($state)) {
+            throw new InvalidMoveException('Already placed the maximum Infrastructure this turn.');
         }
 
         if (! array_key_exists($cellKey, $state->board)) {
@@ -254,6 +254,29 @@ final class GameEngine
         return [$state, [
             ['type' => 'infrastructure_placed', 'role_key' => $actorRole, 'payload' => ['infrastructure' => $type, 'cell' => $cell]],
         ]];
+    }
+
+    /**
+     * Builder's gloves: "If you are on a space that produces ⚙️ during
+     * the Emperor's phase, the Emperor may play +1 infrastructure
+     * token." Any Wanderer equipping it on such a space raises the
+     * normal 2-per-turn cap to 3.
+     */
+    private static function infrastructureCapThisTurn(GameState $state): int
+    {
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            if (! in_array('builders-gloves', $state->wanderers[$role]['equipped'], true)) {
+                continue;
+            }
+
+            $location = LocationCatalog::find($state->board[Board::key($cell)]['location_key']);
+
+            if ($location !== null && $location->producesEmoji === '⚙️') {
+                return 3;
+            }
+        }
+
+        return 2;
     }
 
     /**
@@ -340,8 +363,12 @@ final class GameEngine
         }
 
         $relic = RelicCatalog::find($relicKey);
+        // Creative alterations: "Your Relics can go into any slot, and
+        // you can ignore Types" — bypasses the type match, but the
+        // slot itself still has to be one of the 5 real equip slots.
+        $ignoresTypes = in_array('creative-alterations', $wanderer['equipped'], true);
 
-        if ($relic === null || ! self::relicFitsSlot($relic->slot, $slot)) {
+        if ($relic === null || ! array_key_exists($slot, $wanderer['equipped']) || (! $ignoresTypes && ! self::relicFitsSlot($relic->slot, $slot))) {
             throw new InvalidMoveException('That Relic does not fit that slot.');
         }
 
@@ -517,12 +544,64 @@ final class GameEngine
             ['type' => 'relic_used', 'role_key' => $actorRole, 'payload' => ['relic_key' => $relicKey, 'name' => $relic?->name]],
         ];
 
+        $hpBeforeDivineIcon = array_map(fn (array $w) => $w['hp'], $state->wanderers);
+
         [$state, $relicEvents, $trash] = self::resolveRelicAction($state, $actorRole, $baseKey, $relicKey, $move);
         $events = [...$events, ...$relicEvents];
+
+        [$state, $divineIconEvents] = self::applyDivineIconBoost($state, $actorRole, $hpBeforeDivineIcon);
+        $events = [...$events, ...$divineIconEvents];
 
         if ($trash) {
             $state = self::trashEquippedRelic($state, $actorRole, $relicKey);
             $events[] = ['type' => 'relic_trashed', 'role_key' => $actorRole, 'payload' => ['relic_key' => $relicKey]];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Divine Icon: "All 🌿 Relics used in your space by you or your
+     * Allies get +3." Rather than special-casing every heal Relic
+     * individually, this diffs every Wanderer's HP across the whole
+     * use_relic call and adds +3 more to any positive gain — which
+     * only ever happens for a 🌿 effect in the first place, so the
+     * diff alone is enough to find them. Only triggers if the caster
+     * (not the target) shares a space with a Divine Icon holder,
+     * matching "used in your space."
+     *
+     * @param  array<string, int>  $hpBefore
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function applyDivineIconBoost(GameState $state, string $actorRole, array $hpBefore): array
+    {
+        $casterCell = $state->wanderers[$actorRole]['cell'];
+        $casterCellKey = $casterCell === null ? null : Board::key($casterCell);
+        $hasDivineIcon = false;
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            if ($casterCellKey !== null && Board::key($cell) === $casterCellKey && in_array('divine-icon', $state->wanderers[$role]['equipped'], true)) {
+                $hasDivineIcon = true;
+                break;
+            }
+        }
+
+        if (! $hasDivineIcon) {
+            return [$state, []];
+        }
+
+        $events = [];
+
+        foreach ($state->wanderers as $role => $wanderer) {
+            $gained = $wanderer['hp'] - ($hpBefore[$role] ?? $wanderer['hp']);
+
+            if ($gained <= 0) {
+                continue;
+            }
+
+            $hp = min(self::maxHpFor($state, $role), $wanderer['hp'] + 3);
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
+            $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
         }
 
         return [$state, $events];
@@ -919,7 +998,7 @@ final class GameEngine
                 continue;
             }
 
-            $hp = min(15, $state->wanderers[$role]['hp'] + 5);
+            $hp = min(self::maxHpFor($state, $role), $state->wanderers[$role]['hp'] + 5);
             $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
             $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
         }
@@ -959,7 +1038,7 @@ final class GameEngine
                 continue;
             }
 
-            $hp = min(15, $state->wanderers[$role]['hp'] + $amount);
+            $hp = min(self::maxHpFor($state, $role), $state->wanderers[$role]['hp'] + $amount);
             $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
             $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
         }
@@ -974,7 +1053,7 @@ final class GameEngine
     private static function relicHealSelfOrAlly(GameState $state, string $actorRole, array $move, int $amount): array
     {
         $targetRole = self::resolveAllyTarget($state, $actorRole, $move) ?? $actorRole;
-        $hp = min(15, $state->wanderers[$targetRole]['hp'] + $amount);
+        $hp = min(self::maxHpFor($state, $targetRole), $state->wanderers[$targetRole]['hp'] + $amount);
         $state = $state->with(['wanderers' => $state->wanderersWith($targetRole, ['hp' => $hp])]);
 
         return [$state, [['type' => 'wanderer_healed', 'role_key' => $targetRole, 'payload' => ['hp' => $hp]]]];
@@ -1290,8 +1369,12 @@ final class GameEngine
         }
 
         $state = $state->with(['golem' => $state->golemWith(['cell' => $destination])]);
+        $events = [['type' => 'golem_moved', 'role_key' => $actorRole, 'payload' => ['to' => $destination]]];
 
-        return [$state, [['type' => 'golem_moved', 'role_key' => $actorRole, 'payload' => ['to' => $destination]]]];
+        [$state, $e] = self::moveDarkChainsWanderers($state, $golemCell, $destination);
+        $events = [...$events, ...$e];
+
+        return [$state, $events];
     }
 
     /**
@@ -1358,7 +1441,7 @@ final class GameEngine
                 continue;
             }
 
-            $hp = min(15, $state->wanderers[$role]['hp'] + 3);
+            $hp = min(self::maxHpFor($state, $role), $state->wanderers[$role]['hp'] + 3);
             $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
             $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
         }
@@ -1583,7 +1666,7 @@ final class GameEngine
         $events = [];
 
         foreach (self::activeWanderers($state) as $role => $cell) {
-            $hp = min(15, $state->wanderers[$role]['hp'] + 5);
+            $hp = min(self::maxHpFor($state, $role), $state->wanderers[$role]['hp'] + 5);
             $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
             $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
         }
@@ -1623,7 +1706,7 @@ final class GameEngine
                 continue;
             }
 
-            $hp = min(15, $state->wanderers[$role]['hp'] + 4);
+            $hp = min(self::maxHpFor($state, $role), $state->wanderers[$role]['hp'] + 4);
             $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
             $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
         }
@@ -1741,7 +1824,7 @@ final class GameEngine
         }
 
         $targetRole = self::resolveAllyTarget($state, $actorRole, $move) ?? $actorRole;
-        $hp = min(15, $state->wanderers[$targetRole]['hp'] + $amount);
+        $hp = min(self::maxHpFor($state, $targetRole), $state->wanderers[$targetRole]['hp'] + $amount);
         $state = $state->with(['wanderers' => $state->wanderersWith($targetRole, ['hp' => $hp])]);
 
         return [$state, [['type' => 'wanderer_healed', 'role_key' => $targetRole, 'payload' => ['hp' => $hp]]]];
@@ -2026,7 +2109,7 @@ final class GameEngine
                     continue;
                 }
 
-                $hp = min(15, $state->wanderers[$role]['hp'] + $healAmount);
+                $hp = min(self::maxHpFor($state, $role), $state->wanderers[$role]['hp'] + $healAmount);
                 $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
                 $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
             }
@@ -2213,7 +2296,8 @@ final class GameEngine
                 continue;
             }
 
-            $state = self::applyDamage($state, $role, 10);
+            [$state, $damageEvents] = self::applyDamage($state, $role, 10);
+            $events = [...$events, ...$damageEvents];
             $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => 10]];
         }
 
@@ -2419,7 +2503,7 @@ final class GameEngine
             $gained = $wanderer['hp'] - $hpBefore[$role];
 
             if ($gained > 0) {
-                $tripled = min(15, $wanderer['hp'] + 2 * $gained);
+                $tripled = min(self::maxHpFor($state, $role), $wanderer['hp'] + 2 * $gained);
                 $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $tripled])]);
                 $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $tripled]];
             }
@@ -2620,9 +2704,10 @@ final class GameEngine
      * trash themselves (per each one's own printed text).
      *
      * inscribe-7 ("When the Golem hits you, add a 🌑 Glyph...") is a
-     * reactive trigger, not a player-initiated action — there's no
-     * damage-event hook for Relics to react to yet, so it's a no-op
-     * like any other unimplemented Relic.
+     * reactive trigger, not a player-initiated action — it's a no-op
+     * here specifically (nothing to do if someone tries to "use" it
+     * manually); its real behavior fires from applyGolemAttackReactions
+     * whenever the Golem actually damages its holder.
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
      */
@@ -2747,9 +2832,16 @@ final class GameEngine
             return [$state, []];
         }
 
+        $golemCellBefore = $state->golem['cell'];
         $state = $state->with(['golem' => $state->golemWith(['cell' => $casterCell])]);
+        $events = [['type' => 'golem_moved', 'role_key' => null, 'payload' => ['to' => $casterCell]]];
 
-        return [$state, [['type' => 'golem_moved', 'role_key' => null, 'payload' => ['to' => $casterCell]]]];
+        if ($golemCellBefore !== null) {
+            [$state, $e] = self::moveDarkChainsWanderers($state, $golemCellBefore, $casterCell);
+            $events = [...$events, ...$e];
+        }
+
+        return [$state, $events];
     }
 
     /**
@@ -2800,6 +2892,15 @@ final class GameEngine
     }
 
     /**
+     * Dark limitations: "Your Health can never exceed 5." Every heal
+     * site caps at this instead of the usual 15.
+     */
+    private static function maxHpFor(GameState $state, string $role): int
+    {
+        return in_array('dark-limitations', $state->wanderers[$role]['equipped'], true) ? 5 : 15;
+    }
+
+    /**
      * Covers Emperor-phase steps 4 (discard) and 5 (draw back to 5) in one
      * action, then hands off to the Wanderer phase. Relic dealing (step 2)
      * happens automatically in playLocation() rather than as a separate
@@ -2830,7 +2931,7 @@ final class GameEngine
 
         $wandererOrder = RoleKeys::wanderers($state->wandererCount);
         $firstRole = $wandererOrder[0];
-        $actionsPerTurn = $state->actionsPerWandererTurn();
+        $actionsPerTurn = self::turnStartActions($state, $firstRole);
 
         $wanderers = $state->wanderers;
         $wanderers[$firstRole] = [...$wanderers[$firstRole], 'actions_remaining' => $actionsPerTurn, 'move_blocked_this_turn' => false];
@@ -2911,6 +3012,12 @@ final class GameEngine
             $events[] = ['type' => 'fruit_tree_bonus_action', 'role_key' => $actorRole, 'payload' => []];
         }
 
+        if (in_array('monolith_shard', $destinationInfrastructure, true) && in_array('rejuvenation-gown', $wanderer['equipped'], true)) {
+            $hp = min(self::maxHpFor($state, $actorRole), $state->wanderers[$actorRole]['hp'] + 2);
+            $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['hp' => $hp])]);
+            $events[] = ['type' => 'wanderer_healed', 'role_key' => $actorRole, 'payload' => ['hp' => $hp]];
+        }
+
         return [$state, $events];
     }
 
@@ -2925,7 +3032,7 @@ final class GameEngine
 
         if ($nextIndex < count($state->wandererOrder)) {
             $nextRole = $state->wandererOrder[$nextIndex];
-            $actionsPerTurn = $state->actionsPerWandererTurn();
+            $actionsPerTurn = self::turnStartActions($state, $nextRole);
 
             $wanderers = $state->wanderers;
             $wanderers[$nextRole] = [...$wanderers[$nextRole], 'actions_remaining' => $actionsPerTurn, 'move_blocked_this_turn' => false];
@@ -2938,6 +3045,29 @@ final class GameEngine
         }
 
         return self::endRound($state);
+    }
+
+    /**
+     * Union Garb: "If you begin your turn on a space with another
+     * Wanderer, +1 Action." Checked wherever a Wanderer's
+     * actions_remaining is set back to the full per-turn amount.
+     */
+    private static function turnStartActions(GameState $state, string $role): int
+    {
+        $actionsPerTurn = $state->actionsPerWandererTurn();
+        $cell = $state->wanderers[$role]['cell'];
+
+        if ($cell === null || ! in_array('union-garb', $state->wanderers[$role]['equipped'], true)) {
+            return $actionsPerTurn;
+        }
+
+        foreach (self::activeWanderers($state) as $otherRole => $otherCell) {
+            if ($otherRole !== $role && Board::key($otherCell) === Board::key($cell)) {
+                return $actionsPerTurn + 1;
+            }
+        }
+
+        return $actionsPerTurn;
     }
 
     /**
@@ -3225,7 +3355,8 @@ final class GameEngine
                     $shame = self::countStatusTokens($state->wanderers[$target]['equipped'], 'shame_token');
 
                     if ($shame > 0) {
-                        $state = self::applyDamage($state, $target, 3 * $shame);
+                        [$state, $damageEvents] = self::applyDamage($state, $target, 3 * $shame, true);
+                        $events = [...$events, ...$damageEvents];
                         $events[] = ['type' => 'wanderer_damaged', 'role_key' => $target, 'payload' => ['amount' => 3 * $shame]];
                     }
                 }
@@ -3239,7 +3370,8 @@ final class GameEngine
                         continue;
                     }
 
-                    $state = self::applyDamage($state, $role, 2 * $shame);
+                    [$state, $damageEvents] = self::applyDamage($state, $role, 2 * $shame, true);
+                    $events = [...$events, ...$damageEvents];
                     $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => 2 * $shame]];
                 }
                 break;
@@ -3362,8 +3494,38 @@ final class GameEngine
         $destination = $steps[array_key_last($steps)];
 
         $state = $state->with(['golem' => $state->golemWith(['cell' => $destination])]);
+        $events = [['type' => 'golem_moved', 'role_key' => null, 'payload' => ['to' => $destination]]];
 
-        return [$state, [['type' => 'golem_moved', 'role_key' => null, 'payload' => ['to' => $destination]]]];
+        [$state, $e] = self::moveDarkChainsWanderers($state, $golemCell, $destination);
+        $events = [...$events, ...$e];
+
+        return [$state, $events];
+    }
+
+    /**
+     * Dark chains: "If you are on the Golem's space when it moves, you
+     * must move with it." Checked after every real Golem movement
+     * (not removal/teleport-to-nowhere, like Poof).
+     *
+     * @param  array{0: int, 1: int}  $fromCell
+     * @param  array{0: int, 1: int}  $toCell
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function moveDarkChainsWanderers(GameState $state, array $fromCell, array $toCell): array
+    {
+        $fromKey = Board::key($fromCell);
+        $events = [];
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            if (Board::key($cell) !== $fromKey || ! in_array('dark-chains', $state->wanderers[$role]['equipped'], true)) {
+                continue;
+            }
+
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['cell' => $toCell])]);
+            $events[] = ['type' => 'wanderer_moved', 'role_key' => $role, 'payload' => ['to' => $toCell, 'forced' => true]];
+        }
+
+        return [$state, $events];
     }
 
     /**
@@ -3489,7 +3651,8 @@ final class GameEngine
             }
 
             $hpBefore = $state->wanderers[$role]['hp'];
-            $state = self::applyDamage($state, $role, 3);
+            [$state, $damageEvents] = self::applyDamage($state, $role, 3, true);
+            $events = [...$events, ...$damageEvents];
             $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => 3]];
 
             if ($hpBefore > 0) {
@@ -3518,7 +3681,8 @@ final class GameEngine
             }
 
             $hpBefore = $state->wanderers[$role]['hp'];
-            $state = self::applyDamage($state, $role, 5);
+            [$state, $damageEvents] = self::applyDamage($state, $role, 5, true);
+            $events = [...$events, ...$damageEvents];
             $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => 5]];
 
             if ($hpBefore > 0) {
@@ -3554,7 +3718,8 @@ final class GameEngine
                 $count += count(array_filter($neighborEntry['infrastructure'], fn (string $i) => $i === 'monolith_shard'));
             }
 
-            $state = self::applyDamage($state, $role, $count);
+            [$state, $damageEvents] = self::applyDamage($state, $role, $count, true);
+            $events = [...$events, ...$damageEvents];
             $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => $count]];
         }
 
@@ -3586,7 +3751,8 @@ final class GameEngine
                     continue;
                 }
 
-                $state = self::applyDamage($state, $role, 2);
+                [$state, $damageEvents] = self::applyDamage($state, $role, 2, true);
+                $events = [...$events, ...$damageEvents];
                 $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => 2]];
             }
         }
@@ -3629,7 +3795,8 @@ final class GameEngine
                 continue;
             }
 
-            $state = self::applyDamage($state, $role, 3);
+            [$state, $damageEvents] = self::applyDamage($state, $role, 3, true);
+            $events = [...$events, ...$damageEvents];
             $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => 3]];
             $affectedRoles[] = $role;
         }
@@ -3708,7 +3875,7 @@ final class GameEngine
             $events[] = ['type' => 'infrastructure_removed', 'role_key' => null, 'payload' => ['cell' => $target, 'infrastructure_type' => 'monolith_shard']];
         }
 
-        [$state, $damageEvents] = self::damageWanderersAt($state, [$target, ...Board::occupiedNeighbors($target, $state->board)], 2);
+        [$state, $damageEvents] = self::damageWanderersAt($state, [$target, ...Board::occupiedNeighbors($target, $state->board)], 2, true);
         $events = [...$events, ...$damageEvents];
 
         return [$state, $events];
@@ -3760,7 +3927,7 @@ final class GameEngine
         }
 
         if ($bestWall !== null) {
-            [$state, $damageEvents] = self::damageWanderersAt($state, Board::occupiedNeighbors($bestWall, $state->board), 4);
+            [$state, $damageEvents] = self::damageWanderersAt($state, Board::occupiedNeighbors($bestWall, $state->board), 4, true);
             $events = [...$events, ...$damageEvents];
         }
 
@@ -3796,7 +3963,7 @@ final class GameEngine
             $events[] = ['type' => 'wanderer_moved', 'role_key' => $role, 'payload' => ['to' => $destination, 'forced' => true]];
         }
 
-        [$state, $damageEvents] = self::damageWanderersAt($state, [$golemCell], 3);
+        [$state, $damageEvents] = self::damageWanderersAt($state, [$golemCell], 3, true);
         $events = [...$events, ...$damageEvents];
 
         return [$state, $events];
@@ -3844,11 +4011,13 @@ final class GameEngine
             return [$state, $events];
         }
 
-        $state = self::applyDamage($state, $target, 5);
+        [$state, $damageEvents] = self::applyDamage($state, $target, 5, true);
+        $events = [...$events, ...$damageEvents];
         $events[] = ['type' => 'wanderer_damaged', 'role_key' => $target, 'payload' => ['amount' => 5]];
 
         foreach ($allies as $role) {
-            $state = self::applyDamage($state, $role, 5);
+            [$state, $damageEvents] = self::applyDamage($state, $role, 5, true);
+            $events = [...$events, ...$damageEvents];
             $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => 5]];
         }
 
@@ -3866,7 +4035,7 @@ final class GameEngine
             return [$state, []];
         }
 
-        return self::damageWanderersAt($state, [$golemCell], $damage);
+        return self::damageWanderersAt($state, [$golemCell], $damage, true);
     }
 
     /**
@@ -3882,7 +4051,7 @@ final class GameEngine
 
         $cells = Board::cellsWithinDistance($golemCell, $distance, $state->board);
 
-        return self::damageWanderersAt($state, $cells, $damage);
+        return self::damageWanderersAt($state, $cells, $damage, true);
     }
 
     /**
@@ -3893,7 +4062,8 @@ final class GameEngine
         $events = [];
 
         foreach (self::activeWanderers($state) as $role => $cell) {
-            $state = self::applyDamage($state, $role, $damage);
+            [$state, $damageEvents] = self::applyDamage($state, $role, $damage, true);
+            $events = [...$events, ...$damageEvents];
             $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => $damage]];
         }
 
@@ -3920,7 +4090,8 @@ final class GameEngine
             }
 
             foreach ($roles as $role) {
-                $state = self::applyDamage($state, $role, $damage);
+                [$state, $damageEvents] = self::applyDamage($state, $role, $damage, true);
+                $events = [...$events, ...$damageEvents];
                 $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => $damage]];
             }
         }
@@ -3964,7 +4135,7 @@ final class GameEngine
      * @param  list<array{0: int, 1: int}>  $cells
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
-    private static function damageWanderersAt(GameState $state, array $cells, int $damage): array
+    private static function damageWanderersAt(GameState $state, array $cells, int $damage, bool $isGolemAttack = false): array
     {
         $cellKeys = array_map(Board::key(...), $cells);
         $events = [];
@@ -3974,18 +4145,128 @@ final class GameEngine
                 continue;
             }
 
-            $state = self::applyDamage($state, $role, $damage);
+            [$state, $damageEvents] = self::applyDamage($state, $role, $damage, $isGolemAttack);
+            $events = [...$events, ...$damageEvents];
             $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => $damage]];
         }
 
         return [$state, $events];
     }
 
-    private static function applyDamage(GameState $state, string $role, int $damage): GameState
+    /**
+     * Applies damage, honoring Dark sacrifice's "reduce incoming
+     * damage by 1 per equipped Dark Relic" and Cabalist wraps' "never
+     * become exhausted — stay at 1, Allies nearby lose 5, Golem taps
+     * 2" save. $isGolemAttack additionally triggers every passive
+     * Relic keyed off "when/after the Golem 👊 you" specifically (not
+     * damage from any other source, like a Wanderer's own Relic).
+     * Returns any extra events those passive Relics caused, to merge
+     * into the caller's own event list alongside its own
+     * 'wanderer_damaged' event.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function applyDamage(GameState $state, string $role, int $damage, bool $isGolemAttack = false): array
     {
-        $hp = max(0, $state->wanderers[$role]['hp'] - $damage);
+        $equipped = $state->wanderers[$role]['equipped'];
+        $darkCount = count(array_filter(
+            $equipped,
+            fn (mixed $key) => is_string($key) && str_starts_with((string) RelicCatalog::find($key)?->name, 'Dark')
+        ));
+        $damage = max(0, $damage - $darkCount);
 
-        return $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
+        $hpBefore = $state->wanderers[$role]['hp'];
+        $hp = max(0, $hpBefore - $damage);
+        $events = [];
+
+        if ($hp <= 0 && $hpBefore > 0 && in_array('cabalist-wraps', $equipped, true)) {
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => 1])]);
+            $events[] = ['type' => 'cabalist_wraps_triggered', 'role_key' => $role, 'payload' => []];
+
+            $cell = $state->wanderers[$role]['cell'];
+            $nearbyKeys = $cell === null
+                ? []
+                : [Board::key($cell), ...array_map(Board::key(...), Board::occupiedNeighbors($cell, $state->board))];
+
+            foreach (self::activeWanderers($state) as $otherRole => $otherCell) {
+                if ($otherRole === $role || ! in_array(Board::key($otherCell), $nearbyKeys, true)) {
+                    continue;
+                }
+
+                $otherHp = max(0, $state->wanderers[$otherRole]['hp'] - 5);
+                $state = $state->with(['wanderers' => $state->wanderersWith($otherRole, ['hp' => $otherHp])]);
+                $events[] = ['type' => 'wanderer_damaged', 'role_key' => $otherRole, 'payload' => ['amount' => 5]];
+            }
+
+            [$state, $tapEvents] = self::tapGolemDrawPile($state, 2);
+            $events = [...$events, ...$tapEvents];
+        } else {
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
+        }
+
+        if ($isGolemAttack) {
+            [$state, $reactiveEvents] = self::applyGolemAttackReactions($state, $role);
+            $events = [...$events, ...$reactiveEvents];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Every passive Relic keyed off "when/after the Golem 👊 you":
+     * Poison Blouse (tap its next draw pile card), Divine Poison
+     * Inversion (heal 2), inscribe-7 (add a 🌑 Glyph, then trash), and
+     * Buckler (immediately use the Action in your other 🖐️ Hand for
+     * free — no action cost, no target_role, since there's no
+     * decision UI to supply either).
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function applyGolemAttackReactions(GameState $state, string $role): array
+    {
+        $equipped = $state->wanderers[$role]['equipped'];
+        $events = [];
+
+        if (in_array('poison-blouse', $equipped, true)) {
+            [$state, $e] = self::tapGolemDrawPile($state, 1);
+            $events = [...$events, ...$e];
+        }
+
+        if (in_array('divine-poison-inversion', $equipped, true)) {
+            $hp = min(self::maxHpFor($state, $role), $state->wanderers[$role]['hp'] + 2);
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
+            $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
+        }
+
+        if (in_array('inscribe-7', $equipped, true)) {
+            [$state, $e] = self::addGlyphOfType($state, '🌑');
+            $events = [...$events, ...$e];
+
+            if ($e !== []) {
+                $state = self::trashEquippedRelic($state, $role, 'inscribe-7');
+                $events[] = ['type' => 'relic_trashed', 'role_key' => $role, 'payload' => ['relic_key' => 'inscribe-7']];
+            }
+        }
+
+        $bucklerSlot = array_search('buckler', $equipped, true);
+
+        if ($bucklerSlot === 'hand_left' || $bucklerSlot === 'hand_right') {
+            $otherHandSlot = $bucklerSlot === 'hand_left' ? 'hand_right' : 'hand_left';
+            $otherRelicKey = $equipped[$otherHandSlot];
+
+            if ($otherRelicKey !== null && ! self::isStatusToken($otherRelicKey)) {
+                $otherBaseKey = (string) preg_replace('/-\d+$/', '', $otherRelicKey);
+                [$state, $innerEvents, $innerTrash] = self::resolveRelicAction($state, $role, $otherBaseKey, $otherRelicKey, []);
+                $events = [...$events, ...$innerEvents];
+
+                if ($innerTrash) {
+                    $state = self::trashEquippedRelic($state, $role, $otherRelicKey);
+                    $events[] = ['type' => 'relic_trashed', 'role_key' => $role, 'payload' => ['relic_key' => $otherRelicKey]];
+                }
+            }
+        }
+
+        return [$state, $events];
     }
 
     /**
@@ -4246,7 +4527,7 @@ final class GameEngine
             throw new InvalidMoveException('No actions remaining this turn.');
         }
 
-        $hp = min(15, $wanderer['hp'] + 2);
+        $hp = min(self::maxHpFor($state, $actorRole), $wanderer['hp'] + 2);
         $wanderers = $state->wanderersWith($actorRole, [
             'hp' => $hp,
             'actions_remaining' => $wanderer['actions_remaining'] - 1,
@@ -4307,6 +4588,11 @@ final class GameEngine
     private static function applyStatusToken(GameState $state, string $targetRole, string $token): array
     {
         $equipped = $state->wanderers[$targetRole]['equipped'];
+
+        // Shamlessness: "Ignore all cards that tell you to gain Shame tokens."
+        if ($token === 'shame_token' && in_array('shamlessness', $equipped, true)) {
+            return [$state, []];
+        }
 
         if ($token === 'shame_token' && self::countStatusTokens($equipped, 'shame_token') >= 3) {
             return [$state, []];

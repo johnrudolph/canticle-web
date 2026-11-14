@@ -332,7 +332,7 @@ test('placing Infrastructure decrements the pool and is capped at 2 per turn', f
         ->and($state->infrastructurePlacedThisTurn)->toBe(2);
 
     GameEngine::apply($state, 'emperor', ['type' => 'place_infrastructure', 'infrastructure_type' => 'walls', 'cell' => [1, 0]]);
-})->throws(InvalidMoveException::class, 'Already placed 2 Infrastructure this turn.');
+})->throws(InvalidMoveException::class, 'Already placed the maximum Infrastructure this turn.');
 
 test('only 1 Monolith Shard may be placed per space', function () {
     $state = startedGame();
