@@ -195,9 +195,38 @@ final class GameEngine
 
         $state = $state->with(['board' => $board, 'locationHand' => $hand, 'relicDecks' => $relicDecks]);
 
-        return [$state, [
+        $events = [
             ['type' => 'location_played', 'role_key' => $actorRole, 'payload' => ['location_key' => $locationKey, 'cell' => $cell]],
-        ]];
+        ];
+
+        // Scriptorium: "When building this: Move all Monolith Shards to
+        // the Emperor's infrastructure pool."
+        if ($locationKey === 'scriptorium') {
+            $board = $state->board;
+            $pool = $state->infrastructurePool;
+            $returned = 0;
+
+            foreach ($board as $key => $entry) {
+                $index = array_search('monolith_shard', $entry['infrastructure'], true);
+
+                while ($index !== false) {
+                    $infrastructure = $board[$key]['infrastructure'];
+                    unset($infrastructure[$index]);
+                    $board[$key] = [...$board[$key], 'infrastructure' => array_values($infrastructure)];
+                    $pool['monolith_shard']++;
+                    $returned++;
+                    $index = array_search('monolith_shard', $board[$key]['infrastructure'], true);
+                }
+            }
+
+            $state = $state->with(['board' => $board, 'infrastructurePool' => $pool]);
+
+            if ($returned > 0) {
+                $events[] = ['type' => 'infrastructure_returned', 'role_key' => null, 'payload' => ['count' => $returned, 'infrastructure' => 'monolith_shard']];
+            }
+        }
+
+        return [$state, $events];
     }
 
     /**
@@ -2991,6 +3020,12 @@ final class GameEngine
             throw new InvalidMoveException('Wanderers must always be on a Location.');
         }
 
+        // Catacombs: "A Wanderer can only enter this space if they were
+        // exhausted earlier in the game."
+        if ($state->board[$toKey]['location_key'] === 'catacombs' && ! $wanderer['was_ever_exhausted']) {
+            throw new InvalidMoveException('Catacombs: only a Wanderer who has been exhausted before may enter.');
+        }
+
         $destinationInfrastructure = $state->board[$toKey]['infrastructure'];
         $actionsRemaining = $wanderer['actions_remaining'] - ($freeMove ? 0 : 1);
 
@@ -3018,6 +3053,16 @@ final class GameEngine
             $events[] = ['type' => 'wanderer_healed', 'role_key' => $actorRole, 'payload' => ['hp' => $hp]];
         }
 
+        // Beds of poison: "If a Wanderer enters this space for any
+        // reason (even if they are just passing through while moving),
+        // they lose 5 Health." Every step of movement is its own
+        // moveWanderer call, so "passing through" is already covered.
+        if ($state->board[$toKey]['location_key'] === 'beds-of-poison') {
+            [$state, $damageEvents] = self::applyDamage($state, $actorRole, 5);
+            $events = [...$events, ...$damageEvents];
+            $events[] = ['type' => 'wanderer_damaged', 'role_key' => $actorRole, 'payload' => ['amount' => 5]];
+        }
+
         return [$state, $events];
     }
 
@@ -3027,6 +3072,17 @@ final class GameEngine
     private static function endWandererTurn(GameState $state, string $actorRole): array
     {
         self::requireRole($state, $actorRole, $state->activeWandererRole(), 'wanderer');
+
+        $events = [];
+
+        // Medicinal herb garden: "Ongoing: If Wanderers end their turn
+        // here, 🌿5 at the end of their turn."
+        $actorCell = $state->wanderers[$actorRole]['cell'];
+        if ($actorCell !== null && $state->board[Board::key($actorCell)]['location_key'] === 'medicinal-herb-garden') {
+            $hp = min(self::maxHpFor($state, $actorRole), $state->wanderers[$actorRole]['hp'] + 5);
+            $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['hp' => $hp])]);
+            $events[] = ['type' => 'wanderer_healed', 'role_key' => $actorRole, 'payload' => ['hp' => $hp]];
+        }
 
         $nextIndex = $state->activeWandererIndex + 1;
 
@@ -3040,11 +3096,14 @@ final class GameEngine
             $state = $state->with(['wanderers' => $wanderers, 'activeWandererIndex' => $nextIndex]);
 
             return [$state, [
+                ...$events,
                 ['type' => 'wanderer_turn_started', 'role_key' => $nextRole, 'payload' => ['actions' => $actionsPerTurn]],
             ]];
         }
 
-        return self::endRound($state);
+        [$state, $endRoundEvents] = self::endRound($state);
+
+        return [$state, [...$events, ...$endRoundEvents]];
     }
 
     /**
@@ -4202,6 +4261,14 @@ final class GameEngine
             $events = [...$events, ...$tapEvents];
         } else {
             $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
+
+            // Catacombs: "A Wanderer can only enter this space if they
+            // were exhausted earlier in the game." Cabalist wraps
+            // explicitly prevents "becoming exhausted," so that branch
+            // doesn't set this.
+            if ($hp === 0) {
+                $state = $state->with(['wanderers' => $state->wanderersWith($role, ['was_ever_exhausted' => true])]);
+            }
         }
 
         if ($isGolemAttack) {

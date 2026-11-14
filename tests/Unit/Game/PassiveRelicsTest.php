@@ -68,7 +68,9 @@ test('Dark limitations caps Health at 5 for every heal', function () {
 test('Rejuvenation gown heals 2 when entering a Monolith Shard space', function () {
     $state = startedGame();
     $board = $state->board;
-    $board['2,0'] = [...$board['2,0'], 'infrastructure' => ['monolith_shard']];
+    // Pin the destination's Location explicitly — a real random board
+    // could otherwise deal Catacombs there, which blocks entry outright.
+    $board['2,0'] = [...$board['2,0'], 'location_key' => 'artists-hovel', 'infrastructure' => ['monolith_shard']];
     $state = $state->with(['board' => $board]);
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'rejuvenation-gown'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 10])]);

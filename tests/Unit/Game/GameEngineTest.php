@@ -18,6 +18,19 @@ function startedGame(): GameState
 {
     $state = GameSetup::create(2);
 
+    // The 6 starting Locations are dealt randomly — swap out any that
+    // would make ordinary movement/positioning in tests nondeterministic
+    // (Catacombs blocks entry outright; Beds of poison deals surprise
+    // damage on entry) for a neutral stand-in. Tests that specifically
+    // want one of these set board[...]['location_key'] explicitly anyway.
+    $board = $state->board;
+    foreach ($board as $key => $entry) {
+        if (in_array($entry['location_key'], ['catacombs', 'beds-of-poison'], true)) {
+            $board[$key] = [...$entry, 'location_key' => 'artists-hovel'];
+        }
+    }
+    $state = $state->with(['board' => $board]);
+
     foreach (RoleKeys::wanderers(2) as $role) {
         [$state] = GameEngine::apply($state, $role, ['type' => 'choose_starting_cell', 'cell' => [1, 0]]);
     }

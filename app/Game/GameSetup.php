@@ -55,6 +55,7 @@ final class GameSetup
                 'free_move_available' => false,
                 'move_blocked_this_turn' => false,
                 'tucked_cards' => [],
+                'was_ever_exhausted' => false,
             ];
         }
 
