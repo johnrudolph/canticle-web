@@ -370,6 +370,48 @@ test('placing Infrastructure decrements the pool and is capped at 2 per turn', f
     GameEngine::apply($state, 'emperor', ['type' => 'place_infrastructure', 'infrastructure_type' => 'walls', 'cell' => [1, 0]]);
 })->throws(InvalidMoveException::class, 'Already placed the maximum Infrastructure this turn.');
 
+test('undo_infrastructure_placement reverts the most recent placement this turn', function () {
+    $state = startedGame();
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'place_infrastructure', 'infrastructure_type' => 'road', 'cell' => [1, 0]]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'place_infrastructure', 'infrastructure_type' => 'fruit_tree', 'cell' => [0, 1]]);
+
+    [$state, $events] = GameEngine::apply($state, 'emperor', ['type' => 'undo_infrastructure_placement']);
+
+    expect($state->board['0,1']['infrastructure'])->not->toContain('fruit_tree')
+        ->and($state->infrastructurePool['fruit_tree'])->toBe(2)
+        ->and($state->infrastructurePlacedThisTurn)->toBe(1)
+        ->and($state->board['1,0']['infrastructure'])->toContain('road') // the earlier placement is untouched
+        ->and(collect($events)->pluck('type'))->toContain('infrastructure_placement_undone');
+
+    // Undoing again reverts the first placement too.
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'undo_infrastructure_placement']);
+    expect($state->board['1,0']['infrastructure'])->not->toContain('road')
+        ->and($state->infrastructurePlacedThisTurn)->toBe(0);
+});
+
+test('undo_infrastructure_placement with nothing to undo throws', function () {
+    $state = startedGame();
+
+    GameEngine::apply($state, 'emperor', ['type' => 'undo_infrastructure_placement']);
+})->throws(InvalidMoveException::class, 'Nothing to undo this turn.');
+
+test('undo_infrastructure_placement cannot reach into a previous round\'s placements', function () {
+    $state = startedGame();
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'place_infrastructure', 'infrastructure_type' => 'road', 'cell' => [1, 0]]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    // Fast-forward through the Wanderer phase into the next round's
+    // Emperor phase without touching Infrastructure.
+    foreach (RoleKeys::wanderers(2) as $role) {
+        [$state] = GameEngine::apply($state, $role, ['type' => 'end_wanderer_turn']);
+    }
+
+    expect($state->round)->toBe(2)
+        ->and($state->infrastructurePlacedThisTurnLog)->toBe([]);
+
+    GameEngine::apply($state, 'emperor', ['type' => 'undo_infrastructure_placement']);
+})->throws(InvalidMoveException::class, 'Nothing to undo this turn.');
+
 test('only 1 Monolith Shard may be placed per space', function () {
     $state = startedGame();
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'place_infrastructure', 'infrastructure_type' => 'monolith_shard', 'cell' => [1, 0]]);

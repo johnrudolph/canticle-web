@@ -69,6 +69,10 @@ export interface GameStateDto {
     golem_cards_this_round: number;
     infrastructure_pool: Record<InfrastructureType, number>;
     infrastructure_placed_this_turn: number;
+    infrastructure_placed_this_turn_log: {
+        cell: [number, number];
+        type: InfrastructureType;
+    }[];
     prophecy: number;
     golem_skipped: boolean;
     outcome: 'elite_victory' | 'simple_victory' | 'defeat' | null;

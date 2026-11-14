@@ -742,6 +742,35 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                             ))}
                                         </div>
 
+                                        {state
+                                            .infrastructure_placed_this_turn_log
+                                            .length > 0 && (
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="mt-2 w-full"
+                                                disabled={processing}
+                                                onClick={() =>
+                                                    submitMove('emperor', {
+                                                        type: 'undo_infrastructure_placement',
+                                                    })
+                                                }
+                                            >
+                                                ↩️ Undo last placement (
+                                                {
+                                                    INFRASTRUCTURE_LABELS[
+                                                        state
+                                                            .infrastructure_placed_this_turn_log[
+                                                            state
+                                                                .infrastructure_placed_this_turn_log
+                                                                .length - 1
+                                                        ].type
+                                                    ]
+                                                }
+                                                )
+                                            </Button>
+                                        )}
+
                                         <div className="mt-3 flex gap-2">
                                             <Button
                                                 variant="outline"

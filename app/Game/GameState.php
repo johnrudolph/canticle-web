@@ -97,6 +97,7 @@ final readonly class GameState
      * @param  list<string>  $wandererOrder
      * @param  list<string>  $glyphDiscardPile
      * @param  list<string>  $trashedRelics
+     * @param  list<array{cell: array{0: int, 1: int}, type: string}>  $infrastructurePlacedThisTurnLog
      */
     public function __construct(
         public int $wandererCount,
@@ -120,6 +121,7 @@ final readonly class GameState
         public array $glyphDiscardPile = [],
         public bool $golemSkipped = false, // Poof: "Skip the Golem phase for the rest of the game."
         public array $trashedRelics = [], // every Relic ever trashed (not dropped) — Re-creation draws from this
+        public array $infrastructurePlacedThisTurnLog = [], // undo_infrastructure_placement pops from the end of this; cleared whenever infrastructurePlacedThisTurn itself resets (new round)
     ) {}
 
     /**
@@ -251,6 +253,7 @@ final readonly class GameState
             'golem_cards_this_round' => $this->golemCardsThisRound(),
             'infrastructure_pool' => $this->infrastructurePool,
             'infrastructure_placed_this_turn' => $this->infrastructurePlacedThisTurn,
+            'infrastructure_placed_this_turn_log' => $this->infrastructurePlacedThisTurnLog,
             'prophecy' => $this->prophecy,
             'golem_skipped' => $this->golemSkipped,
             'outcome' => $this->phase === 'finished' ? $this->outcome() : null,

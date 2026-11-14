@@ -43,6 +43,7 @@ final class GameEngine
             'choose_golem_cell' => self::chooseGolemCell($state, $actorRole, $move),
             'play_location' => self::playLocation($state, $actorRole, $move),
             'place_infrastructure' => self::placeInfrastructure($state, $actorRole, $move),
+            'undo_infrastructure_placement' => self::undoInfrastructurePlacement($state, $actorRole),
             'end_emperor_phase' => self::endEmperorPhase($state, $actorRole, $move),
             'move_wanderer' => self::moveWanderer($state, $actorRole, $move),
             'search_location' => self::searchLocation($state, $actorRole, $move),
@@ -298,10 +299,59 @@ final class GameEngine
             'board' => $board,
             'infrastructurePool' => $pool,
             'infrastructurePlacedThisTurn' => $state->infrastructurePlacedThisTurn + 1,
+            'infrastructurePlacedThisTurnLog' => [...$state->infrastructurePlacedThisTurnLog, ['cell' => $cell, 'type' => $type]],
         ]);
 
         return [$state, [
             ['type' => 'infrastructure_placed', 'role_key' => $actorRole, 'payload' => ['infrastructure' => $type, 'cell' => $cell]],
+        ]];
+    }
+
+    /**
+     * Undoes the Emperor's own most recent Infrastructure placement
+     * this turn — "I meant to put that Road somewhere else." Only ever
+     * pops from infrastructurePlacedThisTurnLog, which is cleared
+     * whenever infrastructurePlacedThisTurn itself resets (a new
+     * round's Emperor phase) — so this can never reach back into an
+     * earlier turn's placements, only the current one's.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function undoInfrastructurePlacement(GameState $state, string $actorRole): array
+    {
+        self::requireRole($state, $actorRole, RoleKeys::EMPEROR, 'emperor');
+
+        $log = $state->infrastructurePlacedThisTurnLog;
+
+        if ($log === []) {
+            throw new InvalidMoveException('Nothing to undo this turn.');
+        }
+
+        $last = array_pop($log);
+        $cellKey = Board::key($last['cell']);
+
+        $infrastructure = $state->board[$cellKey]['infrastructure'];
+        $index = array_search($last['type'], $infrastructure, true);
+
+        if ($index !== false) {
+            unset($infrastructure[$index]);
+        }
+
+        $board = $state->board;
+        $board[$cellKey] = [...$board[$cellKey], 'infrastructure' => array_values($infrastructure)];
+
+        $pool = $state->infrastructurePool;
+        $pool[$last['type']]++;
+
+        $state = $state->with([
+            'board' => $board,
+            'infrastructurePool' => $pool,
+            'infrastructurePlacedThisTurn' => max(0, $state->infrastructurePlacedThisTurn - 1),
+            'infrastructurePlacedThisTurnLog' => $log,
+        ]);
+
+        return [$state, [
+            ['type' => 'infrastructure_placement_undone', 'role_key' => $actorRole, 'payload' => ['infrastructure' => $last['type'], 'cell' => $last['cell']]],
         ]];
     }
 
@@ -3752,6 +3802,7 @@ final class GameEngine
             'phase' => 'emperor',
             'activeWandererIndex' => null,
             'infrastructurePlacedThisTurn' => 0,
+            'infrastructurePlacedThisTurnLog' => [],
             'wanderers' => $wanderers,
         ]);
         $events[] = ['type' => 'round_started', 'role_key' => null, 'payload' => ['round' => $nextRound]];

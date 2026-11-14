@@ -87,6 +87,7 @@ final class GameStateRepository
             glyphDiscardPile: $data['glyph_discard_pile'] ?? [],
             golemSkipped: $data['golem_skipped'] ?? false,
             trashedRelics: $data['trashed_relics'] ?? [],
+            infrastructurePlacedThisTurnLog: $data['infrastructure_placed_this_turn_log'] ?? [],
         );
     }
 
@@ -117,6 +118,7 @@ final class GameStateRepository
                 'glyph_discard_pile' => $state->glyphDiscardPile,
                 'golem_skipped' => $state->golemSkipped,
                 'trashed_relics' => $state->trashedRelics,
+                'infrastructure_placed_this_turn_log' => $state->infrastructurePlacedThisTurnLog,
             ],
         ]);
     }
