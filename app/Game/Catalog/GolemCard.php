@@ -14,4 +14,15 @@ final class GolemCard
         public readonly string $name,
         public readonly string $action,
     ) {}
+
+    /**
+     * @return array{name: string, action: string}
+     */
+    public function toArray(): array
+    {
+        return [
+            'name' => $this->name,
+            'action' => $this->action,
+        ];
+    }
 }

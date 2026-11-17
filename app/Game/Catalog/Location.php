@@ -29,7 +29,7 @@ final class Location
     ) {}
 
     /**
-     * @return array<string, mixed>
+     * @return array{key: string, name: string, lore: string, back_text: ?string, produces: ?string, produces_emoji: ?string, costs: list<string>, relic_count: int}
      */
     public function toArray(): array
     {

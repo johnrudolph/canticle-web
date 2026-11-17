@@ -19,8 +19,7 @@ final class GlyphCatalog
         }
 
         $path = config('canticle.output_path').'/glyphs.json';
-        $contents = file_get_contents($path) ?: throw new \RuntimeException("Could not read {$path}");
-        $rows = json_decode($contents, true, flags: JSON_THROW_ON_ERROR);
+        $rows = CatalogFile::readJson($path);
 
         $glyphs = [];
         $seenSlugs = [];

@@ -194,40 +194,22 @@ class GameController extends Controller
     }
 
     /**
-     * @return array<string, array{name: string, lore: string, back_text: ?string, produces: ?string, produces_emoji: ?string, costs: list<string>, relic_count: int}>
+     * @return array<string, array{key: string, name: string, lore: string, back_text: ?string, produces: ?string, produces_emoji: ?string, costs: list<string>, relic_count: int}>
      */
     private function locationCatalog(): array
     {
         return collect(LocationCatalog::all())
-            ->map(fn (Location $location) => [
-                'name' => $location->name,
-                'lore' => $location->lore,
-                'back_text' => $location->backText,
-                'produces' => $location->produces,
-                'produces_emoji' => $location->producesEmoji,
-                'costs' => $location->costs,
-                'relic_count' => $location->relicCount,
-            ])
+            ->map(fn (Location $location) => $location->toArray())
             ->all();
     }
 
     /**
-     * @return array<string, array{name: string, effect: string, slot: string, slot_emoji: string, symbol: string, location_name: ?string, is_event: bool, is_bound: bool}>
+     * @return array<string, array{key: string, name: string, effect: string, slot: string, slot_emoji: string, symbol: string, location_name: ?string, is_event: bool, is_bound: bool, is_action: bool}>
      */
     private function relicCatalog(): array
     {
         return collect(RelicCatalog::all())
-            ->map(fn (Relic $relic) => [
-                'name' => $relic->name,
-                'effect' => $relic->effect,
-                'slot' => $relic->slot,
-                'slot_emoji' => $relic->slotEmoji,
-                'symbol' => $relic->symbol,
-                'location_name' => $relic->locationName,
-                'is_event' => $relic->isEvent,
-                'is_bound' => $relic->isBound,
-                'is_action' => $relic->isAction,
-            ])
+            ->map(fn (Relic $relic) => $relic->toArray())
             ->all();
     }
 
@@ -237,7 +219,7 @@ class GameController extends Controller
     private function golemCardCatalog(): array
     {
         return collect(GolemCardCatalog::all())
-            ->map(fn (GolemCard $card) => ['name' => $card->name, 'action' => $card->action])
+            ->map(fn (GolemCard $card) => $card->toArray())
             ->all();
     }
 
@@ -247,7 +229,7 @@ class GameController extends Controller
     private function glyphCatalog(): array
     {
         return collect(GlyphCatalog::all())
-            ->map(fn (Glyph $glyph) => ['name' => $glyph->name, 'type' => $glyph->type, 'description' => $glyph->description])
+            ->map(fn (Glyph $glyph) => $glyph->toArray())
             ->all();
     }
 

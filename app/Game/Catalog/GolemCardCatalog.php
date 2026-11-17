@@ -24,8 +24,7 @@ final class GolemCardCatalog
         }
 
         $path = config('canticle.output_path').'/golem_cards.json';
-        $contents = file_get_contents($path) ?: throw new \RuntimeException("Could not read {$path}");
-        $rows = json_decode($contents, true, flags: JSON_THROW_ON_ERROR);
+        $rows = CatalogFile::readJson($path);
 
         $cards = [];
         $seenSlugs = [];

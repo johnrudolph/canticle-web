@@ -24,7 +24,7 @@ final class Relic
     ) {}
 
     /**
-     * @return array<string, mixed>
+     * @return array{key: string, name: string, effect: string, slot: string, slot_emoji: string, symbol: string, location_name: ?string, is_event: bool, is_bound: bool, is_action: bool}
      */
     public function toArray(): array
     {

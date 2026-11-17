@@ -10,4 +10,16 @@ final class Glyph
         public readonly string $type, // an emoji — which glyph-type deck this belongs to
         public readonly string $description,
     ) {}
+
+    /**
+     * @return array{name: string, type: string, description: string}
+     */
+    public function toArray(): array
+    {
+        return [
+            'name' => $this->name,
+            'type' => $this->type,
+            'description' => $this->description,
+        ];
+    }
 }
