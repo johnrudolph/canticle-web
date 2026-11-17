@@ -58,6 +58,7 @@ final class GameEngine
             'magnetic_mail_move' => self::magneticMailMove($state, $actorRole, $move),
             'telekinesis_move' => self::telekinesisMove($state, $actorRole, $move),
             'laborers_jacket_move_allies' => self::laborersJacketMoveAllies($state, $actorRole, $move),
+            'trash_relic_for_health' => self::trashRelicForHealth($state, $actorRole, $move),
             'end_wanderer_turn' => self::endWandererTurn($state, $actorRole),
             default => throw new InvalidMoveException('Unknown move type.'),
         };
@@ -446,6 +447,13 @@ final class GameEngine
      */
     public static function infrastructureCapThisTurn(GameState $state): int
     {
+        // Productive Glyph: "The Emperor plays 3 Infrastructure during
+        // their phase." Same resulting cap as Builder's gloves — not
+        // stacked to 4, since neither card's text says "+1."
+        if (in_array('productive', $state->golem['glyphs'], true)) {
+            return 3;
+        }
+
         foreach (self::activeWanderers($state) as $role => $cell) {
             if (! in_array('builders-gloves', $state->wanderers[$role]['equipped'], true)) {
                 continue;
@@ -3874,14 +3882,39 @@ final class GameEngine
             $actionsRemaining += 2;
         }
 
+        // Revelatory Glyph: "When moving, Wanderers may choose to lose
+        // any amount of Health. +1🦶 for each Health you lost."
+        // Deliberately not routed through applyDamage() — Dark
+        // Relics/Cabalist's Gown reducing a *voluntary* sacrifice
+        // would break the 1:1 Health-lost-for-actions-gained exchange
+        // the player is explicitly choosing, so this clamps directly
+        // against current HP instead.
+        $sacrificedHp = 0;
+        if (in_array('revelatory', $state->golem['glyphs'], true)) {
+            $requested = (int) ($move['sacrifice_hp'] ?? 0);
+            $sacrificedHp = max(0, min($requested, $wanderer['hp']));
+            $actionsRemaining += $sacrificedHp;
+        }
+
+        $newHp = $wanderer['hp'] - $sacrificedHp;
+
         $wanderers = $state->wanderersWith($actorRole, [
             'cell' => $to,
             'actions_remaining' => $actionsRemaining,
+            'hp' => $newHp,
         ]);
 
         $state = $state->with(['wanderers' => $wanderers]);
 
+        if ($newHp === 0 && $wanderer['hp'] > 0) {
+            $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['was_ever_exhausted' => true])]);
+        }
+
         $events = [['type' => 'wanderer_moved', 'role_key' => $actorRole, 'payload' => ['to' => $to, 'free' => $freeMove]]];
+
+        if ($sacrificedHp > 0) {
+            $events[] = ['type' => 'wanderer_damaged', 'role_key' => $actorRole, 'payload' => ['amount' => $sacrificedHp]];
+        }
 
         if (self::hasMonolithShardFor($state, $actorRole, $to) && in_array('rejuvenation-gown', $wanderer['equipped'], true)) {
             $hp = min(self::maxHpFor($state, $actorRole), $state->wanderers[$actorRole]['hp'] + 2);
@@ -6261,6 +6294,62 @@ final class GameEngine
         $state = $state->with(['wanderers' => $wanderers]);
 
         return [$state, [['type' => 'wanderer_healed', 'role_key' => $actorRole, 'payload' => ['hp' => $hp]]]];
+    }
+
+    /**
+     * Smoldering Glyph: "On their turn, Wanderers may trash Relics
+     * (not including Bound Relics) from their mat, and gain 2 Health
+     * for each they trash. This does not cost an action." A new move
+     * type rather than an auto-resolved reaction — unlike every other
+     * Glyph effect so far, this is a genuine optional choice of WHICH
+     * (if any) equipped Relics to give up, with no single "always
+     * correct" answer.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function trashRelicForHealth(GameState $state, string $actorRole, array $move): array
+    {
+        self::requireRole($state, $actorRole, $state->activeWandererRole(), 'wanderer');
+
+        if (! in_array('smoldering', $state->golem['glyphs'], true)) {
+            throw new InvalidMoveException('Smoldering is not active.');
+        }
+
+        $relicKeys = $move['relic_keys'] ?? [];
+
+        if (! is_array($relicKeys) || $relicKeys === []) {
+            throw new InvalidMoveException('At least one Relic key is required.');
+        }
+
+        $events = [];
+        $trashedCount = 0;
+
+        foreach ($relicKeys as $relicKey) {
+            if (! is_string($relicKey) || self::isStatusToken($relicKey)) {
+                continue;
+            }
+
+            if (! in_array($relicKey, $state->wanderers[$actorRole]['equipped'], true)) {
+                continue;
+            }
+
+            if (RelicCatalog::find($relicKey)?->isBound === true) {
+                continue;
+            }
+
+            $state = self::trashEquippedRelic($state, $actorRole, $relicKey);
+            $events[] = ['type' => 'relic_trashed', 'role_key' => $actorRole, 'payload' => ['relic_key' => $relicKey]];
+            $trashedCount++;
+        }
+
+        if ($trashedCount > 0) {
+            $hp = min(self::maxHpFor($state, $actorRole), $state->wanderers[$actorRole]['hp'] + 2 * $trashedCount);
+            $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['hp' => $hp])]);
+            $events[] = ['type' => 'wanderer_healed', 'role_key' => $actorRole, 'payload' => ['hp' => $hp]];
+        }
+
+        return [$state, $events];
     }
 
     /**

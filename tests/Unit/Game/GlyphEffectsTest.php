@@ -386,6 +386,107 @@ test('Miraculous heals a Wanderer to 3 the moment they become exhausted', functi
     expect($state->wanderers['wanderer_a']['hp'])->toBe(3);
 });
 
+test('Productive raises the Infrastructure cap to 3, same as Builder\'s gloves', function () {
+    $state = startedGame();
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['productive']])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'infrastructureCapThisTurn');
+    $reflection->setAccessible(true);
+
+    expect($reflection->invoke(null, $state))->toBe(3);
+});
+
+test('Smoldering lets a Wanderer trash equipped Relics on their turn for 2 Health each, for free', function () {
+    $state = startedGame();
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['smoldering']])]);
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'golem-whistle', 'bag' => 'last-rites'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 5])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+    $actionsBefore = $state->wanderers['wanderer_a']['actions_remaining'];
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', [
+        'type' => 'trash_relic_for_health', 'relic_keys' => ['golem-whistle', 'last-rites'],
+    ]);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(9) // 5 + 2*2
+        ->and($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBeNull()
+        ->and($state->wanderers['wanderer_a']['equipped']['bag'])->toBeNull()
+        ->and($state->wanderers['wanderer_a']['actions_remaining'])->toBe($actionsBefore) // free, no action cost
+        ->and(collect($events)->pluck('type'))->toContain('relic_trashed')
+        ->and(collect($events)->pluck('type'))->toContain('wanderer_healed');
+});
+
+test('Smoldering refuses to trash a Bound Relic', function () {
+    $state = startedGame();
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['smoldering']])]);
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'peacemakers-spirit'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 5])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', [
+        'type' => 'trash_relic_for_health', 'relic_keys' => ['peacemakers-spirit'],
+    ]);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(5)
+        ->and($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBe('peacemakers-spirit')
+        ->and($events)->toBe([]);
+});
+
+test('Smoldering is rejected outright when not active', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'golem-whistle'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'trash_relic_for_health', 'relic_keys' => ['golem-whistle']]))
+        ->toThrow(InvalidMoveException::class, 'Smoldering is not active.');
+});
+
+test('Revelatory grants +1 action per Health voluntarily sacrificed while moving', function () {
+    $state = startedGame();
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['revelatory']])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 10])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+    $actionsBefore = $state->wanderers['wanderer_a']['actions_remaining'];
+
+    $direction = Board::directionBetween([1, 0], [0, 1]);
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', [
+        'type' => 'move_wanderer', 'direction' => $direction, 'sacrifice_hp' => 4,
+    ]);
+
+    // -1 for the move, +4 for the sacrifice.
+    expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe($actionsBefore + 3)
+        ->and($state->wanderers['wanderer_a']['hp'])->toBe(6)
+        ->and(collect($events)->pluck('type'))->toContain('wanderer_damaged');
+});
+
+test('Revelatory caps the sacrifice at the Wanderer\'s current Health', function () {
+    $state = startedGame();
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['revelatory']])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 3])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    $direction = Board::directionBetween([1, 0], [0, 1]);
+    [$state] = GameEngine::apply($state, 'wanderer_a', [
+        'type' => 'move_wanderer', 'direction' => $direction, 'sacrifice_hp' => 999,
+    ]);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(0);
+});
+
+test('Moving without Revelatory active ignores any sacrifice_hp in the move payload', function () {
+    $state = startedGame();
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 10])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    $direction = Board::directionBetween([1, 0], [0, 1]);
+    [$state] = GameEngine::apply($state, 'wanderer_a', [
+        'type' => 'move_wanderer', 'direction' => $direction, 'sacrifice_hp' => 4,
+    ]);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(10);
+});
+
 test('Miraculous does not re-trigger on further damage to an already-exhausted Wanderer', function () {
     $state = startedGame();
     $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['miraculous']])]);
