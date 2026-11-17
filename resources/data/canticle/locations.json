@@ -115,11 +115,11 @@
         "is_starter": "Hide"
     },
     {
-        "print": false,
+        "print": true,
         "name": "Bazaar",
         "Relics": "1 of each type already produced by the city",
         "lore": "Our abundant society needs safe haven for its unwanted objects",
-        "rule": "Action: Tuck a Relic from your mat here. Then, gain 1 action.\n\nEnd of game: Gain 📜 for every 2 Relics tucked here that is from 4+ spaces away.",
+        "rule": "Action: On your turn you may tuck a Relic from your mat here. 🌿1, then gain 1 action.\n\nEnd of game: Gain 📜 for every 4 Relics tucked here.",
         "cost_1": "",
         "cost_2": "",
         "cost_3": "",

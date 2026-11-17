@@ -41,13 +41,13 @@ test('Invigoration does nothing unless explicitly taken', function () {
         ->and($state->wanderers['wanderer_a']['actions_remaining'])->toBe(3);
 });
 
-test('Bazaar lets a Wanderer tuck a Relic and immediately refunds the action', function () {
+test('Bazaar lets a Wanderer tuck a Relic, heals 1, and immediately refunds the action', function () {
     $state = startedGame();
     $board = $state->board;
     $board['1,0'] = [...$board['1,0'], 'location_key' => 'bazaar'];
     $state = $state->with(['board' => $board]);
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'golem-whistle'];
-    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 10])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
     $actionsBefore = $state->wanderers['wanderer_a']['actions_remaining'];
@@ -58,8 +58,10 @@ test('Bazaar lets a Wanderer tuck a Relic and immediately refunds the action', f
 
     expect($state->wanderers['wanderer_a']['equipped']['body'])->toBeNull()
         ->and($state->board['1,0']['tucked'])->toBe(['golem-whistle'])
+        ->and($state->wanderers['wanderer_a']['hp'])->toBe(11)
         ->and($state->wanderers['wanderer_a']['actions_remaining'])->toBe($actionsBefore)
-        ->and(collect($events)->pluck('type'))->toContain('relic_tucked');
+        ->and(collect($events)->pluck('type'))->toContain('relic_tucked')
+        ->and(collect($events)->pluck('type'))->toContain('wanderer_healed');
 });
 
 test('Bazaar\'s tuck action requires actually being on the Bazaar', function () {

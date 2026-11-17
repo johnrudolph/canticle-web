@@ -870,3 +870,45 @@ test('Pen does not score if Pen was never built', function () {
     expect($state->prophecy)->toBe(0)
         ->and($events)->toBe([]);
 });
+
+test('Bazaar grants 1 Prophecy per 4 Relics tucked there at end of game', function () {
+    $state = startedGame();
+    $board = $state->board;
+    // Bazaar can only ever be built once in a real game (it's a unique
+    // Location in the deck), but startedGame()'s random starting 6
+    // could otherwise already include one elsewhere on the board —
+    // scrub that first so the scoring loop can't find the wrong one.
+    foreach ($board as $key => $entry) {
+        if ($entry['location_key'] === 'bazaar') {
+            $board[$key] = [...$entry, 'location_key' => 'artists-hovel'];
+        }
+    }
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'bazaar', 'tucked' => array_fill(0, 9, 'golem-whistle')];
+    $state = $state->with(['board' => $board]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyEndOfGameScoring');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state);
+
+    expect($state->prophecy)->toBe(2) // intdiv(9, 4)
+        ->and(collect($events)->pluck('type'))->toContain('prophecy_gained');
+});
+
+test('Bazaar does not score with fewer than 4 Relics tucked there', function () {
+    $state = startedGame();
+    $board = $state->board;
+    foreach ($board as $key => $entry) {
+        if ($entry['location_key'] === 'bazaar') {
+            $board[$key] = [...$entry, 'location_key' => 'artists-hovel'];
+        }
+    }
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'bazaar', 'tucked' => array_fill(0, 3, 'golem-whistle')];
+    $state = $state->with(['board' => $board]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyEndOfGameScoring');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state);
+
+    expect($state->prophecy)->toBe(0)
+        ->and($events)->toBe([]);
+});
