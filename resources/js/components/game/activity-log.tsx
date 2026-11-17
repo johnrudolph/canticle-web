@@ -7,7 +7,7 @@ function roleLabel(role: RoleKey | null): string {
     return `Wanderer ${role.replace('wanderer_', '').toUpperCase()}`;
 }
 
-function describe(
+export function describe(
     event: GameLogEntry,
     locationNames: Record<string, string>,
     relicNames: Record<string, string>,

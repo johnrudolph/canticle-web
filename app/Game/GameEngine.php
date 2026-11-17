@@ -6544,11 +6544,14 @@ final class GameEngine
         }
 
         $skipped = array_pop($golem['revealed']);
+        $card = GolemCardCatalog::find($skipped['key']);
         $golem['discard_pile'][] = $skipped['key'];
         $state = $state->with(['golem' => $golem, 'parallelUsedThisRound' => true]);
         $state = self::refillGolemRevealed($state);
 
-        return [$state, [['type' => 'golem_card_skipped', 'role_key' => $actorRole, 'payload' => ['card_key' => $skipped['key']]]]];
+        return [$state, [['type' => 'golem_card_skipped', 'role_key' => $actorRole, 'payload' => [
+            'card_key' => $skipped['key'], 'name' => $card?->name, 'action' => $card?->action,
+        ]]]];
     }
 
     /**

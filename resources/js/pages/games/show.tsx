@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { ActivityLog } from '@/components/game/activity-log';
 import { EventRelicDialog } from '@/components/game/event-relic-dialog';
 import { GolemPanel } from '@/components/game/golem-panel';
+import { GolemTurnSpotlightDialog } from '@/components/game/golem-turn-spotlight-dialog';
 import { HexBoard } from '@/components/game/hex-board';
 import { InsightFromTheFutureDialog } from '@/components/game/insight-from-the-future-dialog';
 import { LocationDetailDialog } from '@/components/game/location-detail-dialog';
@@ -20,6 +21,14 @@ import {
 } from '@/components/ui/tooltip';
 import { useClipboard } from '@/hooks/use-clipboard';
 import { useGamePolling } from '@/hooks/use-game-polling';
+import {
+    buildGolemTurnSegments,
+    containsGolemCardMarker,
+} from '@/lib/golem-turn-spotlight';
+import type {
+    GolemTurnSegment,
+    GolemTurnSnapshot,
+} from '@/lib/golem-turn-spotlight';
 import {
     cellKey,
     directionBetween,
@@ -101,6 +110,10 @@ export default function GameShow({ game }: { game: GameSummary }) {
     const [eventRelicQueue, setEventRelicQueue] = useState<
         { role: RoleKey; relicKey: string }[]
     >([]);
+    const [golemSpotlightSegments, setGolemSpotlightSegments] = useState<
+        GolemTurnSegment[]
+    >([]);
+    const [golemSpotlightIndex, setGolemSpotlightIndex] = useState(0);
     const holdingSeenRef = useRef<Record<string, Set<string>>>({});
     const seenEventIdRef = useRef<number | null>(null);
     const previousPhaseRef = useRef<string | null>(null);
@@ -187,17 +200,12 @@ export default function GameShow({ game }: { game: GameSummary }) {
         }
     }
 
-    function detectEventRelic(payload: GamePollResponse) {
-        const lastSeen = seenEventIdRef.current ?? 0;
+    function detectEventRelic(payload: GamePollResponse, lastSeen: number) {
         const found = payload.events.filter(
             (e) =>
                 e.id > lastSeen &&
                 e.type === 'location_searched' &&
                 e.payload.trashed_as_event === true,
-        );
-        seenEventIdRef.current = payload.events.reduce(
-            (max, e) => Math.max(max, e.id),
-            lastSeen,
         );
 
         if (found.length > 0) {
@@ -211,9 +219,33 @@ export default function GameShow({ game }: { game: GameSummary }) {
         }
     }
 
-    function applyPoll(payload: GamePollResponse) {
+    function detectGolemTurn(
+        payload: GamePollResponse,
+        lastSeen: number,
+        preMoveSnapshot: GolemTurnSnapshot | null,
+    ) {
+        const fresh = payload.events.filter((e) => e.id > lastSeen);
+        if (!preMoveSnapshot || !containsGolemCardMarker(fresh)) return;
+
+        const segments = buildGolemTurnSegments(fresh, preMoveSnapshot);
+        if (segments.length > 0) {
+            setGolemSpotlightSegments(segments);
+            setGolemSpotlightIndex(0);
+        }
+    }
+
+    function applyPoll(
+        payload: GamePollResponse,
+        preMoveSnapshot: GolemTurnSnapshot | null = null,
+    ) {
+        const lastSeen = seenEventIdRef.current ?? 0;
         detectNewRelic(payload.state, payload.my_roles);
-        detectEventRelic(payload);
+        detectEventRelic(payload, lastSeen);
+        detectGolemTurn(payload, lastSeen, preMoveSnapshot);
+        seenEventIdRef.current = payload.events.reduce(
+            (max, e) => Math.max(max, e.id),
+            lastSeen,
+        );
         setStatus(payload.status);
         setRoleList(payload.roles);
         setMyRoles(payload.my_roles);
@@ -238,6 +270,21 @@ export default function GameShow({ game }: { game: GameSummary }) {
         roleKey: RoleKey,
         move: Record<string, unknown>,
     ): Promise<GamePollResponse | null> {
+        // Snapshotted before the move so the Golem Turn Spotlight (if this
+        // move triggers one) can play the Golem's phase back step by step
+        // instead of jumping straight to the end result.
+        const preMoveSnapshot: GolemTurnSnapshot | null =
+            move.type === 'end_wanderer_turn' && state
+                ? {
+                      golemCell: state.golem.cell,
+                      wandererHp: Object.fromEntries(
+                          Object.entries(state.wanderers).map(
+                              ([role, wanderer]) => [role, wanderer.hp],
+                          ),
+                      ),
+                  }
+                : null;
+
         setProcessing(true);
         try {
             const response = await postJson<GamePollResponse>(
@@ -247,7 +294,7 @@ export default function GameShow({ game }: { game: GameSummary }) {
                     move,
                 },
             );
-            applyPoll(response);
+            applyPoll(response, preMoveSnapshot);
             setSelectedLocationKey(null);
             setDiscardKeys(new Set());
             return response;
@@ -546,7 +593,10 @@ export default function GameShow({ game }: { game: GameSummary }) {
                         locationCatalog={locationCatalog}
                         relicCatalog={game.relic_catalog}
                         wanderers={state.wanderers}
-                        golemCell={state.golem.cell}
+                        golemCell={
+                            golemSpotlightSegments[golemSpotlightIndex]
+                                ?.snapshotAfter.golemCell ?? state.golem.cell
+                        }
                         highlightedCells={highlightedCells}
                         activeWandererRole={
                             state.phase === 'wanderer'
@@ -1149,7 +1199,17 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                 | 'wanderer_c'
                             )[]
                         ).map((role) => {
-                            const wanderer = state.wanderers[role];
+                            const activeSpotlightSegment =
+                                golemSpotlightSegments[golemSpotlightIndex];
+                            const wanderer = activeSpotlightSegment
+                                ? {
+                                      ...state.wanderers[role],
+                                      hp:
+                                          activeSpotlightSegment.snapshotAfter
+                                              .wandererHp[role] ??
+                                          state.wanderers[role].hp,
+                                  }
+                                : state.wanderers[role];
                             const isActive =
                                 state.phase === 'wanderer' &&
                                 state.active_wanderer_role === role;
@@ -1312,6 +1372,49 @@ export default function GameShow({ game }: { game: GameSummary }) {
                         location_key: locationKey,
                     });
                     setInsightPeek(null);
+                }}
+            />
+
+            <GolemTurnSpotlightDialog
+                open={golemSpotlightSegments.length > 0}
+                segment={golemSpotlightSegments[golemSpotlightIndex] ?? null}
+                index={golemSpotlightIndex}
+                total={golemSpotlightSegments.length}
+                activeGlyphs={state.golem.glyphs}
+                glyphCatalog={game.glyph_catalog}
+                golemCardCatalog={game.golem_card_catalog}
+                locationNames={Object.fromEntries(
+                    Object.entries(locationCatalog).map(([k, v]) => [
+                        k,
+                        v.name,
+                    ]),
+                )}
+                relicNames={Object.fromEntries(
+                    Object.entries(game.relic_catalog).map(([k, v]) => [
+                        k,
+                        v.name,
+                    ]),
+                )}
+                glyphNames={Object.fromEntries(
+                    Object.entries(game.glyph_catalog).map(([k, v]) => [
+                        k,
+                        v.name,
+                    ]),
+                )}
+                golemCardNames={Object.fromEntries(
+                    Object.entries(game.golem_card_catalog).map(([k, v]) => [
+                        k,
+                        v.name,
+                    ]),
+                )}
+                onContinue={() => {
+                    setGolemSpotlightIndex((i) => {
+                        if (i + 1 >= golemSpotlightSegments.length) {
+                            setGolemSpotlightSegments([]);
+                            return 0;
+                        }
+                        return i + 1;
+                    });
                 }}
             />
         </>
