@@ -786,6 +786,9 @@ final class GameEngine
         [$state, $divineIconEvents] = self::applyDivineIconBoost($state, $actorRole, $hpBeforeDivineIcon);
         $events = [...$events, ...$divineIconEvents];
 
+        [$state, $glyphHealEvents] = self::applyGlyphHealBoost($state, $actorRole, $hpBeforeDivineIcon);
+        $events = [...$events, ...$glyphHealEvents];
+
         // Golem sanctuary: "When playing a 🌿 Relic in the Golem's
         // space, tuck the Relic here." Reuses the same HP-diff used for
         // Divine Icon to detect a 🌿 effect without special-casing
@@ -800,6 +803,14 @@ final class GameEngine
         $onGolemSanctuary = $healedAnyone
             && $state->board[$casterCellKey]['location_key'] === 'golem-sanctuary'
             && self::golemSharesCellWith($state, $actorRole);
+
+        // Vindictive Glyph: "When Wanderers play Relics with 🌿, the
+        // Golem immediately 👊5 all Wanderers in its space." Same
+        // healedAnyone HP-diff detection as everything else here.
+        if ($healedAnyone && in_array('vindictive', $state->golem['glyphs'], true)) {
+            [$state, $vindictiveEvents] = self::golemAttackHere($state, 5);
+            $events = [...$events, ...$vindictiveEvents];
+        }
 
         if ($onGolemSanctuary && in_array($relicKey, $state->wanderers[$actorRole]['equipped'], true)) {
             $equipped = $state->wanderers[$actorRole]['equipped'];
@@ -889,6 +900,57 @@ final class GameEngine
             }
 
             $hp = min(self::maxHpFor($state, $role), $wanderer['hp'] + 3);
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
+            $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Blessed: "When Wanderers play Relics with 🌿, they heal +2."
+     * Congenial: "Relics with 🌿 get +3 if played while on a space
+     * with another Wanderer." Both detected the exact same way Divine
+     * Icon is (an HP-diff snapshot across every Wanderer around this
+     * use_relic call) rather than special-casing every heal Relic —
+     * same reused pattern as Golem sanctuary's tuck-on-heal check.
+     *
+     * @param  array<string, int>  $hpBefore
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function applyGlyphHealBoost(GameState $state, string $actorRole, array $hpBefore): array
+    {
+        $glyphs = $state->golem['glyphs'];
+        $blessed = in_array('blessed', $glyphs, true);
+
+        $congenial = false;
+        if (in_array('congenial', $glyphs, true)) {
+            $casterCell = $state->wanderers[$actorRole]['cell'];
+            if ($casterCell !== null) {
+                foreach (self::activeWanderers($state) as $role => $cell) {
+                    if ($role !== $actorRole && Board::key($cell) === Board::key($casterCell)) {
+                        $congenial = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (! $blessed && ! $congenial) {
+            return [$state, []];
+        }
+
+        $bonus = ($blessed ? 2 : 0) + ($congenial ? 3 : 0);
+        $events = [];
+
+        foreach ($state->wanderers as $role => $wanderer) {
+            $gained = $wanderer['hp'] - ($hpBefore[$role] ?? $wanderer['hp']);
+
+            if ($gained <= 0) {
+                continue;
+            }
+
+            $hp = min(self::maxHpFor($state, $role), $wanderer['hp'] + $bonus);
             $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
             $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
         }
@@ -4248,6 +4310,9 @@ final class GameEngine
             [$state, $cardEvents, $effects] = self::resolveOrSkipTappedCard($state, $cardEntry);
             $events = [...$events, ...$cardEvents];
 
+            [$state, $forgivingEvents] = self::applyForgivingHeal($state);
+            $events = [...$events, ...$forgivingEvents];
+
             if ($adaptiveInPlay) {
                 $anyDamage = false;
                 foreach ($state->wanderers as $role => $wanderer) {
@@ -4280,6 +4345,9 @@ final class GameEngine
                     $nextEntry = $golem['revealed'][array_key_last($golem['revealed'])];
                     [$state, $extraEvents] = self::resolveOrSkipTappedCard($state, $nextEntry);
                     $events = [...$events, ...$extraEvents];
+
+                    [$state, $forgivingEvents] = self::applyForgivingHeal($state);
+                    $events = [...$events, ...$forgivingEvents];
                 }
             }
 
@@ -4329,6 +4397,33 @@ final class GameEngine
 
             [$state, $cardEvents] = self::resolveOrSkipTappedCard($state, $cardEntry);
             $events = [...$events, ...$cardEvents];
+
+            [$state, $forgivingEvents] = self::applyForgivingHeal($state);
+            $events = [...$events, ...$forgivingEvents];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Forgiving: "Every time the Golem plays a card, all Wanderers
+     * 🌿1." Fires for every card resolution, tapped or untapped — same
+     * "plays a card" reading Defenders' Guild already uses.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function applyForgivingHeal(GameState $state): array
+    {
+        if (! in_array('forgiving', $state->golem['glyphs'], true)) {
+            return [$state, []];
+        }
+
+        $events = [];
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            $hp = min(self::maxHpFor($state, $role), $state->wanderers[$role]['hp'] + 1);
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
+            $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
         }
 
         return [$state, $events];
@@ -5675,6 +5770,16 @@ final class GameEngine
         $hpBefore = $state->wanderers[$role]['hp'];
         $hp = max(0, $hpBefore - $damage);
 
+        // Accusing Glyph: "When the Golem plays a card with 👊 that
+        // causes a Wanderer to lose health, the Wanderer gains 1
+        // Shame." Checked against the actual Health loss, not the
+        // raw $damage figure — a fully-absorbed hit (Cabalist's Gown,
+        // Dark Relics reducing it to 0) doesn't cause any.
+        if ($isGolemAttack && $hp < $hpBefore && in_array('accusing', $state->golem['glyphs'], true)) {
+            [$state, $shameEvents] = self::applyStatusToken($state, $role, 'shame_token');
+            $events = [...$events, ...$shameEvents];
+        }
+
         if ($hp <= 0 && $hpBefore > 0 && in_array('cabalist-wraps', $equipped, true)) {
             $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => 1])]);
             $events[] = ['type' => 'cabalist_wraps_triggered', 'role_key' => $role, 'payload' => []];
@@ -5705,6 +5810,16 @@ final class GameEngine
             // doesn't set this.
             if ($hp === 0) {
                 $state = $state->with(['wanderers' => $state->wanderersWith($role, ['was_ever_exhausted' => true])]);
+
+                // Miraculous Glyph: "If any Wanderer becomes exhausted,
+                // they immediately 🌿3." Only the actual transition
+                // into exhaustion ($hpBefore > 0) counts, not further
+                // damage piling onto an already-exhausted Wanderer.
+                if ($hpBefore > 0 && in_array('miraculous', $state->golem['glyphs'], true)) {
+                    $healedHp = min(self::maxHpFor($state, $role), 3);
+                    $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $healedHp])]);
+                    $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $healedHp]];
+                }
             }
         }
 

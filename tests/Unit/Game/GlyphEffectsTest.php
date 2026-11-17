@@ -278,3 +278,122 @@ test('Adaptive sends a card that dealt damage to the bottom of the draw pile ins
     expect($state->golem['discard_pile'])->not->toContain('pound')
         ->and(collect($state->golem['draw_pile'])->pluck('key'))->toContain('pound');
 });
+
+test('Accusing gives a Wanderer 1 Shame when a Golem attack actually costs them Health', function () {
+    $state = startedGame();
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['accusing']])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 10])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyDamage');
+    $reflection->setAccessible(true);
+    [$state] = $reflection->invoke(null, $state, 'wanderer_a', 3, true);
+
+    expect($state->wanderers['wanderer_a']['equipped'])->toContain('shame_token');
+});
+
+test('Accusing does not trigger if the attack dealt 0 Health loss', function () {
+    $state = startedGame();
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['accusing', 'merciful']])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 10])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyDamage');
+    $reflection->setAccessible(true);
+    [$state] = $reflection->invoke(null, $state, 'wanderer_a', 1, true); // Merciful reduces this to 0
+
+    expect($state->wanderers['wanderer_a']['equipped'])->not->toContain('shame_token');
+});
+
+test('Vindictive makes the Golem attack everyone on its space for 5 when a 🌿 Relic is played', function () {
+    $state = startedGame(); // both wanderers + Golem share the hub
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['vindictive']])]);
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'divine-healing-oil'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 5])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['hp' => 15])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'divine-healing-oil']);
+
+    // +3 self-heal from Divine healing oil (5 -> 8), then -5 from Vindictive = 3.
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(3)
+        ->and($state->wanderers['wanderer_b']['hp'])->toBe(10); // 15 - 5
+});
+
+test('Blessed adds +2 to any Health gained from a Relic use', function () {
+    $state = startedGame();
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['blessed']])]);
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'divine-healing-oil'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 5])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'divine-healing-oil']);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(10); // 5 + 3 (oil) + 2 (Blessed)
+});
+
+test('Congenial adds +3 to any Health gained from a Relic used while sharing a space with another Wanderer', function () {
+    $state = startedGame(); // both wanderers share the hub by default
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['congenial']])]);
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'divine-healing-oil'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 5])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'divine-healing-oil']);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(11); // 5 + 3 (oil) + 3 (Congenial)
+});
+
+test('Congenial does not apply when the caster is alone on their space', function () {
+    $state = startedGame();
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['cell' => [0, 1]])]);
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['congenial']])]);
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'divine-healing-oil'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 5])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'divine-healing-oil']);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(8); // 5 + 3 (oil) only
+});
+
+test('Forgiving heals every Wanderer 1 each time the Golem plays a card', function () {
+    $state = startedGame();
+    // Force a non-damaging card to the top of revealed (array_pop takes
+    // from the end) so this test is isolated from the Golem's real,
+    // randomly-shuffled deck possibly dealing damage of its own.
+    $revealed = $state->golem['revealed'];
+    $revealed[array_key_last($revealed)] = ['key' => 'self-inscription', 'tapped' => false];
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['forgiving'], 'revealed' => $revealed])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 5])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['hp' => 5])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'golemPlayCards');
+    $reflection->setAccessible(true);
+    [$state] = $reflection->invoke(null, $state, 1);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(6)
+        ->and($state->wanderers['wanderer_b']['hp'])->toBe(6);
+});
+
+test('Miraculous heals a Wanderer to 3 the moment they become exhausted', function () {
+    $state = startedGame();
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['miraculous']])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 5])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyDamage');
+    $reflection->setAccessible(true);
+    [$state] = $reflection->invoke(null, $state, 'wanderer_a', 10, true);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(3);
+});
+
+test('Miraculous does not re-trigger on further damage to an already-exhausted Wanderer', function () {
+    $state = startedGame();
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['miraculous']])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 0])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyDamage');
+    $reflection->setAccessible(true);
+    [$state] = $reflection->invoke(null, $state, 'wanderer_a', 5, true);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(0);
+});
