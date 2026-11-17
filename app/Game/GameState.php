@@ -64,7 +64,7 @@ namespace App\Game;
  * golem = [
  *     'cell' => [col, row]|null,  // null only before setup places it
  *     'shame' => int,
- *     'glyphs' => list<string>,   // up to 4 active, face up, FIFO — see GameEngine::addGlyphOfType
+ *     'glyphs' => list<string>,   // up to 3 active, face up, FIFO — see GameEngine::addGlyphOfType
  *     'draw_pile' => list<array{key: string, tapped: bool}>,
  *     'revealed' => list<array{key: string, tapped: bool}>, // up to 3, face up, resolved right-to-left
  *     'discard_pile' => list<string>, // tapped state doesn't matter once discarded

@@ -226,10 +226,12 @@ test('Pray adds a 📖 Glyph exactly 3 spaces from the Golem, then trashes', fun
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'pray'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'cell' => [4, 0]])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+    $prophecyBefore = $state->prophecy;
 
     [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'pray']);
 
     expect($state->golem['glyphs'])->toHaveCount(1)
+        ->and($state->prophecy)->toBe($prophecyBefore + 1)
         ->and($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBeNull()
         ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
 });

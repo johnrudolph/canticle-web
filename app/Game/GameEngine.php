@@ -26,7 +26,7 @@ final class GameEngine
 
     private const GOLEM_REVEALED_SIZE = 3;
 
-    private const GOLEM_MAX_GLYPHS = 4;
+    private const GOLEM_MAX_GLYPHS = 3;
 
     // rules.md's Emperor phase step 5 — also the starting hand size
     // (GameSetup), so the hand is always exactly 5 between turns.
@@ -79,9 +79,57 @@ final class GameEngine
             return 'At 0 Health, resting is the only action you can take.';
         }
 
+        // "Inscribe"'s dozen reprints are mechanically distinct despite
+        // the shared name (see resolveRelicAction) — dispatch on the
+        // untouched $relicKey before the generic baseKey-stripping
+        // below would collapse every one of them into the same
+        // indistinguishable condition (confirmed in production, game
+        // WNNDOZ: inscribe-6 was used while standing nowhere near a
+        // Monolith Shard — its specific condition — with no disabled
+        // button or warning, spending the action for nothing).
+        if (str_starts_with($relicKey, 'inscribe')) {
+            return self::inscribeUnmetReason($state, $actorRole, $relicKey);
+        }
+
         $baseKey = (string) preg_replace('/-\d+$/', '', $relicKey);
 
         return self::relicUnmetConditionReason($state, $actorRole, $baseKey);
+    }
+
+    private static function inscribeUnmetReason(GameState $state, string $actorRole, string $relicKey): ?string
+    {
+        $casterCell = $state->wanderers[$actorRole]['cell'];
+        $onGolemSpace = self::golemSharesCellWith($state, $actorRole);
+
+        return match ($relicKey) {
+            'inscribe', 'inscribe-2', 'inscribe-3', 'inscribe-8', 'inscribe-9', 'inscribe-10' => $onGolemSpace
+                ? null
+                : 'Inscribe requires sharing the Golem\'s space.',
+
+            'inscribe-4' => self::inscribePrisonJudgmentReady($state, $actorRole)
+                ? null
+                : 'Inscribe requires you and the Golem in the Prison, no Shame tokens on you, and the Golem at 3+ Shame.',
+
+            'inscribe-5' => $onGolemSpace && self::countStatusTokens($state->wanderers[$actorRole]['equipped'], 'shame_token') === 0
+                ? null
+                : 'Inscribe requires sharing the Golem\'s space with no Shame tokens.',
+
+            'inscribe-6' => $onGolemSpace && in_array('monolith_shard', $state->board[Board::key($casterCell)]['infrastructure'], true)
+                ? null
+                : 'Inscribe requires sharing the Golem\'s space, which must also have a Monolith Shard.',
+
+            'inscribe-7' => 'This triggers automatically when the Golem attacks you.',
+
+            'inscribe-11' => self::allWanderersShareGolemSpace($state)
+                ? null
+                : 'Inscribe requires every Wanderer sharing the Golem\'s space.',
+
+            'inscribe-12' => $onGolemSpace && self::allWanderersMutuallyAtLeastDistance($state, 2)
+                ? null
+                : 'Inscribe requires sharing the Golem\'s space while every Wanderer is 2+ spaces from every other.',
+
+            default => null,
+        };
     }
 
     /**
@@ -691,10 +739,12 @@ final class GameEngine
         // For Relics whose printed condition is knowable from state alone
         // (no target/cell choice needed), reject the attempt outright
         // rather than spending the action on a guaranteed no-op — see
-        // relicUnmetConditionReason(). Relics needing a $move-supplied
-        // target (an ally, a cell, etc.) aren't covered here; their
-        // conditions depend on a choice the player hasn't made yet.
-        $unmetReason = self::relicUnmetConditionReason($state, $actorRole, $baseKey);
+        // relicUsabilityReason() (handles "Inscribe"'s dozen mechanically
+        // distinct reprints specially, same as here). Relics needing a
+        // $move-supplied target (an ally, a cell, etc.) aren't covered
+        // here; their conditions depend on a choice the player hasn't
+        // made yet.
+        $unmetReason = self::relicUsabilityReason($state, $actorRole, $relicKey);
 
         if ($unmetReason !== null) {
             throw new InvalidMoveException($unmetReason);
@@ -2459,7 +2509,7 @@ final class GameEngine
             return [$state, [], false];
         }
 
-        return [...self::addGlyphOfType($state, '🎨', $actorRole), true];
+        return self::inscribeOutcome($state, '🎨', $actorRole, 1, true);
     }
 
     /**
@@ -2938,10 +2988,10 @@ final class GameEngine
             $pool['walls']++;
             $state = $state->with(['board' => $board, 'infrastructurePool' => $pool]);
 
-            [$state, $events] = self::addGlyphOfType($state, '🎨', $actorRole);
+            [$state, $events, $trash] = self::inscribeOutcome($state, '🎨', $actorRole, 1, true);
             $events[] = ['type' => 'infrastructure_returned', 'role_key' => null, 'payload' => ['cell' => $wallCell]];
 
-            return [$state, $events, true];
+            return [$state, $events, $trash];
         }
 
         return [$state, [], false];
@@ -2987,7 +3037,7 @@ final class GameEngine
             return [$state, [], false];
         }
 
-        return [...self::addGlyphOfType($state, '📖', $actorRole), true];
+        return self::inscribeOutcome($state, '📖', $actorRole, 1, true);
     }
 
     /**
@@ -3273,43 +3323,59 @@ final class GameEngine
 
         return match ($relicKey) {
             'inscribe', 'inscribe-2', 'inscribe-3' => $onGolemSpace
-                ? [...self::addGlyphOfType($state, '⏳', $actorRole), true]
+                ? self::inscribeOutcome($state, '⏳', $actorRole, 1, true)
                 : $noOp,
 
             'inscribe-4' => self::inscribePrisonJudgment($state, $actorRole),
 
             'inscribe-5' => $onGolemSpace && self::countStatusTokens($state->wanderers[$actorRole]['equipped'], 'shame_token') === 0
-                ? [...self::addGlyphOfType($state, '⚖️', $actorRole), true]
+                ? self::inscribeOutcome($state, '⚖️', $actorRole, 1, true)
                 : $noOp,
 
             'inscribe-6' => $onGolemSpace && in_array('monolith_shard', $state->board[Board::key($casterCell)]['infrastructure'], true)
-                ? [...self::addGlyphOfType($state, '✨', $actorRole), true]
+                ? self::inscribeOutcome($state, '✨', $actorRole, 1, true)
                 : $noOp,
 
             'inscribe-7' => $noOp,
 
             'inscribe-8' => $onGolemSpace
-                ? [...self::addGlyphOfType($state, '🎨', $actorRole), true]
+                ? self::inscribeOutcome($state, '🎨', $actorRole, 1, true)
                 : $noOp,
 
             'inscribe-9' => $onGolemSpace
-                ? [...self::addGlyphOfType($state, '🐾', $actorRole), true]
+                ? self::inscribeOutcome($state, '🐾', $actorRole, 1, true)
                 : $noOp,
 
             'inscribe-10' => $onGolemSpace
-                ? [...self::addGlyphOfType($state, '📖', $actorRole), true]
+                ? self::inscribeOutcome($state, '📖', $actorRole, 1, true)
                 : $noOp,
 
             'inscribe-11' => self::allWanderersShareGolemSpace($state)
-                ? [...self::addGlyphOfType($state, '🤝', $actorRole), true]
+                ? self::inscribeOutcome($state, '🤝', $actorRole, 1, true)
                 : $noOp,
 
             'inscribe-12' => $onGolemSpace && self::allWanderersMutuallyAtLeastDistance($state, 2)
-                ? [...self::addGlyphOfType($state, '🤝', $actorRole), false]
+                ? self::inscribeOutcome($state, '🤝', $actorRole, 1, false)
                 : $noOp,
 
             default => $noOp,
         };
+    }
+
+    /**
+     * Shared tail for every "Inscribe"-family Relic: add a Glyph of
+     * $type, grant $prophecy only if that actually happened (the
+     * deck might have no Glyph of that type left), and only trash the
+     * Relic ($trashIfSuccess) if it did too — a condition being
+     * satisfied doesn't mean a matching Glyph still exists to draw.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function inscribeOutcome(GameState $state, string $type, string $actorRole, int $prophecy, bool $trashIfSuccess): array
+    {
+        [$state, $events] = self::addGlyphOfType($state, $type, $actorRole, $prophecy);
+
+        return [$state, $events, $trashIfSuccess && $events !== []];
     }
 
     /**
@@ -3321,17 +3387,22 @@ final class GameEngine
      */
     private static function inscribePrisonJudgment(GameState $state, string $actorRole): array
     {
+        if (! self::inscribePrisonJudgmentReady($state, $actorRole)) {
+            return [$state, [], false];
+        }
+
+        return self::inscribeOutcome($state, '⚖️', $actorRole, 3, true);
+    }
+
+    private static function inscribePrisonJudgmentReady(GameState $state, string $actorRole): bool
+    {
         $casterCell = $state->wanderers[$actorRole]['cell'];
         $onPrison = $state->board[Board::key($casterCell)]['location_key'] === 'prison';
         $golemThere = self::golemSharesCellWith($state, $actorRole);
         $noShame = self::countStatusTokens($state->wanderers[$actorRole]['equipped'], 'shame_token') === 0;
         $golemHighShame = $state->golem['shame'] >= 3;
 
-        if (! ($onPrison && $golemThere && $noShame && $golemHighShame)) {
-            return [$state, [], false];
-        }
-
-        return [...self::addGlyphOfType($state, '⚖️', $actorRole), true];
+        return $onPrison && $golemThere && $noShame && $golemHighShame;
     }
 
     private static function allWanderersShareGolemSpace(GameState $state): bool
@@ -5394,7 +5465,7 @@ final class GameEngine
         }
 
         if (in_array('inscribe-7', $equipped, true)) {
-            [$state, $e] = self::addGlyphOfType($state, '🌑', $role);
+            [$state, $e] = self::addGlyphOfType($state, '🌑', $role, 1);
             $events = [...$events, ...$e];
 
             if ($e !== []) {
@@ -5520,9 +5591,21 @@ final class GameEngine
     }
 
     /**
+     * $prophecyOnSuccess: every "Inscribe"-family Relic (and Pray,
+     * Aural inscription, Jericho inscription) grants 📜 — 1 for most,
+     * 3 for Inscribe #4 — in the same breath as adding the Glyph, but
+     * ONLY if a Glyph of that type was actually left in the deck to
+     * add (confirmed in production, game WNNDOZ: every one of these
+     * granted its Glyph correctly but never granted the Prophecy its
+     * own printed text promised, since this was the one shared
+     * function behind all of them and never granted it at all).
+     * Callers that add a Glyph without their own Prophecy clause
+     * (Rift in time, the Golem's own self-inscription card) simply
+     * omit this and keep the default of 0.
+     *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
-    private static function addGlyphOfType(GameState $state, string $type, ?string $actorRole = null): array
+    private static function addGlyphOfType(GameState $state, string $type, ?string $actorRole = null, int $prophecyOnSuccess = 0): array
     {
         $deck = $state->glyphDeck;
         $index = null;
@@ -5586,6 +5669,11 @@ final class GameEngine
         if ($actorRole !== null && $prohibitionInPlay) {
             [$state, $shameEvents] = self::applyStatusToken($state, $actorRole, 'shame_token');
             $events = [...$events, ...$shameEvents];
+        }
+
+        if ($actorRole !== null && $prophecyOnSuccess > 0) {
+            $state = $state->with(['prophecy' => $state->prophecy + $prophecyOnSuccess]);
+            $events[] = ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => $prophecyOnSuccess]];
         }
 
         return [$state, $events];

@@ -73,10 +73,12 @@ test('Aural inscription requires every Wanderer adjacent to the Golem on their o
     $wanderers['wanderer_a']['equipped']['bag'] = 'aural-inscription';
     $state = $state->with(['wanderers' => $wanderers]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+    $prophecyBefore = $state->prophecy;
 
     [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'aural-inscription']);
 
     expect($state->golem['glyphs'])->toHaveCount(1)
+        ->and($state->prophecy)->toBe($prophecyBefore + 1)
         ->and($state->wanderers['wanderer_a']['equipped']['bag'])->toBeNull()
         ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
 });

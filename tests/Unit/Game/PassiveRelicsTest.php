@@ -766,12 +766,12 @@ test('Farmer\'s insight doubles the Fruit tree action bonus for its holder', fun
     expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe($actionsBefore + 1);
 });
 
-test('Pen grants 3 Prophecy at end of game if all 4 active Glyphs are non-👺 and Pen is built', function () {
+test('Pen grants 3 Prophecy at end of game if all 3 active Glyphs are non-👺 and Pen is built', function () {
     $state = startedGame();
     $board = $state->board;
     $board['1,0'] = [...$board['1,0'], 'location_key' => 'pen'];
     $state = $state->with(['board' => $board]);
-    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['inverted', 'paradoxical', 'perplexing', 'parallel']])]);
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['inverted', 'paradoxical', 'perplexing']])]);
 
     $reflection = new ReflectionMethod(GameEngine::class, 'applyEndOfGameScoring');
     $reflection->setAccessible(true);
@@ -781,7 +781,11 @@ test('Pen grants 3 Prophecy at end of game if all 4 active Glyphs are non-👺 a
         ->and(collect($events)->pluck('type'))->toContain('prophecy_gained');
 });
 
-test('Pen scores with exactly 3 non-👺 Glyphs active, even alongside a 👺 Glyph', function () {
+test('Pen scoring counts non-👺 Glyphs, not total active, even past the normal 3-Glyph cap', function () {
+    // GOLEM_MAX_GLYPHS is 3, so 4 active glyphs can't happen through
+    // normal play — this is a defensive check that the >= 3 threshold
+    // itself is about non-👺 count, not "every active slot is non-👺",
+    // in case the cap ever changes again.
     $state = startedGame();
     $board = $state->board;
     $board['1,0'] = [...$board['1,0'], 'location_key' => 'pen'];
@@ -801,7 +805,7 @@ test('Pen does not score with only 2 non-👺 Glyphs active', function () {
     $board = $state->board;
     $board['1,0'] = [...$board['1,0'], 'location_key' => 'pen'];
     $state = $state->with(['board' => $board]);
-    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['inverted', 'paradoxical', 'mobile', 'legalistic']])]);
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['inverted', 'paradoxical', 'mobile']])]);
 
     $reflection = new ReflectionMethod(GameEngine::class, 'applyEndOfGameScoring');
     $reflection->setAccessible(true);

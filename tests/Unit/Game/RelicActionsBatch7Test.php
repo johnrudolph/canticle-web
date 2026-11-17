@@ -127,12 +127,14 @@ test('Jericho inscription destroys a Wall when the Golem is on the far side and 
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
     $wallsPoolBefore = $state->infrastructurePool['walls'];
+    $prophecyBefore = $state->prophecy;
 
     [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'jericho-inscription']);
 
     expect($state->board['2,0']['infrastructure'])->toBe([])
         ->and($state->infrastructurePool['walls'])->toBe($wallsPoolBefore + 1)
         ->and($state->golem['glyphs'])->toHaveCount(1)
+        ->and($state->prophecy)->toBe($prophecyBefore + 1)
         ->and($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBeNull()
         ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
 });
@@ -170,7 +172,7 @@ test('Past troubles reshuffles the active Glyphs and discard pile, keeping the t
     $totalAfter = count($state->golem['glyphs']) + count($state->glyphDiscardPile);
 
     expect($totalAfter)->toBe(5)
-        ->and(count($state->golem['glyphs']))->toBeLessThanOrEqual(4)
+        ->and(count($state->golem['glyphs']))->toBe(3)
         ->and($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBe('past-troubles') // not trashed
         ->and(collect($events)->pluck('type'))->toContain('glyphs_reshuffled');
 });
