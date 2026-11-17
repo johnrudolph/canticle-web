@@ -226,6 +226,7 @@ class GameController extends Controller
                 'location_name' => $relic->locationName,
                 'is_event' => $relic->isEvent,
                 'is_bound' => $relic->isBound,
+                'is_action' => $relic->isAction,
             ])
             ->all();
     }

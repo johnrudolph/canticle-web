@@ -7,16 +7,23 @@ export const WANDERER_BG: Record<string, string> = {
 export function RoleAvatar({
     role,
     size = 'sm',
+    active = false,
 }: {
     role: 'wanderer_a' | 'wanderer_b' | 'wanderer_c' | 'golem';
     size?: 'sm' | 'lg';
+    /** Gently highlights this avatar — e.g. the Wanderer whose turn it currently is. */
+    active?: boolean;
 }) {
+    const activeRing = active
+        ? 'ring-2 ring-amber-400 ring-offset-1 ring-offset-background'
+        : '';
+
     if (role === 'golem') {
         return (
             <span
                 className={`flex items-center justify-center rounded-full bg-black text-white dark:bg-white dark:text-black ${
                     size === 'lg' ? 'size-10 text-2xl' : 'size-6 text-sm'
-                }`}
+                } ${activeRing}`}
             >
                 👺
             </span>
@@ -27,7 +34,7 @@ export function RoleAvatar({
         <span
             className={`flex items-center justify-center rounded-full text-white ${WANDERER_BG[role] ?? 'bg-gray-600'} ${
                 size === 'lg' ? 'size-10 text-xl' : 'size-6 text-xs'
-            }`}
+            } ${activeRing}`}
         >
             🧑
         </span>

@@ -58,6 +58,7 @@ final class RelicCatalog
                 // text itself (no dedicated column in the sheet) — see
                 // e.g. Peacemaker's spirit, Hands of deliverance.
                 isBound: str_starts_with($effect, 'Bound'),
+                isAction: trim((string) ($row['type'] ?? '')) === 'Action',
             );
         }
 

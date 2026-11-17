@@ -98,6 +98,7 @@ export interface RelicCatalogEntry {
     location_name: string | null;
     is_event: boolean;
     is_bound: boolean;
+    is_action: boolean;
 }
 
 export interface GolemCardCatalogEntry {

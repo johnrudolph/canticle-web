@@ -20,6 +20,7 @@ final class Relic
         public readonly ?string $locationName, // non-null => location-locked, see rules-todo
         public readonly bool $isEvent, // resolve immediately and trash, never equipped — rules.md
         public readonly bool $isBound, // rules.md's Bound (🪡) Relics can never be dropped, only trashed
+        public readonly bool $isAction, // has a "Use" action a Wanderer can take; false for Passive and Event Relics
     ) {}
 
     /**
@@ -37,6 +38,7 @@ final class Relic
             'location_name' => $this->locationName,
             'is_event' => $this->isEvent,
             'is_bound' => $this->isBound,
+            'is_action' => $this->isAction,
         ];
     }
 }

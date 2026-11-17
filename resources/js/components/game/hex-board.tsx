@@ -60,6 +60,7 @@ export function HexBoard({
     wanderers,
     golemCell,
     highlightedCells,
+    activeWandererRole,
     onCellClick,
     myRoles = [],
     onPickupRelic,
@@ -70,6 +71,8 @@ export function HexBoard({
     wanderers: Record<string, WandererState>;
     golemCell?: Cell | null;
     highlightedCells?: Set<string>;
+    /** Whoever's turn it currently is — gently highlighted on the board. */
+    activeWandererRole?: string | null;
     onCellClick?: (cell: Cell) => void;
     myRoles?: string[];
     onPickupRelic?: (role: string, relicKey: string) => void;
@@ -89,6 +92,11 @@ export function HexBoard({
         wandererByCell.set(key, [...(wandererByCell.get(key) ?? []), role]);
     }
 
+    const activeWandererCellKey = activeWandererRole
+        ? wanderers[activeWandererRole]?.cell &&
+          cellKey(wanderers[activeWandererRole].cell as Cell)
+        : null;
+
     return (
         <>
             <div
@@ -103,6 +111,8 @@ export function HexBoard({
                     const pos = cellTopLeft(cell);
                     const location = locationCatalog[cellData.location_key];
                     const isHighlighted = highlightedCells?.has(key) ?? false;
+                    const isActiveWandererCell =
+                        activeWandererCellKey === key;
 
                     return (
                         <div
@@ -111,6 +121,10 @@ export function HexBoard({
                                 isHighlighted
                                     ? 'border-primary bg-primary/10'
                                     : 'border-border bg-card'
+                            } ${
+                                isActiveWandererCell
+                                    ? 'ring-2 ring-amber-400/70 ring-offset-1 ring-offset-background'
+                                    : ''
                             }`}
                             style={{
                                 left: pos.x - bounds.minX,
@@ -190,6 +204,10 @@ export function HexBoard({
                                                             | 'wanderer_a'
                                                             | 'wanderer_b'
                                                             | 'wanderer_c'
+                                                    }
+                                                    active={
+                                                        role ===
+                                                        activeWandererRole
                                                     }
                                                 />
                                             ),

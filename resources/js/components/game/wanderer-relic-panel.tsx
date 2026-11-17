@@ -189,7 +189,7 @@ export function WandererRelicPanel({
                                             {relicCatalog[relicKey].effect}
                                         </p>
                                     )}
-                                    {canAct && (
+                                    {canAct && relicCatalog[relicKey]?.is_action && (
                                         <div className="flex flex-wrap gap-1">
                                             {(() => {
                                                 const reason =

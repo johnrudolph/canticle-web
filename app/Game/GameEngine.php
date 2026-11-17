@@ -91,6 +91,13 @@ final class GameEngine
             return self::inscribeUnmetReason($state, $actorRole, $relicKey);
         }
 
+        // Passive Relics have no "Use" action at all — see useRelic()'s
+        // matching check.
+        $relic = RelicCatalog::find($relicKey);
+        if ($relic !== null && ! $relic->isAction) {
+            return "{$relic->name} is a passive Relic — it has no action to use.";
+        }
+
         $baseKey = (string) preg_replace('/-\d+$/', '', $relicKey);
 
         return self::relicUnmetConditionReason($state, $actorRole, $baseKey);
@@ -734,6 +741,20 @@ final class GameEngine
         }
 
         $relic = RelicCatalog::find($relicKey);
+
+        // Passive Relics (e.g. Prohibition of inscribing) have no "Use"
+        // concept at all — their effect is just being equipped. Without
+        // this, a Passive Relic with no case in resolveRelicAction's
+        // match below silently falls through to its no-op default arm,
+        // spending the action for nothing (confirmed in production: the
+        // UI showed a "Use" button for one and let it burn through
+        // actions). inscribe-7 is Passive too, but excluded here since
+        // it's routed through resolveInscribe/inscribeUnmetReason
+        // instead, which already rejects it with a more specific reason.
+        if ($relic !== null && ! $relic->isAction && ! str_starts_with($relicKey, 'inscribe')) {
+            throw new InvalidMoveException("{$relic->name} is a passive Relic — it has no action to use.");
+        }
+
         $baseKey = (string) preg_replace('/-\d+$/', '', $relicKey);
 
         // For Relics whose printed condition is knowable from state alone
@@ -5666,12 +5687,16 @@ final class GameEngine
         }
 
         // Prohibition of inscribing: "If anyone (Wanderer or Golem) adds
-        // a Glyph to the Golem mat, they gain 1 Shame token." Gated on
-        // the card being equipped ANYWHERE (it describes a standing rule
-        // while it's in play, not a personal reaction), and only applies
-        // to a Wanderer-attributed add — the Golem's own card effects
-        // (self-inscription) pass no actorRole, and the Golem has no
-        // slot to hold a token in anyway.
+        // a Glyph to the Golem mat, they gain 1 Shame token (max 3)."
+        // Gated on the card being equipped ANYWHERE (it describes a
+        // standing rule while it's in play, not a personal reaction).
+        // A Wanderer-attributed add gains a Shame status token; the
+        // Golem's own card effects (self-inscription) pass no
+        // actorRole, but the Golem has its own Shame counter
+        // (golem['shame'], capped at 3 the same as everywhere else it's
+        // gained) and gains that instead — confirmed in production:
+        // equipped, then the Golem added "Vindictive" via a card with
+        // no actorRole, and gained no Shame at all.
         $prohibitionInPlay = false;
         foreach ($state->wanderers as $otherWanderer) {
             if (in_array('prohibition-of-inscribing', $otherWanderer['equipped'], true)) {
@@ -5680,9 +5705,14 @@ final class GameEngine
             }
         }
 
-        if ($actorRole !== null && $prohibitionInPlay) {
-            [$state, $shameEvents] = self::applyStatusToken($state, $actorRole, 'shame_token');
-            $events = [...$events, ...$shameEvents];
+        if ($prohibitionInPlay) {
+            if ($actorRole !== null) {
+                [$state, $shameEvents] = self::applyStatusToken($state, $actorRole, 'shame_token');
+                $events = [...$events, ...$shameEvents];
+            } elseif ($state->golem['shame'] < 3) {
+                $state = $state->with(['golem' => $state->golemWith(['shame' => $state->golem['shame'] + 1])]);
+                $events[] = ['type' => 'golem_shame_gained', 'role_key' => null, 'payload' => ['amount' => 1]];
+            }
         }
 
         if ($actorRole !== null && $prophecyOnSuccess > 0) {

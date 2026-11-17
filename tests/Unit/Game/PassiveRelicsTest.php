@@ -737,17 +737,56 @@ test('Prohibition of inscribing gives the actor who added a Glyph 1 Shame token,
         ->and($state->wanderers['wanderer_a']['equipped'])->toContain('shame_token');
 });
 
-test('Prohibition of inscribing does not trigger a Golem-attributed Glyph add (no actorRole)', function () {
+test('Prohibition of inscribing gives the Golem 1 Shame instead, for a Golem-attributed Glyph add (no actorRole)', function () {
+    // Confirmed in production: equipped, then the Golem added
+    // "Vindictive" via a card with no actorRole, and gained no Shame
+    // at all — the Golem has its own Shame counter (capped at 3, same
+    // as everywhere else it's gained), not a Shame status token.
     $state = startedGame();
     $equipped = [...$state->wanderers['wanderer_b']['equipped'], 'hand_left' => 'prohibition-of-inscribing'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['equipped' => $equipped])]);
+    $shameBefore = $state->golem['shame'];
 
     $reflection = new ReflectionMethod(GameEngine::class, 'addGlyphOfType');
     $reflection->setAccessible(true);
     $type = GlyphCatalog::find($state->glyphDeck[0])?->type;
     [$state, $events] = $reflection->invoke(null, $state, $type);
 
-    expect(collect($events)->pluck('type'))->not->toContain('wanderer_shamed');
+    expect($state->golem['shame'])->toBe($shameBefore + 1)
+        ->and(collect($events)->pluck('type'))->toContain('golem_shame_gained')
+        ->and(collect($events)->pluck('type'))->not->toContain('wanderer_shamed');
+});
+
+test('Prohibition of inscribing caps the Golem\'s Shame gain at 3', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_b']['equipped'], 'hand_left' => 'prohibition-of-inscribing'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['equipped' => $equipped])]);
+    $state = $state->with(['golem' => $state->golemWith(['shame' => 3])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'addGlyphOfType');
+    $reflection->setAccessible(true);
+    $type = GlyphCatalog::find($state->glyphDeck[0])?->type;
+    [$state, $events] = $reflection->invoke(null, $state, $type);
+
+    expect($state->golem['shame'])->toBe(3)
+        ->and(collect($events)->pluck('type'))->not->toContain('golem_shame_gained');
+});
+
+test('a Passive Relic cannot be "used" — it is rejected outright, without spending the action', function () {
+    // Confirmed in production: the UI showed a "Use" button for
+    // Prohibition of inscribing (a Passive Relic) and let it burn
+    // through actions for nothing, since resolveRelicAction's match
+    // has no case for it and silently falls through to a no-op.
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'prohibition-of-inscribing'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+    $actionsBefore = $state->wanderers['wanderer_a']['actions_remaining'];
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'prohibition-of-inscribing']))
+        ->toThrow(InvalidMoveException::class, 'is a passive Relic');
+
+    expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe($actionsBefore);
 });
 
 test('Farmer\'s insight doubles the Fruit tree action bonus for a Wanderer starting their turn there', function () {

@@ -548,6 +548,11 @@ export default function GameShow({ game }: { game: GameSummary }) {
                         wanderers={state.wanderers}
                         golemCell={state.golem.cell}
                         highlightedCells={highlightedCells}
+                        activeWandererRole={
+                            state.phase === 'wanderer'
+                                ? state.active_wanderer_role
+                                : null
+                        }
                         onCellClick={onCellClick}
                         myRoles={myRoles}
                         onPickupRelic={(role, relicKey) =>
