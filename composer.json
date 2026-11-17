@@ -65,7 +65,8 @@
             "Composer\\Config::disableProcessTimeout",
             "npm run check",
             "npm run types:check",
-            "@test"
+            "@test",
+            "@test:stability"
         ],
         "types:check": [
             "phpstan analyse"
@@ -75,6 +76,9 @@
             "@lint:check",
             "@types:check",
             "@php artisan test"
+        ],
+        "test:stability": [
+            "bash -c 'for i in $(seq 1 9); do php artisan test || exit 1; done'"
         ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",

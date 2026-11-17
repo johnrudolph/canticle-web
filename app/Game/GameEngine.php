@@ -567,6 +567,11 @@ final class GameEngine
             throw new InvalidMoveException('That Relic does not fit that slot.');
         }
 
+        // Tyrannical Glyph: "Wanderers cannot equip Relics with 🌿."
+        if (in_array('tyrannical', $state->golem['glyphs'], true) && str_contains($relic->effect, '🌿')) {
+            throw new InvalidMoveException('Tyrannical: Relics with 🌿 cannot be equipped right now.');
+        }
+
         // An expansive mind: "You can add two more Mind cards to this
         // slot." mind_2/mind_3 only exist while it occupies 'mind' itself.
         if (($slot === 'mind_2' || $slot === 'mind_3') && $wanderer['equipped']['mind'] !== 'an-expansive-mind') {
@@ -4134,6 +4139,13 @@ final class GameEngine
 
         if (in_array('fruit_tree', $state->board[Board::key($cell)]['infrastructure'], true)) {
             $actionsPerTurn += in_array('farmers-insight', $equipped, true) ? 2 : 1;
+        }
+
+        // Energizing Glyph: "Wanderers get +1 Action if they start
+        // their turn on the Golem's space."
+        if (in_array('energizing', $state->golem['glyphs'], true)
+            && $state->golem['cell'] !== null && Board::key($state->golem['cell']) === Board::key($cell)) {
+            $actionsPerTurn++;
         }
 
         return $actionsPerTurn;

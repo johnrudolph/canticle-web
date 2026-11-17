@@ -487,6 +487,34 @@ test('Moving without Revelatory active ignores any sacrifice_hp in the move payl
     expect($state->wanderers['wanderer_a']['hp'])->toBe(10);
 });
 
+test('Energizing grants +1 action for starting a turn on the Golem\'s space', function () {
+    $state = startedGame(); // Golem on the hub [1,0] by default
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['energizing']])]);
+
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe(4); // base 3 + 1
+});
+
+test('Tyrannical blocks equipping a Relic with 🌿', function () {
+    $state = startedGame();
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['tyrannical']])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['holding' => ['divine-healing-oil']])]);
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'equip_relic', 'relic_key' => 'divine-healing-oil', 'slot' => 'bag']))
+        ->toThrow(InvalidMoveException::class, 'Tyrannical');
+});
+
+test('Tyrannical does not block equipping a Relic without 🌿', function () {
+    $state = startedGame();
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['tyrannical']])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['holding' => ['golem-whistle']])]);
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'equip_relic', 'relic_key' => 'golem-whistle', 'slot' => 'bag']);
+
+    expect($state->wanderers['wanderer_a']['equipped']['bag'])->toBe('golem-whistle');
+});
+
 test('Miraculous does not re-trigger on further damage to an already-exhausted Wanderer', function () {
     $state = startedGame();
     $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['miraculous']])]);

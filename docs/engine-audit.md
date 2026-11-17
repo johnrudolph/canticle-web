@@ -65,25 +65,37 @@ Full list, by type, with what's missing:
 | 📖 | Merciful | -1👊 | `applyDamage` |
 | 📖 | Miraculous | Becoming exhausted → immediately 🌿3 | `applyDamage`'s exhaustion branch |
 
-Several of these (Legalistic, Cruel, Merciful, Enchanted, Outnumbered) are
-all "modify incoming/outgoing 👊" and belong in **one** damage-modifier
-pipeline in `applyDamage`/`golemAttackHere` rather than one-off patches —
-see §3's recommendation.
+**Update, 2026-11-17: 32 of 36 now implemented.** All combat/movement/
+card-count/targeting/reactive/heal Glyphs from the table above landed —
+see `tests/Unit/Game/GlyphEffectsTest.php` for coverage of each. 4 remain
+deliberately unimplemented because the current architecture has no clean
+seam for the choice they require:
 
-**Recommendation:** don't try to land all 35 in one pass. Triage by how
-often they'll actually come up (the always-on combat modifiers — Cruel,
-Merciful, Legalistic, Enchanted, Outnumbered — will matter in nearly every
-game; Barricading/Destructive/Reactive are situational; Focused and
-Tyrannical are rare-but-high-impact when they do apply) and do a batch of
-~5 at a time the same way Relic batches were done this session, each with
-its own test file.
+- **Neighborly** (🤝) — needs a target Ally *and* a target Relic choice
+  mid-reaction; every other "always strictly beneficial" auto-resolved
+  reaction in this engine has exactly one right answer, this doesn't.
+- **Paradoxical** (⏳) — "each Wanderer may 🦶1" fires mid-Golem-phase,
+  outside any Wanderer's actual turn. Modeling it as `+1 actions_remaining`
+  (the pattern every other free-action Glyph uses) is a no-op in practice:
+  the next Wanderer turn's `turnStartActions()` overwrites it before
+  anyone could spend it.
+- **Perplexing** (⏳) and **Parallel** (⏳) — both need a pause mid-
+  resolution (after a Location is played; after a card is drawn) for an
+  opt-in player choice. Location-building and card-resolution are both
+  atomic single calls right now, with no interrupt point to pause on.
+
+All four would need either a new interactive move type with real UI (same
+shape as Smoldering's `trash_relic_for_health`, which *did* get built this
+pass) or a restructure of the relevant resolution loop into something
+pausable. Worth scoping as a deliberate follow-up, not a quick fix.
 
 ---
 
 ## 2. Other confirmed gameplay bugs found during this audit
 
-- **Emperor's Knowledge applies without being equipped.** `moveWanderer`
-  unconditionally calls `countEmperorsRelics(equipped)` and grants
+- **Fixed, 2026-11-17: Emperor's Knowledge applied without being
+  equipped.** `moveWanderer`
+  unconditionally called `countEmperorsRelics(equipped)` and granted
   `intdiv(count, 2)` refunded actions to every move — counting *any*
   equipped Relic whose name starts with "Emperor's" (Diary, Robes,
   Timepiece, Knowledge itself). The printed effect belongs to Emperor's
@@ -274,18 +286,24 @@ visibly slow:
 
 ## Suggested priority order
 
-1. **Glyph batch 1** — the always-on combat modifiers (Cruel, Merciful,
-   Enchanted, Legalistic, Outnumbered) plus Accused, since they'll be felt
-   in nearly every game and share one damage-pipeline seam.
-2. **Emperor's Knowledge gate fix** — one-line, high-value, currently
-   giving away a bonus for free.
-3. **CI stability-loop step** — cheap, prevents re-discovering flaky
-   tests by hand every session.
-4. **Glyph batches 2-4** — movement modifiers, card-count modifiers,
-   reactive/targeting Glyphs, roughly in the table order above.
-5. Everything in §3 (structural refactors) — do opportunistically, not as
-   a dedicated pass; each is low-urgency and higher-risk-of-regression
-   than the gameplay gaps above.
+1. ~~**Glyph batch 1** — combat modifiers.~~ **Done, 2026-11-17.**
+2. ~~**Emperor's Knowledge gate fix.**~~ **Done, 2026-11-17.**
+3. **CI stability-loop step** — still open. Cheap, prevents
+   re-discovering flaky tests by hand every session (and this pass added
+   several more random-shuffle-dependent tests that needed a manual
+   20-30x loop to confirm — see `GlyphEffectsTest.php`'s forced-top-card
+   tricks for where that bit).
+4. ~~**Glyph batches 2-6** — movement/card-count/targeting/reactive/
+   heal/misc modifiers.~~ **Done, 2026-11-17** (32/36; Neighborly,
+   Paradoxical, Perplexing, Parallel deliberately deferred — see §1).
+5. Everything in §3 (structural refactors) — still open, do
+   opportunistically rather than as a dedicated pass; each is
+   low-urgency and higher-risk-of-regression than the gameplay gaps
+   above. §3.2's triplicated-condition pattern is worth revisiting now
+   that ~15 more Glyph conditions were added the same scattered way.
+6. **New:** the 4 deferred Glyphs, once there's a concrete plan for a
+   pausable mid-resolution interrupt point (or a decision that
+   auto-skipping them is acceptable).
 
 No open questions for the designer — everything above is either an
 implementation gap (effect exists in rules.md/the sheet, code doesn't do
