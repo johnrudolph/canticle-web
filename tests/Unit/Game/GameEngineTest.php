@@ -41,13 +41,25 @@ function startedGame(): GameState
     //     plants its own Defenders' Guild at a specific cell (to test
     //     that mechanic directly) needs to be the ONLY one on the board,
     //     since the engine always tucks at the first one found.
+    //   - Monolith and Field auto-place a Monolith Shard/Fruit tree
+    //     fixture (has_shard/has_tree) the moment they're placed on the
+    //     board, which would make any test asserting an exact
+    //     infrastructurePool count nondeterministic depending on
+    //     whether the shuffle happened to pick them.
+    // Swapping a cell's location_key alone doesn't undo a fixture it
+    // already placed during GameSetup::create() — explicitly strip any
+    // infrastructure on a swapped cell and restore it to the pool.
     $board = $state->board;
+    $pool = $state->infrastructurePool;
     foreach ($board as $key => $entry) {
-        if (in_array($entry['location_key'], ['catacombs', 'exile', 'beds-of-poison', 'golem-sanctuary', 'house-of-cryptids', 'library', 'defenders-guild'], true)) {
-            $board[$key] = [...$entry, 'location_key' => 'artists-hovel'];
+        if (in_array($entry['location_key'], ['catacombs', 'exile', 'beds-of-poison', 'golem-sanctuary', 'house-of-cryptids', 'library', 'defenders-guild', 'monolith', 'field'], true)) {
+            foreach ($entry['infrastructure'] as $fixtureType) {
+                $pool[$fixtureType]++;
+            }
+            $board[$key] = [...$entry, 'location_key' => 'artists-hovel', 'infrastructure' => []];
         }
     }
-    $state = $state->with(['board' => $board]);
+    $state = $state->with(['board' => $board, 'infrastructurePool' => $pool]);
 
     foreach (RoleKeys::wanderers(2) as $role) {
         [$state] = GameEngine::apply($state, $role, ['type' => 'choose_starting_cell', 'cell' => [1, 0]]);
@@ -154,6 +166,62 @@ test('a successfully played Location deals its Relic pile and leaves the Emperor
         ->and($state->board[$cellKey]['relics'])->toHaveCount($costFree->relicCount)
         ->and($state->locationHand)->not->toContain($costFree->key)
         ->and($events[0]['type'])->toBe('location_played');
+});
+
+test('playing a has_shard Location (Monolith) places a Monolith Shard fixture for free and depletes the pool', function () {
+    $state = startedGame();
+    $monolith = LocationCatalog::find('monolith');
+    expect($monolith->hasShard)->toBeTrue();
+
+    $state = $state->with(['locationHand' => [$monolith->key]]);
+    $poolBefore = $state->infrastructurePool['monolith_shard'];
+    $cell = Board::placeableCells($state->board)[0];
+
+    [$state, $events] = GameEngine::apply($state, 'emperor', [
+        'type' => 'play_location', 'location_key' => $monolith->key, 'cell' => $cell,
+    ]);
+
+    $cellKey = Board::key($cell);
+    expect($state->board[$cellKey]['infrastructure'])->toBe(['monolith_shard'])
+        ->and($state->infrastructurePool['monolith_shard'])->toBe($poolBefore - 1)
+        ->and(collect($events)->pluck('type'))->toContain('infrastructure_placed');
+});
+
+test('playing a has_tree Location (Field) places a Fruit tree fixture for free and depletes the pool', function () {
+    $state = startedGame();
+    $field = LocationCatalog::find('field');
+    expect($field->hasTree)->toBeTrue();
+
+    $state = $state->with(['locationHand' => [$field->key]]);
+    $poolBefore = $state->infrastructurePool['fruit_tree'];
+    $cell = Board::placeableCells($state->board)[0];
+
+    [$state, $events] = GameEngine::apply($state, 'emperor', [
+        'type' => 'play_location', 'location_key' => $field->key, 'cell' => $cell,
+    ]);
+
+    $cellKey = Board::key($cell);
+    expect($state->board[$cellKey]['infrastructure'])->toBe(['fruit_tree'])
+        ->and($state->infrastructurePool['fruit_tree'])->toBe($poolBefore - 1)
+        ->and(collect($events)->pluck('type'))->toContain('infrastructure_placed');
+});
+
+test('a has_shard/has_tree Location gets no fixture once the relevant pool is exhausted', function () {
+    $state = startedGame();
+    $monolith = LocationCatalog::find('monolith');
+    $state = $state->with([
+        'locationHand' => [$monolith->key],
+        'infrastructurePool' => [...$state->infrastructurePool, 'monolith_shard' => 0],
+    ]);
+    $cell = Board::placeableCells($state->board)[0];
+
+    [$state, $events] = GameEngine::apply($state, 'emperor', [
+        'type' => 'play_location', 'location_key' => $monolith->key, 'cell' => $cell,
+    ]);
+
+    $cellKey = Board::key($cell);
+    expect($state->board[$cellKey]['infrastructure'])->toBe([])
+        ->and(collect($events)->pluck('type'))->not->toContain('infrastructure_placed');
 });
 
 test('Bazaar deals 1 Relic per distinct branch already produced by the city, not its printed count', function () {
@@ -364,7 +432,7 @@ test('placing Infrastructure decrements the pool and is capped at 2 per turn', f
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'place_infrastructure', 'infrastructure_type' => 'fruit_tree', 'cell' => [1, 0]]);
 
     expect($state->infrastructurePool['road'])->toBe(9)
-        ->and($state->infrastructurePool['fruit_tree'])->toBe(1)
+        ->and($state->infrastructurePool['fruit_tree'])->toBe(2)
         ->and($state->infrastructurePlacedThisTurn)->toBe(2);
 
     GameEngine::apply($state, 'emperor', ['type' => 'place_infrastructure', 'infrastructure_type' => 'walls', 'cell' => [1, 0]]);
@@ -378,7 +446,7 @@ test('undo_infrastructure_placement reverts the most recent placement this turn'
     [$state, $events] = GameEngine::apply($state, 'emperor', ['type' => 'undo_infrastructure_placement']);
 
     expect($state->board['0,1']['infrastructure'])->not->toContain('fruit_tree')
-        ->and($state->infrastructurePool['fruit_tree'])->toBe(2)
+        ->and($state->infrastructurePool['fruit_tree'])->toBe(3)
         ->and($state->infrastructurePlacedThisTurn)->toBe(1)
         ->and($state->board['1,0']['infrastructure'])->toContain('road') // the earlier placement is untouched
         ->and(collect($events)->pluck('type'))->toContain('infrastructure_placement_undone');

@@ -42,17 +42,37 @@ final class GameSetup
 
         $relicDecks = self::buildRelicDecks();
 
+        $infrastructurePool = [
+            'monolith_shard' => 12,
+            'road' => 10,
+            'walls' => 2,
+            'fruit_tree' => 3,
+        ];
+
         $board = [];
         foreach ($startingCells as $i => $cell) {
             $location = LocationCatalog::find($startingKeys[$i]);
             [$relics, $relicDecks] = RelicDealer::dealForLocation($relicDecks, $location, $board);
+
+            // Fixture outlines: a Location marked has_shard/has_tree on
+            // the sheet starts with that fixture already on its space,
+            // drawn from the same finite pool the Emperor places from.
+            $infrastructure = [];
+            if ($location?->hasShard && $infrastructurePool['monolith_shard'] > 0) {
+                $infrastructure[] = 'monolith_shard';
+                $infrastructurePool['monolith_shard']--;
+            }
+            if ($location?->hasTree && $infrastructurePool['fruit_tree'] > 0) {
+                $infrastructure[] = 'fruit_tree';
+                $infrastructurePool['fruit_tree']--;
+            }
 
             $board[Board::key($cell)] = [
                 'location_key' => $startingKeys[$i],
                 'placed_round' => 1,
                 'relics' => $relics,
                 'relics_face_up' => [],
-                'infrastructure' => [],
+                'infrastructure' => $infrastructure,
                 'tucked' => [],
             ];
         }
@@ -109,12 +129,7 @@ final class GameSetup
                 'active_attack_reduction' => 0,
             ],
             glyphDeck: $glyphDeck,
-            infrastructurePool: [
-                'monolith_shard' => 12,
-                'road' => 10,
-                'walls' => 2,
-                'fruit_tree' => 2,
-            ],
+            infrastructurePool: $infrastructurePool,
             pendingSetupWanderers: $wandererRoles,
             pendingGolemPlacement: true,
         );

@@ -4,9 +4,10 @@ namespace App\Game\Catalog;
 
 /**
  * One row from resources/data/canticle/locations.json, normalized. Relic
- * drawing, infrastructure fixtures, and the ⭐/has_specific_relics rule are
- * deliberately not modeled yet — only what's needed to place a Location on
- * the board (name, lore text, what it produces, what it costs).
+ * drawing and the ⭐/has_specific_relics rule are deliberately not modeled
+ * yet — only what's needed to place a Location on the board (name, lore
+ * text, what it produces, what it costs) plus its fixed-at-build-time
+ * Infrastructure fixtures ($hasShard/$hasTree).
  */
 final class Location
 {
@@ -23,6 +24,8 @@ final class Location
         public readonly array $costs,
         public readonly int $relicCount,
         public readonly bool $isStarter,
+        public readonly bool $hasShard,
+        public readonly bool $hasTree,
     ) {}
 
     /**

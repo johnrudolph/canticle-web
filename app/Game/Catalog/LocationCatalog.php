@@ -55,6 +55,8 @@ final class LocationCatalog
                 costs: $costs,
                 relicCount: self::leadingInt($row['Relics'] ?? null),
                 isStarter: ($row['is_starter'] ?? null) === 'Show',
+                hasShard: ($row['has_shard'] ?? null) === 'Show',
+                hasTree: ($row['has_tree'] ?? null) === 'Show',
             );
         }
 

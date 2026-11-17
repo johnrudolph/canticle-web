@@ -213,21 +213,40 @@ final class GameEngine
 
         [$relics, $relicDecks] = RelicDealer::dealForLocation($state->relicDecks, $location, $state->board);
 
+        // Fixture outlines: a Location marked has_shard/has_tree on the
+        // sheet starts with that fixture already on its space the
+        // moment it's built, drawn from the same finite infrastructurePool
+        // the Emperor's own per-turn placements come from.
+        $infrastructure = [];
+        $pool = $state->infrastructurePool;
+        if ($location->hasShard && $pool['monolith_shard'] > 0) {
+            $infrastructure[] = 'monolith_shard';
+            $pool['monolith_shard']--;
+        }
+        if ($location->hasTree && $pool['fruit_tree'] > 0) {
+            $infrastructure[] = 'fruit_tree';
+            $pool['fruit_tree']--;
+        }
+
         $hand = array_values(array_diff($state->locationHand, [$locationKey]));
         $board = $state->boardWith($cellKey, [
             'location_key' => $locationKey,
             'placed_round' => $state->round,
             'relics' => $relics,
             'relics_face_up' => [],
-            'infrastructure' => [],
+            'infrastructure' => $infrastructure,
             'tucked' => [],
         ]);
 
-        $state = $state->with(['board' => $board, 'locationHand' => $hand, 'relicDecks' => $relicDecks]);
+        $state = $state->with(['board' => $board, 'locationHand' => $hand, 'relicDecks' => $relicDecks, 'infrastructurePool' => $pool]);
 
         $events = [
             ['type' => 'location_played', 'role_key' => $actorRole, 'payload' => ['location_key' => $locationKey, 'cell' => $cell]],
         ];
+
+        foreach ($infrastructure as $type) {
+            $events[] = ['type' => 'infrastructure_placed', 'role_key' => null, 'payload' => ['infrastructure' => $type, 'cell' => $cell]];
+        }
 
         // Scriptorium: "When building this: Move all Monolith Shards to
         // the Emperor's infrastructure pool."
