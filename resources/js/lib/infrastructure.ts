@@ -17,8 +17,8 @@ export const INFRASTRUCTURE_LABELS: Record<InfrastructureType, string> = {
 export const INFRASTRUCTURE_DESCRIPTIONS: Record<InfrastructureType, string> = {
     monolith_shard:
         'No effect on its own, but many Relics interact with Shards. Only 1 per space.',
-    road: "Wanderers who move into this space may continue into an adjacent space for free. Connected Road spaces all produce each other's resources.",
+    road: "Moving from this space never costs a Wanderer an action. Connected Road spaces all produce each other's resources.",
     walls: "The Golem cannot enter this space. Can't be placed on the Golem's own space, and can't be placed in a way that fully traps the Golem out of every non-Walls Location.",
     fruit_tree:
-        'Wanderers who enter this space gain 1 action, which they must use this turn.',
+        'A Wanderer who starts their turn on this space gains 1 action, which they must use this turn.',
 };

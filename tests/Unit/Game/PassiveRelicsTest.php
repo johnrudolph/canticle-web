@@ -750,20 +750,18 @@ test('Prohibition of inscribing does not trigger a Golem-attributed Glyph add (n
     expect(collect($events)->pluck('type'))->not->toContain('wanderer_shamed');
 });
 
-test('Farmer\'s insight doubles the Fruit tree action bonus for its holder', function () {
+test('Farmer\'s insight doubles the Fruit tree action bonus for a Wanderer starting their turn there', function () {
     $state = startedGame();
     $board = $state->board;
-    $board['2,0'] = [...$board['2,0'], 'location_key' => 'artists-hovel', 'infrastructure' => ['fruit_tree']];
+    $board['1,0'] = [...$board['1,0'], 'infrastructure' => ['fruit_tree']];
     $state = $state->with(['board' => $board]);
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'mind' => 'farmers-insight'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
-    $actionsBefore = $state->wanderers['wanderer_a']['actions_remaining'];
 
-    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => 'NE']);
-
-    // -1 to move, +2 from the doubled Fruit tree bonus => net +1.
-    expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe($actionsBefore + 1);
+    // Base 3 + 2 from the doubled Fruit tree bonus (normally +1).
+    expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe(5);
 });
 
 test('Pen grants 3 Prophecy at end of game if all 3 active Glyphs are non-👺 and Pen is built', function () {

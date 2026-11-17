@@ -43,7 +43,6 @@ namespace App\Game;
  *         'mind_2' => ?string, 'mind_3' => ?string,
  *     ],
  *     'holding' => list<string>,       // searched but not yet equipped or dropped
- *     'free_move_available' => bool,   // set after arriving on a Road — next move is free
  *     'move_blocked_this_turn' => bool, // Incarceration — cleared when this Wanderer's next turn starts
  *     'tucked_cards' => array<string, list<string>>, // keyed by the equipped Relic (Defanging tool/Golem log) tracking its own progress; dropping that Relic loses the progress (rules.md)
  *     'was_ever_exhausted' => bool, // set once hp hits 0 for real (not saved by Cabalist wraps) — the Catacombs Location requires this to enter

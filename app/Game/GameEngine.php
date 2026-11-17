@@ -3633,7 +3633,18 @@ final class GameEngine
 
         $events[] = ['type' => 'wanderer_turn_started', 'role_key' => $firstRole, 'payload' => ['actions' => $actionsPerTurn]];
 
+        if (self::wandererStartsOnFruitTree($state, $firstRole)) {
+            $events[] = ['type' => 'fruit_tree_bonus_action', 'role_key' => $firstRole, 'payload' => []];
+        }
+
         return [$state, $events];
+    }
+
+    private static function wandererStartsOnFruitTree(GameState $state, string $role): bool
+    {
+        $cell = $state->wanderers[$role]['cell'];
+
+        return $cell !== null && in_array('fruit_tree', $state->board[Board::key($cell)]['infrastructure'], true);
     }
 
     /**
@@ -3687,14 +3698,12 @@ final class GameEngine
 
     /**
      * Road: "When Wanderers move into a space that contains a Road, they
-     * can continue into an adjacent space for free." Modeled as a
-     * one-hop-ahead flag set on arrival at a Road space and consumed by
-     * the very next move — chains naturally through consecutive Road
-     * spaces since each such arrival re-sets it.
-     *
-     * Fruit tree: "When Wanderers enter this space, they gain 1 action
-     * that they must use on this turn." Modeled as +1 action immediately;
-     * the "must use it this turn" constraint isn't separately enforced.
+     * can continue into an adjacent space for free." Modeled as free
+     * (no action cost) any time the ORIGIN space of a move has a Road —
+     * not gated on having arrived there via a previous move, so a
+     * Wanderer who simply starts their turn on a Road gets their first
+     * move free too. Chains naturally through consecutive Road spaces
+     * since each move re-checks its own new origin.
      *
      * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
@@ -3704,7 +3713,8 @@ final class GameEngine
         self::requireRole($state, $actorRole, $state->activeWandererRole(), 'wanderer');
 
         $wanderer = $state->wanderers[$actorRole];
-        $freeMove = $wanderer['free_move_available'];
+        $originInfrastructure = $state->board[Board::key($wanderer['cell'])]['infrastructure'];
+        $freeMove = in_array('road', $originInfrastructure, true);
 
         if (! $freeMove && $wanderer['actions_remaining'] <= 0) {
             throw new InvalidMoveException('No actions remaining this turn.');
@@ -3737,33 +3747,22 @@ final class GameEngine
         $destinationInfrastructure = $state->board[$toKey]['infrastructure'];
         $actionsRemaining = $wanderer['actions_remaining'] - ($freeMove ? 0 : 1);
 
-        if (in_array('fruit_tree', $destinationInfrastructure, true)) {
-            // Farmer's insight: "🌳 have double effect for you" — Fruit
-            // tree's own action bonus, doubled.
-            $actionsRemaining += in_array('farmers-insight', $wanderer['equipped'], true) ? 2 : 1;
-        }
-
         // Emperor's Knowledge: "When moving, move an additional space for
         // every 2 Relics you have equipped that start with 'Emperor's
         // __.'" Modeled as refunding the action this move cost, the same
-        // way Fruit tree/Road already grant a move for free, rather than
-        // literally chaining a second step (there's no second direction
-        // to move in from a single move_wanderer call).
+        // way Road already grants a move for free, rather than literally
+        // chaining a second step (there's no second direction to move in
+        // from a single move_wanderer call).
         $actionsRemaining += intdiv(self::countEmperorsRelics(array_values($wanderer['equipped'])), 2);
 
         $wanderers = $state->wanderersWith($actorRole, [
             'cell' => $to,
             'actions_remaining' => $actionsRemaining,
-            'free_move_available' => in_array('road', $destinationInfrastructure, true),
         ]);
 
         $state = $state->with(['wanderers' => $wanderers]);
 
         $events = [['type' => 'wanderer_moved', 'role_key' => $actorRole, 'payload' => ['to' => $to, 'free' => $freeMove]]];
-
-        if (in_array('fruit_tree', $destinationInfrastructure, true)) {
-            $events[] = ['type' => 'fruit_tree_bonus_action', 'role_key' => $actorRole, 'payload' => []];
-        }
 
         if (self::hasMonolithShardFor($state, $actorRole, $to) && in_array('rejuvenation-gown', $wanderer['equipped'], true)) {
             $hp = min(self::maxHpFor($state, $actorRole), $state->wanderers[$actorRole]['hp'] + 2);
@@ -3861,10 +3860,13 @@ final class GameEngine
 
             $state = $state->with(['wanderers' => $wanderers, 'activeWandererIndex' => $nextIndex]);
 
-            return [$state, [
-                ...$events,
-                ['type' => 'wanderer_turn_started', 'role_key' => $nextRole, 'payload' => ['actions' => $actionsPerTurn]],
-            ]];
+            $events[] = ['type' => 'wanderer_turn_started', 'role_key' => $nextRole, 'payload' => ['actions' => $actionsPerTurn]];
+
+            if (self::wandererStartsOnFruitTree($state, $nextRole)) {
+                $events[] = ['type' => 'fruit_tree_bonus_action', 'role_key' => $nextRole, 'payload' => []];
+            }
+
+            return [$state, $events];
         }
 
         [$state, $houseOfCryptidsEvents] = self::tuckAtHouseOfCryptids($state);
@@ -3941,22 +3943,34 @@ final class GameEngine
 
     /**
      * Union Garb: "If you begin your turn on a space with another
-     * Wanderer, +1 Action." Checked wherever a Wanderer's
-     * actions_remaining is set back to the full per-turn amount.
+     * Wanderer, +1 Action." Fruit tree: "When Wanderers start their
+     * turn on this space, they gain 1 action that they must use on
+     * this turn" (Farmer's insight doubles it). Checked wherever a
+     * Wanderer's actions_remaining is set back to the full per-turn
+     * amount.
      */
     private static function turnStartActions(GameState $state, string $role): int
     {
         $actionsPerTurn = $state->actionsPerWandererTurn();
         $cell = $state->wanderers[$role]['cell'];
 
-        if ($cell === null || ! in_array('union-garb', $state->wanderers[$role]['equipped'], true)) {
+        if ($cell === null) {
             return $actionsPerTurn;
         }
 
-        foreach (self::activeWanderers($state) as $otherRole => $otherCell) {
-            if ($otherRole !== $role && Board::key($otherCell) === Board::key($cell)) {
-                return $actionsPerTurn + 1;
+        $equipped = $state->wanderers[$role]['equipped'];
+
+        if (in_array('union-garb', $equipped, true)) {
+            foreach (self::activeWanderers($state) as $otherRole => $otherCell) {
+                if ($otherRole !== $role && Board::key($otherCell) === Board::key($cell)) {
+                    $actionsPerTurn++;
+                    break;
+                }
             }
+        }
+
+        if (in_array('fruit_tree', $state->board[Board::key($cell)]['infrastructure'], true)) {
+            $actionsPerTurn += in_array('farmers-insight', $equipped, true) ? 2 : 1;
         }
 
         return $actionsPerTurn;
@@ -5982,8 +5996,10 @@ final class GameEngine
         self::requireRole($state, $actorRole, $state->activeWandererRole(), 'wanderer');
 
         $wanderer = $state->wanderers[$actorRole];
+        $originInfrastructure = $state->board[Board::key($wanderer['cell'])]['infrastructure'];
+        $freeMove = in_array('road', $originInfrastructure, true);
 
-        if ($wanderer['actions_remaining'] <= 0) {
+        if (! $freeMove && $wanderer['actions_remaining'] <= 0) {
             throw new InvalidMoveException('No actions remaining this turn.');
         }
 
@@ -6024,16 +6040,13 @@ final class GameEngine
             throw new InvalidMoveException('Exile: only a Wanderer with 3 Shame tokens may enter.');
         }
 
-        $destinationInfrastructure = $state->board[$toKey]['infrastructure'];
-
         $wanderers = $state->wanderersWith($actorRole, [
             'cell' => $toCell,
-            'actions_remaining' => $wanderer['actions_remaining'] - 1,
-            'free_move_available' => in_array('road', $destinationInfrastructure, true),
+            'actions_remaining' => $wanderer['actions_remaining'] - ($freeMove ? 0 : 1),
         ]);
         $state = $state->with(['wanderers' => $wanderers]);
 
-        $events = [['type' => 'wanderer_moved', 'role_key' => $actorRole, 'payload' => ['to' => $toCell, 'free' => false]]];
+        $events = [['type' => 'wanderer_moved', 'role_key' => $actorRole, 'payload' => ['to' => $toCell, 'free' => $freeMove]]];
 
         if ($destinationLocationKey === 'beds-of-poison') {
             [$state, $damageEvents] = self::applyDamage($state, $actorRole, 5);

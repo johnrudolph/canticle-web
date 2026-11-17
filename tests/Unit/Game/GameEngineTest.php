@@ -523,16 +523,20 @@ test('Walls cannot be placed on the Golem\'s own space', function () {
     GameEngine::apply($state, 'emperor', ['type' => 'place_infrastructure', 'infrastructure_type' => 'walls', 'cell' => [1, 0]]);
 })->throws(InvalidMoveException::class, "Cannot wall the Golem's own space.");
 
-test('arriving on a Road makes the next move free, and it chains through consecutive Roads', function () {
+test('moving FROM a Road space is free, and it chains through consecutive Roads', function () {
     $state = startedGame();
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'place_infrastructure', 'infrastructure_type' => 'road', 'cell' => [0, 1]]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
+    // Moving onto the Road costs the normal action — the origin [1,0]
+    // has no Road, so this move isn't free.
     $toRoad = Board::directionBetween([1, 0], [0, 1]);
-    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $toRoad]);
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $toRoad]);
     expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe(2)
-        ->and($state->wanderers['wanderer_a']['free_move_available'])->toBeTrue();
+        ->and($events[0]['payload']['free'])->toBeFalse();
 
+    // Moving FROM the Road space back to the hub is free — the move's
+    // own origin, not its destination, is what matters now.
     $backToHub = Board::directionBetween([0, 1], [1, 0]);
     [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $backToHub]);
 
@@ -540,17 +544,47 @@ test('arriving on a Road makes the next move free, and it chains through consecu
         ->and($events[0]['payload']['free'])->toBeTrue();
 });
 
-test('entering a Fruit tree space grants a bonus action', function () {
+test('starting a turn already on a Road makes that Wanderer\'s first move free too', function () {
     $state = startedGame();
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'place_infrastructure', 'infrastructure_type' => 'road', 'cell' => [1, 0]]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    // wanderer_a starts their turn already on [1,0], which now has a
+    // Road — under the OLD rule (free move only after arriving via a
+    // previous move) this would have cost an action; under the new
+    // rule it's free just for starting there.
+    $direction = Board::directionBetween([1, 0], [0, 0]);
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $direction]);
+
+    expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe(3) // unchanged — free move
+        ->and($events[0]['payload']['free'])->toBeTrue();
+});
+
+test('starting a turn on a Fruit tree space grants a bonus action; moving onto one mid-turn does not', function () {
+    $state = startedGame();
+    // Isolate this from the Golem phase's own randomness between
+    // rounds (a card could otherwise force-move wanderer_a off the
+    // Fruit tree space before the next round's assertion runs).
+    $state = $state->with(['golemSkipped' => true]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'place_infrastructure', 'infrastructure_type' => 'fruit_tree', 'cell' => [0, 1]]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
+    // Moving onto the Fruit tree space mid-turn no longer grants
+    // anything — the bonus is now tied to starting a turn there.
     $direction = Board::directionBetween([1, 0], [0, 1]);
     [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $direction]);
 
-    // started at 3, -1 for the move, +1 for the fruit tree = 3
-    expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe(3)
-        ->and(collect($events)->pluck('type'))->toContain('fruit_tree_bonus_action');
+    expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe(2)
+        ->and(collect($events)->pluck('type'))->not->toContain('fruit_tree_bonus_action');
+
+    // Ending the turn here and starting the next round's turn on the
+    // same Fruit tree space grants the bonus action.
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'end_wanderer_turn']);
+    [$state] = GameEngine::apply($state, 'wanderer_b', ['type' => 'end_wanderer_turn']);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    expect($state->wanderers['wanderer_a']['cell'])->toBe([0, 1])
+        ->and($state->wanderers['wanderer_a']['actions_remaining'])->toBe(4); // 3 + 1 Fruit tree
 });
 
 test('Walls block the Golem\'s pathing', function () {
