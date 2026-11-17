@@ -1,5 +1,6 @@
 <?php
 
+use App\Game\Board;
 use App\Game\GameEngine;
 
 // startedGame() (GameEngineTest.php) is declared in a sibling file,
@@ -131,6 +132,47 @@ test('Lilted reduces the Golem\'s cards played this round by equipped 🎶 Relic
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
 
     expect($state->golemCardsThisRound())->toBe(1); // base 3 - 2 instruments
+});
+
+test('Mobile adds +1 to the Golem\'s step budget when it moves toward a target', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['3,0'] = ['location_key' => 'cathedral', 'placed_round' => 2, 'relics' => [], 'infrastructure' => []];
+    $state = $state->with(['board' => $board]);
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['mobile'], 'cell' => [1, 0]])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'golemMoveTowardCell');
+    $reflection->setAccessible(true);
+    [$state] = $reflection->invoke(null, $state, [3, 0], 1);
+
+    expect($state->golem['cell'])->toBe([3, 0]); // 1 base + 1 Mobile = 2 steps, reaching the target
+});
+
+test('Chained subtracts 3 from the Golem\'s step budget, floored at 0', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['2,0'] = [...$board['2,0'], 'infrastructure' => []];
+    $state = $state->with(['board' => $board]);
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['chained'], 'cell' => [1, 0]])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'golemMoveTowardCell');
+    $reflection->setAccessible(true);
+    [$state] = $reflection->invoke(null, $state, [2, 0], 1);
+
+    expect($state->golem['cell'])->toBe([1, 0]); // 1 base - 3 Chained, floored at 0 — no movement
+});
+
+test('Buoyant grants a Wanderer +2 actions on every move', function () {
+    $state = startedGame();
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['buoyant']])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+    $actionsBefore = $state->wanderers['wanderer_a']['actions_remaining'];
+
+    $direction = Board::directionBetween([1, 0], [0, 1]);
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $direction]);
+
+    // -1 to move, +2 from Buoyant.
+    expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe($actionsBefore + 1);
 });
 
 test('Empathetic reduces the Golem\'s cards played this round by Wanderers on its space', function () {

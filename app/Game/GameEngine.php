@@ -3797,6 +3797,14 @@ final class GameEngine
             $actionsRemaining += intdiv(self::countEmperorsRelics(array_values($wanderer['equipped'])), 2);
         }
 
+        // Buoyant: "Wanderers get +2🦶 for all of their movements" —
+        // modeled the same way as every other movement bonus here
+        // (Road/Fruit tree/Emperor's Knowledge): refund extra actions
+        // on the move itself rather than literally chaining steps.
+        if (in_array('buoyant', $state->golem['glyphs'], true)) {
+            $actionsRemaining += 2;
+        }
+
         $wanderers = $state->wanderersWith($actorRole, [
             'cell' => $to,
             'actions_remaining' => $actionsRemaining,
@@ -4623,6 +4631,24 @@ final class GameEngine
         if ($targetCell === null || $golemCell === null) {
             return [$state, []];
         }
+
+        // Movement Glyphs: Mobile (+1🦶), Relentless (+2🦶), Chained
+        // (-3🦶), Contemplative (-1🦶) — all modify the Golem's own
+        // step budget for every move it makes, floored at 0.
+        $glyphs = $state->golem['glyphs'];
+        if (in_array('mobile', $glyphs, true)) {
+            $maxSteps += 1;
+        }
+        if (in_array('relentless', $glyphs, true)) {
+            $maxSteps += 2;
+        }
+        if (in_array('chained', $glyphs, true)) {
+            $maxSteps -= 3;
+        }
+        if (in_array('contemplative', $glyphs, true)) {
+            $maxSteps -= 1;
+        }
+        $maxSteps = max(0, $maxSteps);
 
         $path = Board::shortestPath($golemCell, $targetCell, $state->board, $state->wallKeys());
 
