@@ -35,6 +35,10 @@ function describe(
             return `${role} draws ${locationNames[event.payload.location_key as string] ?? event.payload.location_key} into the Emperor's hand.`;
         case 'emperor_phase_ended':
             return `${role} ended their phase.`;
+        case 'emperor_hand_mulliganed': {
+            const count = event.payload.count as number;
+            return `${role}'s hand had no playable Location — redrew ${count} time${count === 1 ? '' : 's'} until one turned up.`;
+        }
         case 'infrastructure_placed':
             return `${role} placed ${event.payload.infrastructure}.`;
         case 'infrastructure_removed':

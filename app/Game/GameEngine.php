@@ -1158,6 +1158,10 @@ final class GameEngine
                 break;
             }
 
+            if (self::catacombsBlocks($state, $actorRole, $to)) {
+                break;
+            }
+
             $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['cell' => $to])]);
             $events[] = ['type' => 'wanderer_moved', 'role_key' => $actorRole, 'payload' => ['to' => $to, 'free' => true]];
         }
@@ -2136,6 +2140,10 @@ final class GameEngine
         }
 
         if (! in_array('monolith_shard', $state->board[$destinationKey]['infrastructure'], true)) {
+            return [$state, []];
+        }
+
+        if (self::catacombsBlocks($state, $targetRole, $destination)) {
             return [$state, []];
         }
 
@@ -3409,6 +3417,10 @@ final class GameEngine
             return [$state, []];
         }
 
+        if (self::catacombsBlocks($state, $actorRole, $targetCell) || self::catacombsBlocks($state, $targetRole, $actorCell)) {
+            return [$state, []];
+        }
+
         $wanderers = $state->wanderersWith($actorRole, ['cell' => $targetCell]);
         $state = $state->with(['wanderers' => $wanderers]);
         $state = $state->with(['wanderers' => $state->wanderersWith($targetRole, ['cell' => $actorCell])]);
@@ -3496,6 +3508,33 @@ final class GameEngine
         $drawn = array_splice($deck, 0, max(0, $needed));
         $hand = [...$hand, ...$drawn];
 
+        // rules.md (Emperor phase, step 5): "If you ever have a hand of
+        // 5 cards that you are not able to play, you may discard
+        // additional cards and draw replacements for them. Continue
+        // doing this until you have at least 1 card you are allowed to
+        // play." Modeled as automatic — there's no real downside to
+        // redrawing an entirely unplayable hand, so there's no decision
+        // to surface to the Emperor. Stops once either a playable card
+        // turns up or the deck and discard pile are both drained (every
+        // remaining card has been seen and none fit the current board).
+        $mulligans = 0;
+        while (
+            ! self::anyLocationPlayable($state, $hand) &&
+            ($deck !== [] || $discardPile !== [])
+        ) {
+            $discardPile = [...$discardPile, ...$hand];
+            $hand = [];
+
+            if (count($deck) < self::EMPEROR_HAND_SIZE && $discardPile !== []) {
+                shuffle($discardPile);
+                $deck = [...$deck, ...$discardPile];
+                $discardPile = [];
+            }
+
+            $hand = array_splice($deck, 0, min(self::EMPEROR_HAND_SIZE, count($deck)));
+            $mulligans++;
+        }
+
         $wandererOrder = RoleKeys::wanderers($state->wandererCount);
         $firstRole = $wandererOrder[0];
         $actionsPerTurn = self::turnStartActions($state, $firstRole);
@@ -3513,10 +3552,66 @@ final class GameEngine
             'activeWandererIndex' => 0,
         ]);
 
-        return [$state, [
+        $events = [
             ['type' => 'emperor_phase_ended', 'role_key' => $actorRole, 'payload' => ['discarded' => $discard]],
-            ['type' => 'wanderer_turn_started', 'role_key' => $firstRole, 'payload' => ['actions' => $actionsPerTurn]],
-        ]];
+        ];
+
+        if ($mulligans > 0) {
+            $events[] = ['type' => 'emperor_hand_mulliganed', 'role_key' => $actorRole, 'payload' => ['count' => $mulligans]];
+        }
+
+        $events[] = ['type' => 'wanderer_turn_started', 'role_key' => $firstRole, 'payload' => ['actions' => $actionsPerTurn]];
+
+        return [$state, $events];
+    }
+
+    /**
+     * @param  list<string>  $handKeys
+     */
+    private static function anyLocationPlayable(GameState $state, array $handKeys): bool
+    {
+        foreach ($handKeys as $key) {
+            $location = LocationCatalog::find($key);
+
+            if ($location === null) {
+                continue;
+            }
+
+            foreach (Board::placeableCells($state->board) as $cell) {
+                $playable = true;
+
+                foreach ($location->costs as $cost) {
+                    if (! self::effectiveProduces($state, $cell, $cost)) {
+                        $playable = false;
+                        break;
+                    }
+                }
+
+                if ($playable) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Catacombs: "A Wanderer can only enter this space if they were
+     * exhausted earlier in the game." Applies to every way a Wanderer's
+     * cell can change — not just a plain move_wanderer — so every
+     * caller below checks this before actually moving someone into
+     * $cell, regardless of whether the move was their own choice (an
+     * explicit move throws) or a side effect of something else (Guide
+     * rope, a relic, the Golem forcing them in) that should just skip
+     * that particular Wanderer rather than fail the whole action.
+     *
+     * @param  array{0: int, 1: int}  $cell
+     */
+    private static function catacombsBlocks(GameState $state, string $role, array $cell): bool
+    {
+        return $state->board[Board::key($cell)]['location_key'] === 'catacombs'
+            && ! $state->wanderers[$role]['was_ever_exhausted'];
     }
 
     /**
@@ -3558,9 +3653,7 @@ final class GameEngine
             throw new InvalidMoveException('Wanderers must always be on a Location.');
         }
 
-        // Catacombs: "A Wanderer can only enter this space if they were
-        // exhausted earlier in the game."
-        if ($state->board[$toKey]['location_key'] === 'catacombs' && ! $wanderer['was_ever_exhausted']) {
+        if (self::catacombsBlocks($state, $actorRole, $to)) {
             throw new InvalidMoveException('Catacombs: only a Wanderer who has been exhausted before may enter.');
         }
 
@@ -3627,6 +3720,10 @@ final class GameEngine
 
             foreach (self::activeWanderers($state) as $otherRole => $otherCell) {
                 if ($otherRole === $actorRole || Board::key($otherCell) !== $sourceKey) {
+                    continue;
+                }
+
+                if (self::catacombsBlocks($state, $otherRole, $to)) {
                     continue;
                 }
 
@@ -4426,6 +4523,10 @@ final class GameEngine
                 continue;
             }
 
+            if (self::catacombsBlocks($state, $role, $toCell)) {
+                continue;
+            }
+
             $state = $state->with(['wanderers' => $state->wanderersWith($role, ['cell' => $toCell])]);
             $events[] = ['type' => 'wanderer_moved', 'role_key' => $role, 'payload' => ['to' => $toCell, 'forced' => true]];
         }
@@ -4714,6 +4815,10 @@ final class GameEngine
             $bestDistance = -1;
 
             foreach (Board::occupiedNeighbors($cell, $state->board) as $option) {
+                if (self::catacombsBlocks($state, $role, $option)) {
+                    continue;
+                }
+
                 $distance = $golemCell === null ? 0 : (Board::distance($golemCell, $option, $state->board) ?? 0);
 
                 if ($distance > $bestDistance) {
@@ -4866,6 +4971,11 @@ final class GameEngine
 
             $steps = array_slice($path, 0, 2);
             $destination = $steps[array_key_last($steps)];
+
+            if (self::catacombsBlocks($state, $role, $destination)) {
+                continue;
+            }
+
             $state = $state->with(['wanderers' => $state->wanderersWith($role, ['cell' => $destination])]);
             $events[] = ['type' => 'wanderer_moved', 'role_key' => $role, 'payload' => ['to' => $destination, 'forced' => true]];
         }
@@ -5761,6 +5871,10 @@ final class GameEngine
             throw new InvalidMoveException('That Ally\'s space has no Monolith Shard.');
         }
 
+        if (self::catacombsBlocks($state, $actorRole, $ally['cell'])) {
+            throw new InvalidMoveException('Catacombs: only a Wanderer who has been exhausted before may enter.');
+        }
+
         $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['cell' => $ally['cell']])]);
 
         return [$state, [['type' => 'wanderer_moved', 'role_key' => $actorRole, 'payload' => ['to' => $ally['cell'], 'free' => true]]]];
@@ -5814,7 +5928,7 @@ final class GameEngine
 
         $destinationLocationKey = $state->board[$toKey]['location_key'];
 
-        if ($destinationLocationKey === 'catacombs' && ! $wanderer['was_ever_exhausted']) {
+        if (self::catacombsBlocks($state, $actorRole, $toCell)) {
             throw new InvalidMoveException('Catacombs: only a Wanderer who has been exhausted before may enter.');
         }
 
@@ -5901,6 +6015,10 @@ final class GameEngine
             $toKey = Board::key($toCell);
 
             if (! array_key_exists($toKey, $state->board)) {
+                continue;
+            }
+
+            if (self::catacombsBlocks($state, $role, $toCell)) {
                 continue;
             }
 

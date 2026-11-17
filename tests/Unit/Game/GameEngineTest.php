@@ -264,6 +264,36 @@ test('ending the Emperor phase draws back up to 5 and starts the first Wanderer 
         ->and(collect($events)->pluck('type'))->toContain('wanderer_turn_started');
 });
 
+test('an Emperor hand with no playable Location automatically mulligans until one turns up', function () {
+    $state = startedGame();
+
+    // House of Cryptids needs an adjacent Golem+Magic producer — never
+    // true on a fresh startedGame() board (the one starter Location
+    // that produces Golem, Golem sanctuary, is swapped out precisely
+    // because its own mechanic would be flaky here — see startedGame()).
+    $unplayable = 'house-of-cryptids';
+    $state = $state->with([
+        'locationHand' => array_fill(0, 5, $unplayable),
+        'locationDeck' => [...array_fill(0, 10, $unplayable), 'field', ...array_fill(0, 10, $unplayable)],
+        'locationDiscard' => [],
+    ]);
+
+    [$state, $events] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    expect($state->locationHand)->toContain('field')
+        ->and(collect($events)->pluck('type'))->toContain('emperor_hand_mulliganed');
+});
+
+test('an Emperor hand that already has a playable Location never mulligans', function () {
+    $state = startedGame();
+    $state = $state->with(['locationHand' => ['field', 'field', 'field', 'field', 'field']]);
+
+    [$state, $events] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    expect($state->locationHand)->toBe(['field', 'field', 'field', 'field', 'field'])
+        ->and(collect($events)->pluck('type'))->not->toContain('emperor_hand_mulliganed');
+});
+
 test('a Wanderer cannot move onto an unbuilt space', function () {
     $state = startedGame();
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);

@@ -67,6 +67,62 @@ test('Catacombs can only be entered by a Wanderer who has been exhausted before'
     expect($state->wanderers['wanderer_a']['cell'])->toBe([2, 0]);
 });
 
+test('Guide rope does not bring an ineligible Ally into Catacombs, but still brings an eligible one', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['2,0'] = [...$board['2,0'], 'location_key' => 'catacombs'];
+    $state = $state->with(['board' => $board]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', [
+        'was_ever_exhausted' => true,
+        'equipped' => [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'guide-rope'],
+    ])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => 'NE']);
+
+    expect($state->wanderers['wanderer_a']['cell'])->toBe([2, 0])
+        ->and($state->wanderers['wanderer_b']['cell'])->toBe([1, 0]); // left behind — never exhausted
+
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['cell' => [1, 0]])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['was_ever_exhausted' => true])]);
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => 'NE']);
+
+    expect($state->wanderers['wanderer_b']['cell'])->toBe([2, 0]);
+});
+
+test('Quantum robes (swap with Ally) is a no-op if either Wanderer would end up in Catacombs without eligibility', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['2,0'] = [...$board['2,0'], 'location_key' => 'catacombs'];
+    $state = $state->with(['board' => $board]);
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'quantum-robes'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['cell' => [2, 0]])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'quantum-robes', 'target_role' => 'wanderer_b']);
+
+    expect($state->wanderers['wanderer_a']['cell'])->toBe([1, 0])
+        ->and($state->wanderers['wanderer_b']['cell'])->toBe([2, 0]);
+});
+
+test('Teleportation stone will not place an Ally in Catacombs without eligibility', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['2,0'] = [...$board['2,0'], 'location_key' => 'catacombs', 'infrastructure' => ['monolith_shard']];
+    $state = $state->with(['board' => $board]);
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'teleportation-stone'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', [
+        'type' => 'use_relic', 'relic_key' => 'teleportation-stone', 'target_role' => 'wanderer_b', 'cell' => [2, 0],
+    ]);
+
+    expect($state->wanderers['wanderer_b']['cell'])->toBe([1, 0]);
+});
+
 test('Reaching 0 Health for real sets was_ever_exhausted; Cabalist wraps\' save does not', function () {
     $state = startedGame();
 
