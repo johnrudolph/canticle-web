@@ -125,6 +125,7 @@ final readonly class GameState
         public array $infrastructurePlacedThisTurnLog = [], // undo_infrastructure_placement pops from the end of this; cleared whenever infrastructurePlacedThisTurn itself resets (new round)
         public ?array $locationJustBuiltCell = null, // Perplexing Glyph — the cell of whichever Location the Emperor most recently played; overwritten every time a new one is played, never otherwise cleared (a Wanderer may use it at their leisure, not strictly "immediately")
         public bool $parallelUsedThisRound = false, // Parallel Glyph — "once per round," shared across all Wanderers (not per-Wanderer); cleared at the start of each new round
+        public ?string $pendingInvigoration = null, // Invigoration's "you may lose 7 Health..." choice can't be supplied in the same move that triggered the search (the Wanderer doesn't know they found it yet) — this holds who must decide via a separate resolve_invigoration move before anything else happens
     ) {}
 
     /**
@@ -292,6 +293,7 @@ final readonly class GameState
             'infrastructure_placed_this_turn_log' => $this->infrastructurePlacedThisTurnLog,
             'prophecy' => $this->prophecy,
             'golem_skipped' => $this->golemSkipped,
+            'pending_invigoration' => $this->pendingInvigoration,
             'outcome' => $this->phase === 'finished' ? $this->outcome() : null,
         ];
     }

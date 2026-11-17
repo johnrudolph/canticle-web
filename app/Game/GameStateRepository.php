@@ -91,6 +91,7 @@ final class GameStateRepository
             infrastructurePlacedThisTurnLog: $data['infrastructure_placed_this_turn_log'] ?? [],
             locationJustBuiltCell: $data['location_just_built_cell'] ?? null,
             parallelUsedThisRound: $data['parallel_used_this_round'] ?? false,
+            pendingInvigoration: $data['pending_invigoration'] ?? null,
         );
     }
 
@@ -124,6 +125,7 @@ final class GameStateRepository
                 'infrastructure_placed_this_turn_log' => $state->infrastructurePlacedThisTurnLog,
                 'location_just_built_cell' => $state->locationJustBuiltCell,
                 'parallel_used_this_round' => $state->parallelUsedThisRound,
+                'pending_invigoration' => $state->pendingInvigoration,
             ],
         ]);
     }

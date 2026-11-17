@@ -35,6 +35,10 @@ export function describe(
             return `${role} draws ${locationNames[event.payload.location_key as string] ?? event.payload.location_key} into the Emperor's hand.`;
         case 'emperor_phase_ended':
             return `${role} ended their phase.`;
+        case 'invigoration_offered':
+            return `${role} found Invigoration — deciding whether to take it.`;
+        case 'invigoration_declined':
+            return `${role} declines Invigoration.`;
         case 'emperor_hand_mulliganed': {
             const count = event.payload.count as number;
             return `${role}'s hand had no playable Location — redrew ${count} time${count === 1 ? '' : 's'} until one turned up.`;

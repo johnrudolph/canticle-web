@@ -76,6 +76,7 @@ export interface GameStateDto {
     infrastructure_cap_this_turn: number;
     prophecy: number;
     golem_skipped: boolean;
+    pending_invigoration: RoleKey | null;
     outcome: 'elite_victory' | 'simple_victory' | 'defeat' | null;
 }
 

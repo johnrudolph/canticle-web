@@ -18,27 +18,61 @@ function resolveEventRelicForTest2(GameState $state, string $actorRole, string $
     return $reflection->invoke(null, $state, $actorRole, $relicKey, $move);
 }
 
-test('Invigoration costs 7 Health for +2 actions when explicitly taken', function () {
+test('finding Invigoration parks the choice on pendingInvigoration instead of resolving immediately', function () {
     $state = startedGame();
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 10])]);
 
-    [$state, $events] = resolveEventRelicForTest2($state, 'wanderer_a', 'invigoration', ['take_invigoration' => true]);
+    [$state, $events] = resolveEventRelicForTest2($state, 'wanderer_a', 'invigoration');
 
-    expect($state->wanderers['wanderer_a']['hp'])->toBe(3)
+    expect($state->pendingInvigoration)->toBe('wanderer_a')
+        ->and($state->wanderers['wanderer_a']['hp'])->toBe(10)
+        ->and($state->wanderers['wanderer_a']['actions_remaining'])->toBe(3)
+        ->and(collect($events)->pluck('type'))->toContain('invigoration_offered');
+});
+
+test('resolve_invigoration costs 7 Health for +2 actions when taken', function () {
+    $state = startedGame();
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 10]), 'pendingInvigoration' => 'wanderer_a']);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_invigoration', 'take' => true]);
+
+    expect($state->pendingInvigoration)->toBeNull()
+        ->and($state->wanderers['wanderer_a']['hp'])->toBe(3)
         ->and($state->wanderers['wanderer_a']['actions_remaining'])->toBe(5) // 3 + 2
         ->and(collect($events)->pluck('type'))->toContain('wanderer_actions_adjusted');
 });
 
-test('Invigoration does nothing unless explicitly taken', function () {
+test('resolve_invigoration does nothing but clear the pending choice when declined', function () {
     $state = startedGame();
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
-    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 10])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 10]), 'pendingInvigoration' => 'wanderer_a']);
 
-    [$state] = resolveEventRelicForTest2($state, 'wanderer_a', 'invigoration');
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_invigoration', 'take' => false]);
 
-    expect($state->wanderers['wanderer_a']['hp'])->toBe(10)
-        ->and($state->wanderers['wanderer_a']['actions_remaining'])->toBe(3);
+    expect($state->pendingInvigoration)->toBeNull()
+        ->and($state->wanderers['wanderer_a']['hp'])->toBe(10)
+        ->and($state->wanderers['wanderer_a']['actions_remaining'])->toBe(3)
+        ->and(collect($events)->pluck('type'))->toContain('invigoration_declined');
+});
+
+test('resolve_invigoration is rejected for anyone other than who it is pending for', function () {
+    $state = startedGame();
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+    $state = $state->with(['pendingInvigoration' => 'wanderer_a']);
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_b', ['type' => 'resolve_invigoration', 'take' => true]))
+        ->toThrow(InvalidMoveException::class);
+});
+
+test('a Wanderer cannot end their turn with an Invigoration choice still pending', function () {
+    $state = startedGame();
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+    $state = $state->with(['pendingInvigoration' => 'wanderer_a']);
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'end_wanderer_turn']))
+        ->toThrow(InvalidMoveException::class, 'You must decide on Invigoration before ending your turn.');
 });
 
 test('Bazaar lets a Wanderer tuck a Relic for free (no action cost) and heals 1', function () {

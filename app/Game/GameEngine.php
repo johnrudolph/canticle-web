@@ -63,6 +63,7 @@ final class GameEngine
             'neighborly_assist' => self::neighborlyAssist($state, $actorRole, $move),
             'move_to_new_location' => self::moveToNewLocation($state, $actorRole),
             'skip_golem_card' => self::skipGolemCard($state, $actorRole),
+            'resolve_invigoration' => self::resolveInvigoration($state, $actorRole, $move),
             'end_wanderer_turn' => self::endWandererTurn($state, $actorRole),
             default => throw new InvalidMoveException('Unknown move type.'),
         };
@@ -1376,7 +1377,12 @@ final class GameEngine
      * card. $move carries any extra choice a specific Event needs
      * (e.g. Epiphany's target cell) — empty when resolved via a bonus
      * search from another Relic's effect rather than the top-level
-     * search_location move.
+     * search_location move. Invigoration is the one exception to
+     * "resolve immediately": its choice genuinely can't be supplied in
+     * $move (the Wanderer doesn't know they found it until this move
+     * already returns), so it parks itself on `pendingInvigoration`
+     * instead of resolving here — see offerInvigoration()/
+     * resolveInvigoration().
      *
      * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
@@ -1395,7 +1401,7 @@ final class GameEngine
             'golem-avarice' => self::relicGolemAvarice($state, $actorRole),
             'magic-explosion' => self::relicMagicExplosion($state, $actorRole),
             'a-rush-of-companionship' => self::relicRushOfCompanionship($state),
-            'invigoration' => self::relicInvigoration($state, $actorRole, $move),
+            'invigoration' => self::offerInvigoration($state, $actorRole),
             'rift-in-time' => self::relicRiftInTime($state, $actorRole, $move),
             default => [$state, []],
         };
@@ -1685,18 +1691,37 @@ final class GameEngine
 
     /**
      * Invigoration: "You may lose 7 Health in exchange for 2 extra
-     * actions this round." The "may" is a real optional choice —
-     * $move['take_invigoration'] must be explicitly truthy, since
-     * defaulting to either yes or no would be putting words in the
-     * player's mouth, unlike a plain unconditional effect.
+     * actions this round." The "may" is a real, immediate choice — but
+     * unlike every other Event Relic, it can't be resolved in the same
+     * move that found it, because the Wanderer doesn't know they found
+     * it until the search_location move already returned. This parks
+     * the decision on `pendingInvigoration` for a dedicated
+     * resolve_invigoration move to pick up — see that method for the
+     * actual effect.
      *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function offerInvigoration(GameState $state, string $actorRole): array
+    {
+        $state = $state->with(['pendingInvigoration' => $actorRole]);
+
+        return [$state, [['type' => 'invigoration_offered', 'role_key' => $actorRole, 'payload' => []]]];
+    }
+
+    /**
      * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
-    private static function relicInvigoration(GameState $state, string $actorRole, array $move): array
+    private static function resolveInvigoration(GameState $state, string $actorRole, array $move): array
     {
-        if (($move['take_invigoration'] ?? false) !== true) {
-            return [$state, []];
+        if ($state->pendingInvigoration !== $actorRole) {
+            throw new InvalidMoveException('There is no Invigoration choice pending for you.');
+        }
+
+        $state = $state->with(['pendingInvigoration' => null]);
+
+        if (($move['take'] ?? false) !== true) {
+            return [$state, [['type' => 'invigoration_declined', 'role_key' => $actorRole, 'payload' => []]]];
         }
 
         $hp = max(0, $state->wanderers[$actorRole]['hp'] - 7);
@@ -4014,6 +4039,10 @@ final class GameEngine
     private static function endWandererTurn(GameState $state, string $actorRole): array
     {
         self::requireRole($state, $actorRole, $state->activeWandererRole(), 'wanderer');
+
+        if ($state->pendingInvigoration === $actorRole) {
+            throw new InvalidMoveException('You must decide on Invigoration before ending your turn.');
+        }
 
         $events = [];
 

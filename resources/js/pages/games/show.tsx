@@ -7,6 +7,7 @@ import { GolemPanel } from '@/components/game/golem-panel';
 import { GolemTurnSpotlightDialog } from '@/components/game/golem-turn-spotlight-dialog';
 import { HexBoard } from '@/components/game/hex-board';
 import { InsightFromTheFutureDialog } from '@/components/game/insight-from-the-future-dialog';
+import { InvigorationDialog } from '@/components/game/invigoration-dialog';
 import { LocationDetailDialog } from '@/components/game/location-detail-dialog';
 import { NewRelicDialog } from '@/components/game/new-relic-dialog';
 import { WandererRelicPanel } from '@/components/game/wanderer-relic-panel';
@@ -205,7 +206,12 @@ export default function GameShow({ game }: { game: GameSummary }) {
             (e) =>
                 e.id > lastSeen &&
                 e.type === 'location_searched' &&
-                e.payload.trashed_as_event === true,
+                e.payload.trashed_as_event === true &&
+                // Invigoration doesn't resolve on the spot — it blocks on
+                // InvigorationDialog (driven by pending_invigoration)
+                // instead of the generic "found an Event, it resolved"
+                // notification, which would be false for it right now.
+                e.payload.found !== 'invigoration',
         );
 
         if (found.length > 0) {
@@ -1389,6 +1395,21 @@ export default function GameShow({ game }: { game: GameSummary }) {
                     });
                     setInsightPeek(null);
                 }}
+            />
+
+            <InvigorationDialog
+                open={
+                    state.pending_invigoration !== null &&
+                    myRoles.includes(state.pending_invigoration)
+                }
+                processing={processing}
+                onDecide={(take) =>
+                    state.pending_invigoration &&
+                    submitMove(state.pending_invigoration, {
+                        type: 'resolve_invigoration',
+                        take,
+                    })
+                }
             />
 
             <GolemTurnSpotlightDialog
