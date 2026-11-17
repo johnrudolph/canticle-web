@@ -54,6 +54,7 @@ final class GameEngine
             'peek_location_deck' => self::peekLocationDeck($state, $actorRole, $move),
             'rest' => self::rest($state, $actorRole),
             'tuck_relic_at_bazaar' => self::tuckRelicAtBazaar($state, $actorRole, $move),
+            'tuck_relic_at_cathedral' => self::tuckRelicAtCathedral($state, $actorRole, $move),
             'cleanse_at_purification_pools' => self::cleanseAtPurificationPools($state, $actorRole),
             'magnetic_mail_move' => self::magneticMailMove($state, $actorRole, $move),
             'telekinesis_move' => self::telekinesisMove($state, $actorRole, $move),
@@ -4322,6 +4323,26 @@ final class GameEngine
             break;
         }
 
+        // Cathedral: "End of game: Gain 📜 for each tucked Relic that
+        // has 'Divine' in its name."
+        foreach ($state->board as $entry) {
+            if ($entry['location_key'] !== 'cathedral') {
+                continue;
+            }
+
+            $gained = count(array_filter(
+                $entry['tucked'],
+                fn (string $relicKey) => str_contains(RelicCatalog::find($relicKey)->name, 'Divine'),
+            ));
+
+            if ($gained > 0) {
+                $state = $state->with(['prophecy' => $state->prophecy + $gained]);
+                $events[] = ['type' => 'prophecy_gained', 'role_key' => null, 'payload' => ['amount' => $gained, 'reason' => 'cathedral']];
+            }
+
+            break;
+        }
+
         return [$state, $events];
     }
 
@@ -6555,10 +6576,11 @@ final class GameEngine
     }
 
     /**
-     * Bazaar: "Action: On your turn you may tuck a Relic from your mat
-     * here. 🌿1, then gain 1 action." Costs 1 action to take, then
-     * immediately refunds 1 — net zero, matching the printed text
-     * exactly rather than treating it as a free action.
+     * Bazaar: "Ongoing: You may tuck Relics from your mat here, if you
+     * are on this space on your turn. This does not cost an action. For
+     * each you tuck: 🌿1." No action cost and no 0-HP gate — same
+     * "free, any time during your own turn here" category as
+     * Purification pools, not a spendable Action.
      *
      * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
@@ -6568,13 +6590,6 @@ final class GameEngine
         self::requireRole($state, $actorRole, $state->activeWandererRole(), 'wanderer');
 
         $wanderer = $state->wanderers[$actorRole];
-
-        if ($wanderer['actions_remaining'] <= 0) {
-            throw new InvalidMoveException('No actions remaining this turn.');
-        }
-
-        self::requireNotExhausted($wanderer);
-
         $cellKey = Board::key($wanderer['cell']);
 
         if ($state->board[$cellKey]['location_key'] !== 'bazaar') {
@@ -6597,7 +6612,6 @@ final class GameEngine
         $wanderers = $state->wanderersWith($actorRole, [
             'equipped' => $equipped,
             'holding' => array_values(array_diff($wanderer['holding'], [$relicKey])),
-            // Net zero — the action spent tucking is immediately refunded.
         ]);
         $state = $state->with(['wanderers' => $wanderers]);
 
@@ -6610,6 +6624,56 @@ final class GameEngine
         $hp = min(self::maxHpFor($state, $actorRole), $state->wanderers[$actorRole]['hp'] + 1);
         $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['hp' => $hp])]);
         $events[] = ['type' => 'wanderer_healed', 'role_key' => $actorRole, 'payload' => ['hp' => $hp]];
+
+        return [$state, $events];
+    }
+
+    /**
+     * Cathedral: "Ongoing: You may tuck Relics from your mat here, if
+     * you are on this space on your turn. This does not cost an
+     * action. End of game: Gain 📜 for each tucked Relic that has
+     * 'Divine' in its name." Same free, any-time-on-your-turn shape as
+     * Bazaar's tuck, just without the per-tuck heal — see
+     * applyEndOfGameScoring() for the matching scoring half.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function tuckRelicAtCathedral(GameState $state, string $actorRole, array $move): array
+    {
+        self::requireRole($state, $actorRole, $state->activeWandererRole(), 'wanderer');
+
+        $wanderer = $state->wanderers[$actorRole];
+        $cellKey = Board::key($wanderer['cell']);
+
+        if ($state->board[$cellKey]['location_key'] !== 'cathedral') {
+            throw new InvalidMoveException('You must be on the Cathedral to do this.');
+        }
+
+        $relicKey = (string) ($move['relic_key'] ?? '');
+        $equipped = $wanderer['equipped'];
+        $fromSlot = array_search($relicKey, $equipped, true);
+        $fromHolding = in_array($relicKey, $wanderer['holding'], true);
+
+        if (! $fromSlot && ! $fromHolding) {
+            throw new InvalidMoveException('You do not have that Relic.');
+        }
+
+        if ($fromSlot !== false) {
+            $equipped[$fromSlot] = null;
+        }
+
+        $wanderers = $state->wanderersWith($actorRole, [
+            'equipped' => $equipped,
+            'holding' => array_values(array_diff($wanderer['holding'], [$relicKey])),
+        ]);
+        $state = $state->with(['wanderers' => $wanderers]);
+
+        $board = $state->board;
+        $board[$cellKey] = [...$board[$cellKey], 'tucked' => [...$board[$cellKey]['tucked'], $relicKey]];
+        $state = $state->with(['board' => $board]);
+
+        $events = [['type' => 'relic_tucked', 'role_key' => $actorRole, 'payload' => ['relic_key' => $relicKey, 'cell' => $wanderer['cell']]]];
 
         return [$state, $events];
     }

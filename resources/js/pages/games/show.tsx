@@ -1217,6 +1217,15 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                 isActive &&
                                 myRoles.includes(role) &&
                                 wanderer.actions_remaining > 0;
+                            const tuckLocationKey = wanderer.cell
+                                ? state.board[cellKey(wanderer.cell)]
+                                      ?.location_key
+                                : undefined;
+                            const canTuck =
+                                isActive &&
+                                myRoles.includes(role) &&
+                                (tuckLocationKey === 'bazaar' ||
+                                    tuckLocationKey === 'cathedral');
                             const allies = Object.entries(state.wanderers)
                                 .filter(
                                     ([otherRole, other]) =>
@@ -1258,6 +1267,13 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                     canAct={canAct}
                                     isActive={isActive}
                                     allies={allies}
+                                    tuckLocationKey={
+                                        canTuck
+                                            ? (tuckLocationKey as
+                                                  | 'bazaar'
+                                                  | 'cathedral')
+                                            : null
+                                    }
                                     relicUnusableReasons={
                                         state.active_wanderer_relic_reasons
                                     }

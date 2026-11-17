@@ -43,6 +43,43 @@ function baseRelicKey(key: string): string {
     return key.replace(/-\d+$/, '');
 }
 
+const TUCK_LABELS: Record<'bazaar' | 'cathedral', string> = {
+    bazaar: 'Tuck (Bazaar, 🌿1)',
+    cathedral: 'Tuck (Cathedral)',
+};
+
+function TuckButton({
+    relicKey,
+    tuckLocationKey,
+    processing,
+    onSubmit,
+}: {
+    relicKey: string;
+    tuckLocationKey: 'bazaar' | 'cathedral';
+    processing: boolean;
+    onSubmit: (move: Record<string, unknown>) => void;
+}) {
+    return (
+        <Button
+            size="sm"
+            variant="outline"
+            className="h-5 px-1.5 text-[10px]"
+            disabled={processing}
+            onClick={() =>
+                onSubmit({
+                    type:
+                        tuckLocationKey === 'bazaar'
+                            ? 'tuck_relic_at_bazaar'
+                            : 'tuck_relic_at_cathedral',
+                    relic_key: relicKey,
+                })
+            }
+        >
+            {TUCK_LABELS[tuckLocationKey]}
+        </Button>
+    );
+}
+
 function DropButton({
     relicKey,
     entry,
@@ -90,6 +127,7 @@ export function WandererRelicPanel({
     canAct,
     isActive = false,
     allies,
+    tuckLocationKey = null,
     relicUnusableReasons = {},
     onUseInsightFromTheFuture,
 }: {
@@ -104,6 +142,13 @@ export function WandererRelicPanel({
     isActive?: boolean;
     /** Other Wanderers sharing this one's space, for Relics that target an Ally. */
     allies: { role: string; label: string }[];
+    /**
+     * Set when this Wanderer is on the Bazaar or Cathedral during their
+     * own turn — both let you tuck a Relic from your mat here for free
+     * (no action cost), so "tuck" buttons show on every equipped/held
+     * Relic regardless of whether any actions remain.
+     */
+    tuckLocationKey?: 'bazaar' | 'cathedral' | null;
     /** Per equip-slot: why that Relic can't be used right now, or null if it can. Only the slots whose condition is checkable without a target are present. */
     relicUnusableReasons?: Record<string, string | null>;
     /**
@@ -189,76 +234,91 @@ export function WandererRelicPanel({
                                             {relicCatalog[relicKey].effect}
                                         </p>
                                     )}
-                                    {canAct && relicCatalog[relicKey]?.is_action && (
-                                        <div className="flex flex-wrap gap-1">
-                                            {(() => {
-                                                const reason =
-                                                    relicUnusableReasons[slot];
-                                                const useButton = (
+                                    {tuckLocationKey && (
+                                        <TuckButton
+                                            relicKey={relicKey}
+                                            tuckLocationKey={tuckLocationKey}
+                                            processing={processing}
+                                            onSubmit={onSubmit}
+                                        />
+                                    )}
+                                    {canAct &&
+                                        relicCatalog[relicKey]?.is_action && (
+                                            <div className="flex flex-wrap gap-1">
+                                                {(() => {
+                                                    const reason =
+                                                        relicUnusableReasons[
+                                                            slot
+                                                        ];
+                                                    const useButton = (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="h-5 px-1.5 text-[10px]"
+                                                            disabled={
+                                                                processing ||
+                                                                !!reason
+                                                            }
+                                                            onClick={() =>
+                                                                baseRelicKey(
+                                                                    relicKey,
+                                                                ) ===
+                                                                    'an-insight-from-the-future' &&
+                                                                onUseInsightFromTheFuture
+                                                                    ? onUseInsightFromTheFuture(
+                                                                          relicKey,
+                                                                      )
+                                                                    : onSubmit({
+                                                                          type: 'use_relic',
+                                                                          relic_key:
+                                                                              relicKey,
+                                                                      })
+                                                            }
+                                                        >
+                                                            Use
+                                                        </Button>
+                                                    );
+
+                                                    if (!reason)
+                                                        return useButton;
+
+                                                    return (
+                                                        <Tooltip>
+                                                            <TooltipTrigger
+                                                                asChild
+                                                            >
+                                                                <span>
+                                                                    {useButton}
+                                                                </span>
+                                                            </TooltipTrigger>
+                                                            <TooltipContent>
+                                                                {reason}
+                                                            </TooltipContent>
+                                                        </Tooltip>
+                                                    );
+                                                })()}
+                                                {allies.map((ally) => (
                                                     <Button
+                                                        key={ally.role}
                                                         size="sm"
                                                         variant="outline"
                                                         className="h-5 px-1.5 text-[10px]"
-                                                        disabled={
-                                                            processing ||
-                                                            !!reason
-                                                        }
+                                                        disabled={processing}
                                                         onClick={() =>
-                                                            baseRelicKey(
-                                                                relicKey,
-                                                            ) ===
-                                                                'an-insight-from-the-future' &&
-                                                            onUseInsightFromTheFuture
-                                                                ? onUseInsightFromTheFuture(
-                                                                      relicKey,
-                                                                  )
-                                                                : onSubmit({
-                                                                      type: 'use_relic',
-                                                                      relic_key:
-                                                                          relicKey,
-                                                                  })
+                                                            onSubmit({
+                                                                type: 'use_relic',
+                                                                relic_key:
+                                                                    relicKey,
+                                                                target_role:
+                                                                    ally.role,
+                                                            })
                                                         }
                                                     >
-                                                        Use
+                                                        Use on {ally.label}
                                                     </Button>
-                                                );
-
-                                                if (!reason) return useButton;
-
-                                                return (
-                                                    <Tooltip>
-                                                        <TooltipTrigger asChild>
-                                                            <span>
-                                                                {useButton}
-                                                            </span>
-                                                        </TooltipTrigger>
-                                                        <TooltipContent>
-                                                            {reason}
-                                                        </TooltipContent>
-                                                    </Tooltip>
-                                                );
-                                            })()}
-                                            {allies.map((ally) => (
-                                                <Button
-                                                    key={ally.role}
-                                                    size="sm"
-                                                    variant="outline"
-                                                    className="h-5 px-1.5 text-[10px]"
-                                                    disabled={processing}
-                                                    onClick={() =>
-                                                        onSubmit({
-                                                            type: 'use_relic',
-                                                            relic_key: relicKey,
-                                                            target_role:
-                                                                ally.role,
-                                                        })
-                                                    }
-                                                >
-                                                    Use on {ally.label}
-                                                </Button>
-                                            ))}
-                                        </div>
-                                    )}
+                                                ))}
+                                            </div>
+                                        )}
                                 </div>
                             ) : (
                                 <span className="text-muted-foreground/60">
@@ -307,6 +367,16 @@ export function WandererRelicPanel({
                                                 Equip {SLOT_LABELS[slot]}
                                             </Button>
                                         ))}
+                                        {tuckLocationKey && (
+                                            <TuckButton
+                                                relicKey={relicKey}
+                                                tuckLocationKey={
+                                                    tuckLocationKey
+                                                }
+                                                processing={processing}
+                                                onSubmit={onSubmit}
+                                            />
+                                        )}
                                         <button
                                             type="button"
                                             disabled={processing}

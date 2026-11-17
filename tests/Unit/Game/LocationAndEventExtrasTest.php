@@ -41,7 +41,7 @@ test('Invigoration does nothing unless explicitly taken', function () {
         ->and($state->wanderers['wanderer_a']['actions_remaining'])->toBe(3);
 });
 
-test('Bazaar lets a Wanderer tuck a Relic, heals 1, and immediately refunds the action', function () {
+test('Bazaar lets a Wanderer tuck a Relic for free (no action cost) and heals 1', function () {
     $state = startedGame();
     $board = $state->board;
     $board['1,0'] = [...$board['1,0'], 'location_key' => 'bazaar'];
@@ -64,7 +64,7 @@ test('Bazaar lets a Wanderer tuck a Relic, heals 1, and immediately refunds the 
         ->and(collect($events)->pluck('type'))->toContain('wanderer_healed');
 });
 
-test('Bazaar\'s tuck action requires actually being on the Bazaar', function () {
+test('Bazaar\'s tuck requires actually being on the Bazaar', function () {
     $state = startedGame();
     $board = $state->board;
     $board['1,0'] = [...$board['1,0'], 'location_key' => 'artists-hovel'];
@@ -73,6 +73,59 @@ test('Bazaar\'s tuck action requires actually being on the Bazaar', function () 
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
     expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'tuck_relic_at_bazaar', 'relic_key' => 'golem-whistle']))
+        ->toThrow(InvalidMoveException::class);
+});
+
+test('Bazaar\'s tuck still works with 0 actions remaining, since it is Ongoing and never costs an action', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'bazaar'];
+    $state = $state->with(['board' => $board]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['holding' => ['golem-whistle'], 'actions_remaining' => 0])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['actions_remaining' => 0])]);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', [
+        'type' => 'tuck_relic_at_bazaar', 'relic_key' => 'golem-whistle',
+    ]);
+
+    expect($state->board['1,0']['tucked'])->toBe(['golem-whistle'])
+        ->and($state->wanderers['wanderer_a']['actions_remaining'])->toBe(0)
+        ->and(collect($events)->pluck('type'))->toContain('relic_tucked');
+});
+
+test('Cathedral lets a Wanderer tuck a Relic for free, with no heal', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'cathedral'];
+    $state = $state->with(['board' => $board]);
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'golem-whistle'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 10])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    $actionsBefore = $state->wanderers['wanderer_a']['actions_remaining'];
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', [
+        'type' => 'tuck_relic_at_cathedral', 'relic_key' => 'golem-whistle',
+    ]);
+
+    expect($state->wanderers['wanderer_a']['equipped']['body'])->toBeNull()
+        ->and($state->board['1,0']['tucked'])->toBe(['golem-whistle'])
+        ->and($state->wanderers['wanderer_a']['hp'])->toBe(10) // no heal, unlike Bazaar
+        ->and($state->wanderers['wanderer_a']['actions_remaining'])->toBe($actionsBefore)
+        ->and(collect($events)->pluck('type'))->toContain('relic_tucked')
+        ->and(collect($events)->pluck('type'))->not->toContain('wanderer_healed');
+});
+
+test('Cathedral\'s tuck requires actually being on the Cathedral', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'artists-hovel'];
+    $state = $state->with(['board' => $board]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['holding' => ['golem-whistle']])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'tuck_relic_at_cathedral', 'relic_key' => 'golem-whistle']))
         ->toThrow(InvalidMoveException::class);
 });
 

@@ -913,3 +913,44 @@ test('Bazaar does not score with fewer than 4 Relics tucked there', function () 
     expect($state->prophecy)->toBe(0)
         ->and($events)->toBe([]);
 });
+
+test('Cathedral grants 1 Prophecy per tucked Relic with "Divine" in its name', function () {
+    $state = startedGame();
+    $board = $state->board;
+    // Cathedral, like Bazaar, can only ever be built once in a real
+    // game — scrub any that landed on startedGame()'s random starting
+    // 6 so the scoring loop can't find the wrong one.
+    foreach ($board as $key => $entry) {
+        if ($entry['location_key'] === 'cathedral') {
+            $board[$key] = [...$entry, 'location_key' => 'artists-hovel'];
+        }
+    }
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'cathedral', 'tucked' => ['divine-robes', 'divine-aura', 'golem-whistle']];
+    $state = $state->with(['board' => $board]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyEndOfGameScoring');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state);
+
+    expect($state->prophecy)->toBe(2) // divine-robes, divine-aura — golem-whistle doesn't count
+        ->and(collect($events)->pluck('type'))->toContain('prophecy_gained');
+});
+
+test('Cathedral does not score when nothing tucked there has "Divine" in its name', function () {
+    $state = startedGame();
+    $board = $state->board;
+    foreach ($board as $key => $entry) {
+        if ($entry['location_key'] === 'cathedral') {
+            $board[$key] = [...$entry, 'location_key' => 'artists-hovel'];
+        }
+    }
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'cathedral', 'tucked' => ['golem-whistle']];
+    $state = $state->with(['board' => $board]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyEndOfGameScoring');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state);
+
+    expect($state->prophecy)->toBe(0)
+        ->and($events)->toBe([]);
+});
