@@ -2,6 +2,7 @@
 
 use App\Game\Board;
 use App\Game\GameEngine;
+use App\Game\InvalidMoveException;
 
 // startedGame() (GameEngineTest.php) is declared in a sibling file,
 // loaded in the same run. It puts both Wanderers and the Golem on the
@@ -181,4 +182,99 @@ test('Empathetic reduces the Golem\'s cards played this round by Wanderers on it
     $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['empathetic']])]);
 
     expect($state->golemCardsThisRound())->toBe(1); // base 3 - 2 Wanderers present
+});
+
+test('Focused redirects nearest/farthest/least-HP targeting to the highest-HP Wanderer', function () {
+    $state = startedGame();
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 5])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['hp' => 15])]);
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['focused']])]);
+
+    $nearest = new ReflectionMethod(GameEngine::class, 'nearestWanderer');
+    $nearest->setAccessible(true);
+    $leastHp = new ReflectionMethod(GameEngine::class, 'leastHpWanderer');
+    $leastHp->setAccessible(true);
+
+    expect($nearest->invoke(null, $state))->toBe('wanderer_b') // highest HP, not nearest
+        ->and($leastHp->invoke(null, $state))->toBe('wanderer_b'); // highest HP, not least
+});
+
+test('Barricading blocks a Wanderer from moving onto the Golem\'s space', function () {
+    $state = startedGame(); // Golem starts on the hub [1,0]
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['cell' => [0, 1]])]);
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['barricading']])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    $direction = Board::directionBetween([0, 1], [1, 0]);
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $direction]))
+        ->toThrow(InvalidMoveException::class, 'Barricading');
+});
+
+test('Destructive destroys Infrastructure the Golem moves onto, returning it to the pool', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['2,0'] = [...$board['2,0'], 'infrastructure' => ['road', 'monolith_shard']];
+    $state = $state->with(['board' => $board]);
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['destructive'], 'cell' => [1, 0]])]);
+    $roadPoolBefore = $state->infrastructurePool['road'];
+    $shardPoolBefore = $state->infrastructurePool['monolith_shard'];
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'golemMoveTowardCell');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state, [2, 0], 1);
+
+    expect($state->golem['cell'])->toBe([2, 0])
+        ->and($state->board['2,0']['infrastructure'])->toBe([])
+        ->and($state->infrastructurePool['road'])->toBe($roadPoolBefore + 1)
+        ->and($state->infrastructurePool['monolith_shard'])->toBe($shardPoolBefore + 1)
+        ->and(collect($events)->pluck('type'))->toContain('infrastructure_removed');
+});
+
+test('Reactive makes the Golem play an extra card when a Wanderer moves onto its space', function () {
+    $state = startedGame(); // Golem on the hub [1,0]
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['cell' => [0, 1]])]);
+    // Force a plain, single-resolution card to the top of revealed
+    // (array_pop takes from the end) so this stays deterministic —
+    // the real deck could otherwise shuffle Double Down/Time Paradox
+    // there, resolving more than 1 extra card.
+    $revealed = $state->golem['revealed'];
+    $revealed[array_key_last($revealed)] = ['key' => 'charge', 'tapped' => false];
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['reactive'], 'revealed' => $revealed])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+    $discardedBefore = count($state->golem['discard_pile']);
+
+    $direction = Board::directionBetween([0, 1], [1, 0]);
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $direction]);
+
+    expect(count($state->golem['discard_pile']))->toBe($discardedBefore + 1)
+        ->and(collect($events)->pluck('type'))->toContain('golem_card_resolved');
+});
+
+test('Fearful moves the Golem 1 space away from the nearest Wanderer when a tapped card resolves', function () {
+    $state = startedGame();
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['fearful'], 'cell' => [1, 0]])]);
+    // wanderer_a stays on the hub [1,0]; the Golem should step away from it.
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'resolveOrSkipTappedCard');
+    $reflection->setAccessible(true);
+    [$state] = $reflection->invoke(null, $state, ['key' => 'charge', 'tapped' => true]);
+
+    expect($state->golem['cell'])->not->toBe([1, 0]);
+});
+
+test('Adaptive sends a card that dealt damage to the bottom of the draw pile instead of the discard pile', function () {
+    $state = startedGame(); // both wanderers + Golem share the hub
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['adaptive'], 'revealed' => [
+        ['key' => 'pound', 'tapped' => false],
+    ]])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 15])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['hp' => 15])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'golemPlayCards');
+    $reflection->setAccessible(true);
+    [$state] = $reflection->invoke(null, $state, 1);
+
+    expect($state->golem['discard_pile'])->not->toContain('pound')
+        ->and(collect($state->golem['draw_pile'])->pluck('key'))->toContain('pound');
 });

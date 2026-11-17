@@ -3779,6 +3779,13 @@ final class GameEngine
             throw new InvalidMoveException('Exile: only a Wanderer with 3 Shame tokens may enter.');
         }
 
+        // Barricading Glyph: "Wanderers cannot move into the Golem's
+        // space (but the Golem can still move into theirs)."
+        if ($state->golem['cell'] !== null && Board::key($state->golem['cell']) === $toKey
+            && in_array('barricading', $state->golem['glyphs'], true)) {
+            throw new InvalidMoveException('Barricading: Wanderers cannot move into the Golem\'s space.');
+        }
+
         $destinationInfrastructure = $state->board[$toKey]['infrastructure'];
         $actionsRemaining = $wanderer['actions_remaining'] - ($freeMove ? 0 : 1);
 
@@ -3876,6 +3883,17 @@ final class GameEngine
                 $state = $state->with(['wanderers' => $state->wanderersWith($otherRole, ['hp' => $hp])]);
                 $events[] = ['type' => 'wanderer_healed', 'role_key' => $otherRole, 'payload' => ['hp' => $hp]];
             }
+        }
+
+        // Reactive Glyph: "Every time a Wanderer enters the Golem's
+        // space, it plays a card." Checked against the mover's own
+        // destination only (not every Ally Guide rope brings along) —
+        // one extra card per move_wanderer call, not per Wanderer who
+        // ends up there.
+        if ($state->golem['cell'] !== null && Board::key($state->golem['cell']) === $toKey
+            && in_array('reactive', $state->golem['glyphs'], true)) {
+            [$state, $reactiveEvents] = self::golemPlayCards($state, 1);
+            $events = [...$events, ...$reactiveEvents];
         }
 
         return [$state, $events];
@@ -4217,8 +4235,40 @@ final class GameEngine
             $golem['discard_pile'][] = $cardEntry['key'];
             $state = $state->with(['golem' => $golem]);
 
+            // Adaptive Glyph: "If a Golem action causes a Wanderer to
+            // lose Health, put the card at the bottom of the draw pile
+            // instead of discarding it." Snapshot every Wanderer's HP
+            // beforehand regardless of card type (Overcharge, for one,
+            // deals Health loss with no 👊 in its printed text), then
+            // redirect this card's just-pushed discard-pile entry if
+            // Adaptive is active and HP actually dropped.
+            $adaptiveInPlay = in_array('adaptive', $state->golem['glyphs'], true);
+            $hpBeforeAdaptive = $adaptiveInPlay ? array_map(fn (array $w) => $w['hp'], $state->wanderers) : [];
+
             [$state, $cardEvents, $effects] = self::resolveOrSkipTappedCard($state, $cardEntry);
             $events = [...$events, ...$cardEvents];
+
+            if ($adaptiveInPlay) {
+                $anyDamage = false;
+                foreach ($state->wanderers as $role => $wanderer) {
+                    if ($wanderer['hp'] < ($hpBeforeAdaptive[$role] ?? $wanderer['hp'])) {
+                        $anyDamage = true;
+                        break;
+                    }
+                }
+
+                if ($anyDamage) {
+                    $golem = $state->golem;
+                    $discardIndex = array_search($cardEntry['key'], $golem['discard_pile'], true);
+
+                    if ($discardIndex !== false) {
+                        unset($golem['discard_pile'][$discardIndex]);
+                        $golem['discard_pile'] = array_values($golem['discard_pile']);
+                        $golem['draw_pile'][] = ['key' => $cardEntry['key'], 'tapped' => false];
+                        $state = $state->with(['golem' => $golem]);
+                    }
+                }
+            }
 
             if ($effects['double_next'] && $i + 1 < $count) {
                 // "Perform the next Golem card twice" — doubles the next
@@ -4308,6 +4358,13 @@ final class GameEngine
             [$state, $events, $effects] = [$state, [
                 ['type' => 'golem_card_tapped', 'role_key' => null, 'payload' => ['card_key' => $cardEntry['key'], 'name' => $card?->name]],
             ], ['double_next' => false, 'extra_from_bottom' => 0]];
+
+            // Fearful Glyph: "When the Golem plays a tapped card, it
+            // moves 1 space away from Wanderers if possible."
+            if (in_array('fearful', $state->golem['glyphs'], true)) {
+                [$state, $fearfulEvents] = self::golemMoveAwayFromWanderers($state);
+                $events = [...$events, ...$fearfulEvents];
+            }
         } else {
             [$state, $events, $effects] = self::resolveGolemCard($state, $cardEntry['key']);
         }
@@ -4416,6 +4473,13 @@ final class GameEngine
      * phase for the Emperor to pick one (rules.md says the Emperor
      * chooses) — there's no mid-phase interactive decision point built
      * yet. Exhausted (0 HP) Wanderers are never targeted or damaged.
+     *
+     * Focused Glyph only overrides single-target selection (Stalk,
+     * Pursue, Charge/Lurch/Pound's implicit "nearest," Targeted
+     * attack) — area-effect cards (Storm, Dissent, Overcharge, etc.)
+     * still hit every Wanderer in range regardless of Focused, since
+     * "effectively invisible to it" isn't modeled as excluding them
+     * from area effects, only from being chosen as a specific target.
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: array{double_next: bool, extra_from_bottom: int}}
      */
@@ -4667,10 +4731,94 @@ final class GameEngine
         $state = $state->with(['golem' => $state->golemWith(['cell' => $destination])]);
         $events = [['type' => 'golem_moved', 'role_key' => null, 'payload' => ['to' => $destination]]];
 
+        // Destructive Glyph: "When the Golem moves into a space
+        // containing Infrastructure, it destroys it immediately."
+        // Checked against the final destination only — Golem movement
+        // is already modeled as one atomic jump (a single golem_moved
+        // event), not per-step, elsewhere in this engine.
+        if (in_array('destructive', $glyphs, true)) {
+            $destinationKey = Board::key($destination);
+            $infrastructure = $state->board[$destinationKey]['infrastructure'];
+
+            if ($infrastructure !== []) {
+                $pool = $state->infrastructurePool;
+                foreach ($infrastructure as $type) {
+                    $pool[$type]++;
+                    $events[] = ['type' => 'infrastructure_removed', 'role_key' => null, 'payload' => ['cell' => $destination, 'infrastructure_type' => $type]];
+                }
+
+                $board = $state->board;
+                $board[$destinationKey] = [...$board[$destinationKey], 'infrastructure' => []];
+                $state = $state->with(['board' => $board, 'infrastructurePool' => $pool]);
+            }
+        }
+
         [$state, $e] = self::moveDarkChainsWanderers($state, $golemCell, $destination);
         $events = [...$events, ...$e];
 
         return [$state, $events];
+    }
+
+    /**
+     * Fearful Glyph: "When the Golem plays a tapped card, it moves 1
+     * space away from Wanderers if possible." Mirrors golemRoar's own
+     * farthest-neighbor selection, but for the Golem's own position
+     * instead of pushing a Wanderer — picks whichever occupied,
+     * non-Walled neighbor maximizes distance to the nearest Wanderer;
+     * stays put if no neighbor improves on its current distance.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemMoveAwayFromWanderers(GameState $state): array
+    {
+        $golemCell = $state->golem['cell'];
+
+        if ($golemCell === null) {
+            return [$state, []];
+        }
+
+        $wallKeys = $state->wallKeys();
+        $bestDistance = self::distanceToNearestWanderer($state, $golemCell);
+        $best = null;
+
+        foreach (Board::occupiedNeighbors($golemCell, $state->board) as $option) {
+            if (in_array(Board::key($option), $wallKeys, true)) {
+                continue;
+            }
+
+            $distance = self::distanceToNearestWanderer($state, $option);
+
+            if ($distance > $bestDistance) {
+                $best = $option;
+                $bestDistance = $distance;
+            }
+        }
+
+        if ($best === null) {
+            return [$state, []];
+        }
+
+        $state = $state->with(['golem' => $state->golemWith(['cell' => $best])]);
+
+        return [$state, [['type' => 'golem_moved', 'role_key' => null, 'payload' => ['to' => $best]]]];
+    }
+
+    /**
+     * @param  array{0: int, 1: int}  $cell
+     */
+    private static function distanceToNearestWanderer(GameState $state, array $cell): int
+    {
+        $min = null;
+
+        foreach (self::activeWanderers($state) as $otherCell) {
+            $distance = Board::distance($cell, $otherCell, $state->board) ?? 0;
+
+            if ($min === null || $distance < $min) {
+                $min = $distance;
+            }
+        }
+
+        return $min ?? 0;
     }
 
     /**
@@ -5663,6 +5811,15 @@ final class GameEngine
 
     private static function extremeWanderer(GameState $state, \Closure $isBetter): ?string
     {
+        // Focused Glyph: "The Golem can only ever target the Wanderer
+        // with the most Health. All other Wanderers are effectively
+        // invisible to it." Overrides nearest/farthest targeting
+        // outright — every card that would otherwise pick by distance
+        // picks by Health instead.
+        if (in_array('focused', $state->golem['glyphs'], true)) {
+            return self::mostHpWanderer($state);
+        }
+
         $golemCell = $state->golem['cell'];
 
         if ($golemCell === null) {
@@ -5715,6 +5872,10 @@ final class GameEngine
 
     private static function leastHpWanderer(GameState $state): ?string
     {
+        if (in_array('focused', $state->golem['glyphs'], true)) {
+            return self::mostHpWanderer($state);
+        }
+
         $best = null;
         $bestHp = null;
 
@@ -5722,6 +5883,23 @@ final class GameEngine
             $hp = $state->wanderers[$role]['hp'];
 
             if ($bestHp === null || $hp < $bestHp) {
+                $best = $role;
+                $bestHp = $hp;
+            }
+        }
+
+        return $best;
+    }
+
+    private static function mostHpWanderer(GameState $state): ?string
+    {
+        $best = null;
+        $bestHp = null;
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            $hp = $state->wanderers[$role]['hp'];
+
+            if ($bestHp === null || $hp > $bestHp) {
                 $best = $role;
                 $bestHp = $hp;
             }
