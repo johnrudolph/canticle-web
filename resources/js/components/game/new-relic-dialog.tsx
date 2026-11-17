@@ -76,10 +76,9 @@ export function NewRelicDialog({
                         !
                     </DialogTitle>
                     <DialogDescription className="break-words">
-                        {entry?.is_bound &&
-                            'Bound — once equipped, this can only be removed by trashing. '}
-                        Equip it now (this drops whatever is in that slot), or
-                        drop it face-up here instead.
+                        {entry?.is_bound
+                            ? 'Bound — you must equip this (unless every eligible slot is blocked by a Shame/Scar token or another Bound Relic). It can never be dropped, tucked, trashed, or traded once equipped.'
+                            : 'Equip it now (this drops whatever is in that slot), or drop it face-up here instead.'}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -95,6 +94,10 @@ export function NewRelicDialog({
                         const currentEntry = current
                             ? relicCatalog[current]
                             : undefined;
+                        const blockedByBound =
+                            current !== null &&
+                            !isStatusToken(current) &&
+                            currentEntry?.is_bound === true;
 
                         return (
                             <div
@@ -109,8 +112,11 @@ export function NewRelicDialog({
                                         {current === null && 'Currently empty.'}
                                         {isStatusToken(current) &&
                                             `Blocked by a ${current === 'shame_token' ? 'Shame' : 'Scar'} token.`}
+                                        {blockedByBound &&
+                                            `Blocked by a Bound Relic (${currentEntry?.name ?? current}).`}
                                         {current !== null &&
                                             !isStatusToken(current) &&
+                                            !blockedByBound &&
                                             `Currently: ${currentEntry?.name ?? current}${
                                                 currentEntry?.effect
                                                     ? ` — ${currentEntry.effect}`
@@ -121,7 +127,9 @@ export function NewRelicDialog({
                                 <Button
                                     size="sm"
                                     disabled={
-                                        processing || isStatusToken(current)
+                                        processing ||
+                                        isStatusToken(current) ||
+                                        blockedByBound
                                     }
                                     onClick={() =>
                                         onSubmit({
@@ -138,21 +146,23 @@ export function NewRelicDialog({
                     })}
                 </div>
 
-                <DialogFooter className="flex-wrap sm:justify-start">
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={processing}
-                        onClick={() =>
-                            onSubmit({
-                                type: 'drop_relic',
-                                relic_key: relicKey,
-                            })
-                        }
-                    >
-                        Drop it face-up
-                    </Button>
-                </DialogFooter>
+                {!entry?.is_bound && (
+                    <DialogFooter className="flex-wrap sm:justify-start">
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={processing}
+                            onClick={() =>
+                                onSubmit({
+                                    type: 'drop_relic',
+                                    relic_key: relicKey,
+                                })
+                            }
+                        >
+                            Drop it face-up
+                        </Button>
+                    </DialogFooter>
+                )}
             </DialogContent>
         </Dialog>
     );

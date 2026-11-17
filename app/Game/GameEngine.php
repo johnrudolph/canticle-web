@@ -594,6 +594,13 @@ final class GameEngine
             throw new InvalidMoveException('That slot is blocked by a status token.');
         }
 
+        // rules.md: Bound Relics "cannot drop" — equipping over one
+        // would displace it face-up exactly like a drop, so it's
+        // blocked the same way a status token blocks the slot.
+        if (is_string($displaced) && RelicCatalog::find($displaced)?->isBound === true) {
+            throw new InvalidMoveException('That slot holds a Bound Relic, which cannot be displaced.');
+        }
+
         $cellKey = Board::key($wanderer['cell']);
         $board = $state->board;
 
@@ -645,18 +652,22 @@ final class GameEngine
             throw new InvalidMoveException('Status tokens are not dropped this way.');
         }
 
+        // rules.md: "You cannot drop, tuck, trash, or trade this" — a
+        // blanket rule on Bound Relics themselves, not just once
+        // equipped. A newly-found one that hasn't been equipped yet
+        // can't be dropped either; it either gets equipped or sits in
+        // holding (the vanishingly rare case where every eligible slot
+        // is already blocked by a Shame/Scar token or another Bound
+        // Relic isn't handled — rules.md doesn't say what happens then
+        // either).
+        if (RelicCatalog::find($relicKey)?->isBound === true) {
+            throw new InvalidMoveException('Bound Relics cannot be dropped — they must be equipped.');
+        }
+
         $equipped = $wanderer['equipped'];
         $fromSlot = array_search($relicKey, $equipped, true);
 
         if ($fromSlot !== false) {
-            // rules.md: a Bound Relic can never be voluntarily dropped
-            // once equipped — only trashed via its own effect. It can
-            // still be dropped face-up while merely held (not yet
-            // equipped), same as any other found-but-unequipped Relic.
-            if (RelicCatalog::find($relicKey)?->isBound === true) {
-                throw new InvalidMoveException('Bound Relics cannot be dropped once equipped.');
-            }
-
             $equipped[$fromSlot] = null;
         } elseif (in_array($relicKey, $wanderer['holding'], true)) {
             // handled below via holding diff

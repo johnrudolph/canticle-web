@@ -51,17 +51,31 @@ test('a Bound Relic cannot be dropped once equipped', function () {
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
 
     expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'drop_relic', 'relic_key' => 'burial-robes']))
-        ->toThrow(InvalidMoveException::class, 'Bound Relics cannot be dropped once equipped.');
+        ->toThrow(InvalidMoveException::class, 'Bound Relics cannot be dropped — they must be equipped.');
 
     expect($state->wanderers['wanderer_a']['equipped']['body'])->toBe('burial-robes');
 });
 
-test('a Bound Relic can still be dropped while merely held, not yet equipped', function () {
+test('a Bound Relic cannot be dropped while merely held either, not yet equipped', function () {
+    // rules.md: "You cannot drop, tuck, trash, or trade this" is a
+    // blanket rule on the Relic itself, not conditioned on whether it
+    // happens to be equipped yet.
     $state = startedGame();
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['holding' => ['burial-robes']])]);
 
-    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'drop_relic', 'relic_key' => 'burial-robes']);
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'drop_relic', 'relic_key' => 'burial-robes']))
+        ->toThrow(InvalidMoveException::class, 'Bound Relics cannot be dropped — they must be equipped.');
 
-    expect($state->wanderers['wanderer_a']['holding'])->toBe([])
-        ->and($state->board['1,0']['relics_face_up'])->toContain('burial-robes');
+    expect($state->wanderers['wanderer_a']['holding'])->toBe(['burial-robes']);
+});
+
+test('equipping over an already-equipped Bound Relic is rejected', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'burial-robes'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'holding' => ['dark-chains']])]);
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'equip_relic', 'relic_key' => 'dark-chains', 'slot' => 'body']))
+        ->toThrow(InvalidMoveException::class, 'That slot holds a Bound Relic, which cannot be displaced.');
+
+    expect($state->wanderers['wanderer_a']['equipped']['body'])->toBe('burial-robes');
 });

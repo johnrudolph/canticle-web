@@ -21,11 +21,23 @@ function wandererLabel(role: string): string {
     return `Wanderer ${role.replace('wanderer_', '').toUpperCase()}`;
 }
 
+/** Branch name (e.g. "Art") -> the emoji whichever Location produces it uses. */
+function branchEmoji(
+    branch: string,
+    locationCatalog: Record<string, LocationCatalogEntry>,
+): string | null {
+    const match = Object.values(locationCatalog).find(
+        (l) => l.produces === branch,
+    );
+    return match?.produces_emoji ?? null;
+}
+
 export function LocationDetailDialog({
     open,
     onOpenChange,
     location,
     cellData,
+    locationCatalog = {},
     relicCatalog = {},
     wanderersHere = [],
     golemHere = false,
@@ -36,6 +48,7 @@ export function LocationDetailDialog({
     onOpenChange: (open: boolean) => void;
     location: LocationCatalogEntry | undefined;
     cellData: BoardCell | undefined;
+    locationCatalog?: Record<string, LocationCatalogEntry>;
     relicCatalog?: Record<string, RelicCatalogEntry>;
     wanderersHere?: string[];
     golemHere?: boolean;
@@ -62,6 +75,25 @@ export function LocationDetailDialog({
                             {location.lore}
                         </p>
                     )}
+
+                    <div className="min-w-0 rounded-md border bg-muted/40 p-3">
+                        <p className="mb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                            Adjacency requirement
+                        </p>
+                        <p className="min-w-0 break-words">
+                            {location.costs.length === 0
+                                ? 'None — can be built adjacent to anything.'
+                                : `Must be adjacent to a space producing: ${location.costs
+                                      .map((c) => {
+                                          const emoji = branchEmoji(
+                                              c,
+                                              locationCatalog,
+                                          );
+                                          return emoji ? `${emoji} ${c}` : c;
+                                      })
+                                      .join(', ')}`}
+                        </p>
+                    </div>
 
                     {location.back_text && (
                         <div className="min-w-0 rounded-md border bg-muted/40 p-3">

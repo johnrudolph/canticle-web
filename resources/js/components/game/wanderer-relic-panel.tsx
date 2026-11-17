@@ -111,8 +111,8 @@ function DropButton({
         <Tooltip>
             <TooltipTrigger asChild>{button}</TooltipTrigger>
             <TooltipContent>
-                Bound Relics can't be dropped once equipped — only trashed by
-                their own effect.
+                Bound Relics can't ever be dropped, tucked, trashed, or traded
+                by choice — only trashed by their own effect.
             </TooltipContent>
         </Tooltip>
     );
@@ -367,29 +367,23 @@ export function WandererRelicPanel({
                                                 Equip {SLOT_LABELS[slot]}
                                             </Button>
                                         ))}
-                                        {tuckLocationKey && (
-                                            <TuckButton
-                                                relicKey={relicKey}
-                                                tuckLocationKey={
-                                                    tuckLocationKey
-                                                }
-                                                processing={processing}
-                                                onSubmit={onSubmit}
-                                            />
-                                        )}
-                                        <button
-                                            type="button"
-                                            disabled={processing}
-                                            className="text-muted-foreground hover:text-destructive"
-                                            onClick={() =>
-                                                onSubmit({
-                                                    type: 'drop_relic',
-                                                    relic_key: relicKey,
-                                                })
-                                            }
-                                        >
-                                            drop
-                                        </button>
+                                        {tuckLocationKey &&
+                                            entry?.is_bound !== true && (
+                                                <TuckButton
+                                                    relicKey={relicKey}
+                                                    tuckLocationKey={
+                                                        tuckLocationKey
+                                                    }
+                                                    processing={processing}
+                                                    onSubmit={onSubmit}
+                                                />
+                                            )}
+                                        <DropButton
+                                            relicKey={relicKey}
+                                            entry={entry}
+                                            processing={processing}
+                                            onSubmit={onSubmit}
+                                        />
                                     </div>
                                 </div>
                                 {entry?.effect && (

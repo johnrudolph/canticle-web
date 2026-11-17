@@ -66,6 +66,33 @@ function occupiedNeighbors(cell: Cell, board: Record<string, unknown>): Cell[] {
     return neighbors(cell).filter((n) => cellKey(n) in board);
 }
 
+/** Branch name (e.g. "Art") -> the emoji whichever Location produces it uses. */
+function branchEmoji(
+    branch: string,
+    locationCatalog: Record<string, LocationCatalogEntry>,
+): string | null {
+    const match = Object.values(locationCatalog).find(
+        (l) => l.produces === branch,
+    );
+    return match?.produces_emoji ?? null;
+}
+
+function adjacencyRequirementText(
+    location: LocationCatalogEntry,
+    locationCatalog: Record<string, LocationCatalogEntry>,
+): string {
+    if (location.costs.length === 0) {
+        return 'No adjacency requirement.';
+    }
+
+    return `Requires adjacent: ${location.costs
+        .map((c) => {
+            const emoji = branchEmoji(c, locationCatalog);
+            return emoji ? `${emoji} ${c}` : c;
+        })
+        .join(', ')}`;
+}
+
 function locationCostSatisfied(
     cell: Cell,
     location: LocationCatalogEntry,
@@ -955,7 +982,7 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                                 return (
                                                     <div
                                                         key={key}
-                                                        className={`flex items-center gap-2 rounded-md border p-2 text-xs ${
+                                                        className={`flex items-start gap-2 rounded-md border p-2 text-xs ${
                                                             marked
                                                                 ? 'opacity-50'
                                                                 : ''
@@ -968,13 +995,14 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                                                     key,
                                                                 )
                                                             }
-                                                            className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted hover:bg-muted-foreground/20"
+                                                            className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-muted hover:bg-muted-foreground/20"
                                                             aria-label={`Inspect ${loc.name}`}
                                                         >
                                                             ℹ️
                                                         </button>
-                                                        <label className="flex flex-1 items-center gap-1.5">
+                                                        <label className="flex min-w-0 flex-1 items-start gap-1.5">
                                                             <Checkbox
+                                                                className="mt-0.5"
                                                                 checked={marked}
                                                                 onCheckedChange={(
                                                                     checked,
@@ -1003,11 +1031,27 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                                                     );
                                                                 }}
                                                             />
-                                                            <span className="font-medium">
-                                                                {
-                                                                    loc.produces_emoji
-                                                                }{' '}
-                                                                {loc.name}
+                                                            <span className="min-w-0 flex-1">
+                                                                <span className="font-medium">
+                                                                    {
+                                                                        loc.produces_emoji
+                                                                    }{' '}
+                                                                    {loc.name}
+                                                                </span>
+                                                                <span className="mt-0.5 block text-muted-foreground">
+                                                                    {adjacencyRequirementText(
+                                                                        loc,
+                                                                        locationCatalog,
+                                                                    )}
+                                                                </span>
+                                                                {loc.back_text && (
+                                                                    <span className="mt-0.5 block text-muted-foreground">
+                                                                        Rule:{' '}
+                                                                        {
+                                                                            loc.back_text
+                                                                        }
+                                                                    </span>
+                                                                )}
                                                             </span>
                                                         </label>
                                                     </div>
@@ -1378,6 +1422,7 @@ export default function GameShow({ game }: { game: GameSummary }) {
                     handInfoKey ? locationCatalog[handInfoKey] : undefined
                 }
                 cellData={undefined}
+                locationCatalog={locationCatalog}
             />
 
             <InsightFromTheFutureDialog
