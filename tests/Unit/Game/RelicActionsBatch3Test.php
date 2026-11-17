@@ -1,5 +1,6 @@
 <?php
 
+use App\Game\Board;
 use App\Game\GameEngine;
 use App\Game\InvalidMoveException;
 
@@ -105,6 +106,36 @@ test('Warlock\'s robes lets the caster perform the action from an Ally\'s Relic'
     expect($state->wanderers['wanderer_a']['cell'])->toBe([2, 0]) // the caster performed it, moving themselves
         ->and($state->wanderers['wanderer_b']['cell'])->toBe([1, 0])
         ->and($state->wanderers['wanderer_b']['equipped']['bag'])->toBe('artists-insight'); // borrowed, not trashed
+});
+
+test('Emperor\'s Knowledge\'s move bonus requires Emperor\'s Knowledge itself equipped', function () {
+    $state = startedGame();
+    // 2 other "Emperor's __" Relics equipped, but NOT Emperor's Knowledge.
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'emperors-diary', 'body' => 'emperors-robes'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    $direction = Board::directionBetween([1, 0], [0, 1]);
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $direction]);
+
+    expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe(2); // normal -1, no bonus
+});
+
+test('Emperor\'s Knowledge grants +1 action per 2 equipped "Emperor\'s __" Relics once it is itself equipped', function () {
+    $state = startedGame();
+    $equipped = [
+        ...$state->wanderers['wanderer_a']['equipped'],
+        'hand_left' => 'emperors-diary', 'body' => 'emperors-robes', 'mind' => 'emperors-knowledge',
+    ];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    $direction = Board::directionBetween([1, 0], [0, 1]);
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $direction]);
+
+    // -1 to move, +1 for 2 Emperor's Relics (Diary + Robes; Knowledge
+    // itself also counts, but 3 Relics still only gives floor(3/2) = 1).
+    expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe(3);
 });
 
 test('Emperor\'s Diary searches once, plus once more per 3 Emperor\'s Relics held or equipped', function () {

@@ -1877,9 +1877,23 @@ final class GameEngine
             return [$state, [], false];
         }
 
-        [$state, $events] = self::tapGolemDrawPile($state, $state->golem['shame']);
+        [$state, $events] = self::tapGolemDrawPile($state, self::effectiveGolemShame($state));
 
         return [$state, $events, true];
+    }
+
+    /**
+     * Accused Glyph: "The Golem always has +1 Shame token. This does
+     * not count toward its normal max of 3." A virtual bonus layered
+     * on top of the stored golem['shame'] counter for every mechanic
+     * that reads it as a quantity (Whip of Justice, Penitent, the
+     * Prison-judgment Inscribe condition) — never stored back, and
+     * never touched by anything that moves/spends actual Shame
+     * (Magistrate's robes), since Accused's +1 isn't a real token.
+     */
+    private static function effectiveGolemShame(GameState $state): int
+    {
+        return $state->golem['shame'] + (in_array('accused', $state->golem['glyphs'], true) ? 1 : 0);
     }
 
     /**
@@ -3421,7 +3435,7 @@ final class GameEngine
         $onPrison = $state->board[Board::key($casterCell)]['location_key'] === 'prison';
         $golemThere = self::golemSharesCellWith($state, $actorRole);
         $noShame = self::countStatusTokens($state->wanderers[$actorRole]['equipped'], 'shame_token') === 0;
-        $golemHighShame = $state->golem['shame'] >= 3;
+        $golemHighShame = self::effectiveGolemShame($state) >= 3;
 
         return $onPrison && $golemThere && $noShame && $golemHighShame;
     }
@@ -3773,8 +3787,15 @@ final class GameEngine
         // __.'" Modeled as refunding the action this move cost, the same
         // way Road already grants a move for free, rather than literally
         // chaining a second step (there's no second direction to move in
-        // from a single move_wanderer call).
-        $actionsRemaining += intdiv(self::countEmperorsRelics(array_values($wanderer['equipped'])), 2);
+        // from a single move_wanderer call). Requires Emperor's Knowledge
+        // itself to be equipped — merely having 2+ OTHER "Emperor's __"
+        // Relics equipped isn't enough (confirmed in the engine audit:
+        // this previously granted the bonus to anyone holding e.g.
+        // Emperor's Diary + Emperor's Robes, with Knowledge itself not
+        // even equipped).
+        if (in_array('emperors-knowledge', $wanderer['equipped'], true)) {
+            $actionsRemaining += intdiv(self::countEmperorsRelics(array_values($wanderer['equipped'])), 2);
+        }
 
         $wanderers = $state->wanderersWith($actorRole, [
             'cell' => $to,
@@ -5428,6 +5449,48 @@ final class GameEngine
             fn (mixed $key) => is_string($key) && str_starts_with((string) RelicCatalog::find($key)?->name, 'Dark')
         ));
         $damage = max(0, $damage - $darkCount);
+
+        // Combat Glyphs — all five only ever modify a Golem attack's
+        // damage, never damage from any other source.
+        if ($isGolemAttack) {
+            $golemGlyphs = $state->golem['glyphs'];
+
+            // Cruel: "+1 for all 👊."
+            if (in_array('cruel', $golemGlyphs, true)) {
+                $damage += 1;
+            }
+
+            // Legalistic: "+1👊 for each Shame the Wanderer has" — the
+            // Wanderer being hit, not the Golem's own Shame.
+            if (in_array('legalistic', $golemGlyphs, true)) {
+                $damage += self::countStatusTokens($equipped, 'shame_token');
+            }
+
+            // Merciful: "-1👊."
+            if (in_array('merciful', $golemGlyphs, true)) {
+                $damage = max(0, $damage - 1);
+            }
+
+            // Enchanted: "-2👊 if the Golem is on a space with a
+            // Monolith Shard" — the Golem's own space, not the
+            // Wanderer's.
+            $golemCell = $state->golem['cell'];
+            if (in_array('enchanted', $golemGlyphs, true) && $golemCell !== null
+                && in_array('monolith_shard', $state->board[Board::key($golemCell)]['infrastructure'], true)) {
+                $damage = max(0, $damage - 2);
+            }
+
+            // Outnumbered: "-3👊 when attacking Wanderers who are in a
+            // space with other Wanderers."
+            if (in_array('outnumbered', $golemGlyphs, true) && $cell !== null) {
+                foreach (self::activeWanderers($state) as $otherRole => $otherCell) {
+                    if ($otherRole !== $role && Board::key($otherCell) === Board::key($cell)) {
+                        $damage = max(0, $damage - 3);
+                        break;
+                    }
+                }
+            }
+        }
 
         // Poison Charm: the Golem's current attack card is -3, for
         // everyone it hits.

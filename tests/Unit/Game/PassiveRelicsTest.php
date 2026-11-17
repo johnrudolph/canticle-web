@@ -586,7 +586,7 @@ test('Emperor\'s Knowledge refunds the move\'s action for every 2 equipped Emper
     $state = startedGame();
     $equipped = [
         ...$state->wanderers['wanderer_a']['equipped'],
-        'body' => 'emperors-robes', 'mind' => 'emperors-diary',
+        'body' => 'emperors-robes', 'mind' => 'emperors-diary', 'hand_left' => 'emperors-knowledge',
     ];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
@@ -594,7 +594,8 @@ test('Emperor\'s Knowledge refunds the move\'s action for every 2 equipped Emper
 
     [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => 'S']);
 
-    // 2 Emperor's Relics equipped => +1 refunded action, net unchanged.
+    // 3 Emperor's Relics equipped (including Knowledge itself) => +1
+    // refunded action, net unchanged.
     expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe($actionsBefore);
 });
 

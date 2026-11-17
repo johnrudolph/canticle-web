@@ -163,16 +163,53 @@ final readonly class GameState
     }
 
     /**
-     * Golem cards played this round — rules.md's Round track.
+     * Golem cards played this round — rules.md's Round track, reduced
+     * by whichever card-count Glyphs are active:
+     *
+     * - Penitent: "The Golem plays 1 fewer card per Shame it has"
+     *   (counting Accused's virtual +1 too — it inflates every
+     *   mechanic that reads Shame as a quantity).
+     * - Lilted: "...for each 🎶 equipped by Wanderers" (lute, pipe,
+     *   tabor-drum, counted across every Wanderer's equipped slots).
+     * - Empathetic: "...for each Wanderer that is on its space."
+     *
+     * Never below 0. All three glyph checks only need data already on
+     * this object (glyph keys, shame, equipped/cell), so this stays a
+     * pure derived getter rather than something GameEngine computes.
      */
     public function golemCardsThisRound(): int
     {
-        return match (true) {
+        $count = match (true) {
             $this->round <= 2 => 3,
             $this->round <= 4 => 4,
             $this->round <= 6 => 5,
             default => 6,
         };
+
+        $glyphs = $this->golem['glyphs'];
+
+        if (in_array('penitent', $glyphs, true)) {
+            $shame = $this->golem['shame'] + (in_array('accused', $glyphs, true) ? 1 : 0);
+            $count -= $shame;
+        }
+
+        if (in_array('lilted', $glyphs, true)) {
+            $instruments = ['lute', 'pipe', 'tabor-drum'];
+            foreach ($this->wanderers as $wanderer) {
+                $count -= count(array_intersect($instruments, array_values($wanderer['equipped'])));
+            }
+        }
+
+        if (in_array('empathetic', $glyphs, true) && $this->golem['cell'] !== null) {
+            $golemKey = Board::key($this->golem['cell']);
+            foreach ($this->wanderers as $wanderer) {
+                if ($wanderer['cell'] !== null && Board::key($wanderer['cell']) === $golemKey) {
+                    $count--;
+                }
+            }
+        }
+
+        return max(0, (int) $count);
     }
 
     /**
