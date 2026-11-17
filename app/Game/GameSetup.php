@@ -93,6 +93,7 @@ final class GameSetup
                 'was_ever_exhausted' => false,
                 'golem_insight_used_this_round' => false,
                 'laborers_jacket_used_this_round' => false,
+                'pending_bonus_actions' => 0,
             ];
         }
 

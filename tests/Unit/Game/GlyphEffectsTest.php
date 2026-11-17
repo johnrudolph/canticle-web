@@ -1,6 +1,7 @@
 <?php
 
 use App\Game\Board;
+use App\Game\Catalog\LocationCatalog;
 use App\Game\GameEngine;
 use App\Game\InvalidMoveException;
 
@@ -525,4 +526,114 @@ test('Miraculous does not re-trigger on further damage to an already-exhausted W
     [$state] = $reflection->invoke(null, $state, 'wanderer_a', 5, true);
 
     expect($state->wanderers['wanderer_a']['hp'])->toBe(0);
+});
+
+test('Neighborly lets an adjacent Ally move in and use one of their own 🌿 Relics for free', function () {
+    $state = startedGame();
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['neighborly']])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['cell' => [0, 1], 'hp' => 5])]);
+    $equipped = [...$state->wanderers['wanderer_b']['equipped'], 'hand_left' => 'divine-healing-oil'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['equipped' => $equipped])]);
+    // wanderer_b stays on the hub [1,0], adjacent to wanderer_a's [0,1].
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_b', [
+        'type' => 'neighborly_assist', 'to_role' => 'wanderer_a', 'relic_key' => 'divine-healing-oil',
+    ]);
+
+    expect($state->wanderers['wanderer_b']['cell'])->toBe([0, 1])
+        ->and($state->wanderers['wanderer_a']['hp'])->toBe(8) // default self-heal +3
+        ->and(collect($events)->pluck('type'))->toContain('wanderer_moved')
+        ->and(collect($events)->pluck('type'))->toContain('wanderer_healed');
+});
+
+test('Neighborly refuses a Relic without 🌿', function () {
+    $state = startedGame();
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['neighborly']])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['cell' => [0, 1]])]);
+    $equipped = [...$state->wanderers['wanderer_b']['equipped'], 'hand_left' => 'golem-whistle'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['equipped' => $equipped])]);
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_b', [
+        'type' => 'neighborly_assist', 'to_role' => 'wanderer_a', 'relic_key' => 'golem-whistle',
+    ]))->toThrow(InvalidMoveException::class, 'not one of your own 🌿 Relics');
+});
+
+test('Neighborly requires the Ally to actually be adjacent', function () {
+    $state = startedGame();
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['neighborly']])]);
+    $board = $state->board;
+    $board['3,0'] = ['location_key' => 'cathedral', 'placed_round' => 2, 'relics' => [], 'infrastructure' => []];
+    $state = $state->with(['board' => $board]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['cell' => [3, 0]])]);
+    $equipped = [...$state->wanderers['wanderer_b']['equipped'], 'hand_left' => 'divine-healing-oil'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['equipped' => $equipped])]);
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_b', [
+        'type' => 'neighborly_assist', 'to_role' => 'wanderer_a', 'relic_key' => 'divine-healing-oil',
+    ]))->toThrow(InvalidMoveException::class, 'not adjacent');
+});
+
+test('Paradoxical banks +1 action for every Wanderer after the Golem\'s first card, spent at their next turn start', function () {
+    $state = startedGame();
+    $revealed = $state->golem['revealed'];
+    $revealed[array_key_last($revealed)] = ['key' => 'self-inscription', 'tapped' => false];
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['paradoxical'], 'revealed' => $revealed])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'resolveGolemPhase');
+    $reflection->setAccessible(true);
+    [$state] = $reflection->invoke(null, $state);
+
+    expect($state->wanderers['wanderer_a']['pending_bonus_actions'])->toBe(1)
+        ->and($state->wanderers['wanderer_b']['pending_bonus_actions'])->toBe(1);
+
+    // Spent (and reset to 0) the moment a fresh Emperor phase hands
+    // out this Wanderer's next turn.
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe(4) // base 3 + 1 banked
+        ->and($state->wanderers['wanderer_a']['pending_bonus_actions'])->toBe(0);
+});
+
+test('Perplexing lets any Wanderer move for free to the Location the Emperor just played', function () {
+    $state = startedGame();
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['perplexing']])]);
+    $costFree = collect(LocationCatalog::all())->first(fn ($l) => $l->costs === [] && $l->key !== 'bazaar');
+    $state = $state->with(['locationHand' => [$costFree->key]]);
+    $cell = Board::placeableCells($state->board)[0];
+
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'play_location', 'location_key' => $costFree->key, 'cell' => $cell]);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_to_new_location']);
+
+    expect($state->wanderers['wanderer_a']['cell'])->toBe($cell)
+        ->and(collect($events)->pluck('type'))->toContain('wanderer_moved');
+});
+
+test('move_to_new_location is rejected outright without Perplexing active', function () {
+    $state = startedGame();
+    $costFree = collect(LocationCatalog::all())->first(fn ($l) => $l->costs === [] && $l->key !== 'bazaar');
+    $state = $state->with(['locationHand' => [$costFree->key]]);
+    $cell = Board::placeableCells($state->board)[0];
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'play_location', 'location_key' => $costFree->key, 'cell' => $cell]);
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'move_to_new_location']))
+        ->toThrow(InvalidMoveException::class, 'Perplexing is not active.');
+});
+
+test('Parallel skips the next-to-resolve Golem card once per round, drawing a replacement', function () {
+    $state = startedGame();
+    $revealed = $state->golem['revealed'];
+    $toSkip = $revealed[array_key_last($revealed)]['key'];
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['parallel']])]);
+    $revealedCountBefore = count($state->golem['revealed']);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'skip_golem_card']);
+
+    expect($state->golem['discard_pile'])->toContain($toSkip)
+        ->and(count($state->golem['revealed']))->toBe($revealedCountBefore)
+        ->and($state->parallelUsedThisRound)->toBeTrue()
+        ->and(collect($events)->pluck('type'))->toContain('golem_card_skipped');
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'skip_golem_card']))
+        ->toThrow(InvalidMoveException::class, 'already been used this round');
 });

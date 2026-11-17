@@ -48,6 +48,7 @@ namespace App\Game;
  *     'was_ever_exhausted' => bool, // set once hp hits 0 for real (not saved by Cabalist wraps) — the Catacombs Location requires this to enter
  *     'golem_insight_used_this_round' => bool, // Golem insight — "once per round" — cleared at the start of each new round
  *     'laborers_jacket_used_this_round' => bool, // Laborer's Jacket — modeled as usable once per round rather than strictly "at the start of the Wanderer phase" (no clean architectural seam for that exact timing) — cleared at the start of each new round
+ *     'pending_bonus_actions' => int, // Paradoxical Glyph — granted mid-Golem-phase, outside any Wanderer's actual turn, so it can't just add to actions_remaining (the next turn-start would overwrite it); banked here instead and added on top of the fresh per-turn amount when this Wanderer's next turn actually starts, then reset to 0
  * ]
  *
  * infrastructurePool = ['monolith_shard' => int, 'road' => int, 'walls' => int, 'fruit_tree' => int]
@@ -97,6 +98,7 @@ final readonly class GameState
      * @param  list<string>  $glyphDiscardPile
      * @param  list<string>  $trashedRelics
      * @param  list<array{cell: array{0: int, 1: int}, type: string}>  $infrastructurePlacedThisTurnLog
+     * @param  array{0: int, 1: int}|null  $locationJustBuiltCell
      */
     public function __construct(
         public int $wandererCount,
@@ -121,15 +123,13 @@ final readonly class GameState
         public bool $golemSkipped = false, // Poof: "Skip the Golem phase for the rest of the game."
         public array $trashedRelics = [], // every Relic ever trashed (not dropped) — Re-creation draws from this
         public array $infrastructurePlacedThisTurnLog = [], // undo_infrastructure_placement pops from the end of this; cleared whenever infrastructurePlacedThisTurn itself resets (new round)
+        public ?array $locationJustBuiltCell = null, // Perplexing Glyph — the cell of whichever Location the Emperor most recently played; overwritten every time a new one is played, never otherwise cleared (a Wanderer may use it at their leisure, not strictly "immediately")
+        public bool $parallelUsedThisRound = false, // Parallel Glyph — "once per round," shared across all Wanderers (not per-Wanderer); cleared at the start of each new round
     ) {}
 
     /**
      * rules.md's Game End thresholds, confirmed with the designer
      * 2026-11-12: 12 Prophecy = simple victory, 16 = elite victory.
-     * Prophecy-*granting* isn't modeled yet (it all comes from Relic and
-     * Location effects, which aren't executed), so this is always
-     * 'defeat' today — the threshold logic is just ready for whenever
-     * those land.
      */
     public function outcome(): string
     {

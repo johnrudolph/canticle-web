@@ -133,6 +133,8 @@ function describe(
             return `Golem plays ${(event.payload.name as string) ?? card(event.payload.card_key)}.`;
         case 'golem_card_tapped':
             return `A tapped Golem card (${(event.payload.name as string) ?? card(event.payload.card_key)}) does nothing.`;
+        case 'golem_card_skipped':
+            return `${role} skips ${card(event.payload.card_key)} (Parallel), drawing the next card instead.`;
         case 'golem_card_flipped_tapped':
             return `${card(event.payload.card_key)} is flipped face-down (tapped).`;
         case 'golem_card_tucked':

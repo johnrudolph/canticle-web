@@ -43,6 +43,7 @@ final class GameStateRepository
                 'was_ever_exhausted' => $wanderer['was_ever_exhausted'] ?? false,
                 'golem_insight_used_this_round' => $wanderer['golem_insight_used_this_round'] ?? false,
                 'laborers_jacket_used_this_round' => $wanderer['laborers_jacket_used_this_round'] ?? false,
+                'pending_bonus_actions' => $wanderer['pending_bonus_actions'] ?? 0,
                 'holding' => $wanderer['holding'] ?? [],
                 'equipped' => [
                     ...$wanderer['equipped'],
@@ -88,6 +89,8 @@ final class GameStateRepository
             golemSkipped: $data['golem_skipped'] ?? false,
             trashedRelics: $data['trashed_relics'] ?? [],
             infrastructurePlacedThisTurnLog: $data['infrastructure_placed_this_turn_log'] ?? [],
+            locationJustBuiltCell: $data['location_just_built_cell'] ?? null,
+            parallelUsedThisRound: $data['parallel_used_this_round'] ?? false,
         );
     }
 
@@ -119,6 +122,8 @@ final class GameStateRepository
                 'golem_skipped' => $state->golemSkipped,
                 'trashed_relics' => $state->trashedRelics,
                 'infrastructure_placed_this_turn_log' => $state->infrastructurePlacedThisTurnLog,
+                'location_just_built_cell' => $state->locationJustBuiltCell,
+                'parallel_used_this_round' => $state->parallelUsedThisRound,
             ],
         ]);
     }

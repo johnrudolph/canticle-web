@@ -59,6 +59,9 @@ final class GameEngine
             'telekinesis_move' => self::telekinesisMove($state, $actorRole, $move),
             'laborers_jacket_move_allies' => self::laborersJacketMoveAllies($state, $actorRole, $move),
             'trash_relic_for_health' => self::trashRelicForHealth($state, $actorRole, $move),
+            'neighborly_assist' => self::neighborlyAssist($state, $actorRole, $move),
+            'move_to_new_location' => self::moveToNewLocation($state, $actorRole),
+            'skip_golem_card' => self::skipGolemCard($state, $actorRole),
             'end_wanderer_turn' => self::endWandererTurn($state, $actorRole),
             default => throw new InvalidMoveException('Unknown move type.'),
         };
@@ -294,7 +297,12 @@ final class GameEngine
             'tucked' => [],
         ]);
 
-        $state = $state->with(['board' => $board, 'locationHand' => $hand, 'relicDecks' => $relicDecks, 'infrastructurePool' => $pool]);
+        // Perplexing Glyph: "When the Emperor plays a Location,
+        // Wanderers may choose to immediately move there at no cost."
+        // Tracked here regardless of whether Perplexing is actually
+        // active — move_to_new_location checks the Glyph itself, same
+        // as every other Glyph-gated move.
+        $state = $state->with(['board' => $board, 'locationHand' => $hand, 'relicDecks' => $relicDecks, 'infrastructurePool' => $pool, 'locationJustBuiltCell' => $cell]);
 
         $events = [
             ['type' => 'location_played', 'role_key' => $actorRole, 'payload' => ['location_key' => $locationKey, 'cell' => $cell]],
@@ -3721,7 +3729,7 @@ final class GameEngine
         $actionsPerTurn = self::turnStartActions($state, $firstRole);
 
         $wanderers = $state->wanderers;
-        $wanderers[$firstRole] = [...$wanderers[$firstRole], 'actions_remaining' => $actionsPerTurn, 'move_blocked_this_turn' => false];
+        $wanderers[$firstRole] = [...$wanderers[$firstRole], 'actions_remaining' => $actionsPerTurn, 'move_blocked_this_turn' => false, 'pending_bonus_actions' => 0];
 
         $state = $state->with([
             'locationHand' => $hand,
@@ -4024,7 +4032,7 @@ final class GameEngine
             $actionsPerTurn = self::turnStartActions($state, $nextRole);
 
             $wanderers = $state->wanderers;
-            $wanderers[$nextRole] = [...$wanderers[$nextRole], 'actions_remaining' => $actionsPerTurn, 'move_blocked_this_turn' => false];
+            $wanderers[$nextRole] = [...$wanderers[$nextRole], 'actions_remaining' => $actionsPerTurn, 'move_blocked_this_turn' => false, 'pending_bonus_actions' => 0];
 
             $state = $state->with(['wanderers' => $wanderers, 'activeWandererIndex' => $nextIndex]);
 
@@ -4148,6 +4156,12 @@ final class GameEngine
             $actionsPerTurn++;
         }
 
+        // Paradoxical Glyph: whatever got banked in pending_bonus_actions
+        // since this Wanderer's last turn started (see resolveGolemPhase())
+        // is spent now — the caller is responsible for resetting it to 0
+        // alongside setting actions_remaining to this return value.
+        $actionsPerTurn += $state->wanderers[$role]['pending_bonus_actions'];
+
         return $actionsPerTurn;
     }
 
@@ -4222,6 +4236,7 @@ final class GameEngine
             'infrastructurePlacedThisTurn' => 0,
             'infrastructurePlacedThisTurnLog' => [],
             'wanderers' => $wanderers,
+            'parallelUsedThisRound' => false,
         ]);
         $events[] = ['type' => 'round_started', 'role_key' => null, 'payload' => ['round' => $nextRound]];
 
@@ -4315,7 +4330,34 @@ final class GameEngine
      */
     private static function resolveGolemPhase(GameState $state): array
     {
-        return self::golemPlayCards($state, $state->golemCardsThisRound());
+        $count = $state->golemCardsThisRound();
+
+        // Paradoxical Glyph: "After the Golem plays its first card of
+        // the Golem Phase, each Wanderer may 🦶1." This fires outside
+        // any Wanderer's actual turn, so it can't just add to
+        // actions_remaining (the next turn-start would overwrite it
+        // before anyone could spend it) — banked in
+        // pending_bonus_actions instead, and added on top of the
+        // fresh per-turn amount once that Wanderer's next turn
+        // starts (see turnStartActions()). Split off the first card
+        // specifically so this doesn't also fire for golemPlayCards()
+        // calls elsewhere (Cabalist brand, Reactive, etc.) that
+        // aren't the Golem Phase itself.
+        if (! in_array('paradoxical', $state->golem['glyphs'], true) || $count <= 0) {
+            return self::golemPlayCards($state, $count);
+        }
+
+        [$state, $events] = self::golemPlayCards($state, 1);
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, [
+                'pending_bonus_actions' => $state->wanderers[$role]['pending_bonus_actions'] + 1,
+            ])]);
+        }
+
+        [$state, $restEvents] = self::golemPlayCards($state, $count - 1);
+
+        return [$state, [...$events, ...$restEvents]];
     }
 
     /**
@@ -6362,6 +6404,151 @@ final class GameEngine
         }
 
         return [$state, $events];
+    }
+
+    /**
+     * Neighborly Glyph: "Any time a Wanderer loses Health, one of
+     * their Allies may move to their space and immediately use a
+     * free 🌿 Relic action from one of their own Relics." A genuine
+     * optional choice of whether to help, who to send, and which of
+     * their own Relics to spend — a new move type, same as
+     * Smoldering, rather than an auto-resolved reaction.
+     *
+     * Simplification: usable any time (not strictly windowed to
+     * "immediately after" an Ally's Health loss) — there's no clean
+     * seam yet for a reaction that must happen in the instant between
+     * one move and the next, same documented gap as Laborer's
+     * Jacket's "start of the Wanderer phase" timing elsewhere in this
+     * engine. Players self-police using it right after the fact.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function neighborlyAssist(GameState $state, string $actorRole, array $move): array
+    {
+        self::requireWandererWithCell($state, $actorRole);
+
+        if (! in_array('neighborly', $state->golem['glyphs'], true)) {
+            throw new InvalidMoveException('Neighborly is not active.');
+        }
+
+        $toRole = (string) ($move['to_role'] ?? '');
+        $ally = $state->wanderers[$toRole] ?? null;
+
+        if ($toRole === $actorRole || $ally === null || $ally['cell'] === null) {
+            throw new InvalidMoveException('That Ally is not on the board.');
+        }
+
+        $actorCell = $state->wanderers[$actorRole]['cell'];
+
+        if (! in_array(Board::key($ally['cell']), array_map(Board::key(...), Board::occupiedNeighbors($actorCell, $state->board)), true)) {
+            throw new InvalidMoveException('That Ally is not adjacent to you.');
+        }
+
+        $relicKey = (string) ($move['relic_key'] ?? '');
+        $relic = RelicCatalog::find($relicKey);
+
+        if ($relic === null || ! str_contains($relic->effect, '🌿') || ! in_array($relicKey, $state->wanderers[$actorRole]['equipped'], true)) {
+            throw new InvalidMoveException('That is not one of your own 🌿 Relics.');
+        }
+
+        if (self::catacombsBlocks($state, $actorRole, $ally['cell'])) {
+            throw new InvalidMoveException('Catacombs: only a Wanderer who has been exhausted before may enter.');
+        }
+
+        $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['cell' => $ally['cell']])]);
+        $events = [['type' => 'wanderer_moved', 'role_key' => $actorRole, 'payload' => ['to' => $ally['cell'], 'free' => true]]];
+
+        // Default the Relic's own target to the Ally being helped, not
+        // the helper — the whole point of coming to their rescue.
+        // Relics that heal everyone sharing the caster's space (e.g.
+        // Burial robes) ignore target_role anyway and heal both, now
+        // that they share a space.
+        $baseKey = (string) preg_replace('/-\d+$/', '', $relicKey);
+        [$state, $relicEvents, $trash] = self::resolveRelicAction($state, $actorRole, $baseKey, $relicKey, [...$move, 'target_role' => $toRole]);
+        $events = [...$events, ...$relicEvents];
+
+        if ($trash) {
+            $state = self::trashEquippedRelic($state, $actorRole, $relicKey);
+            $events[] = ['type' => 'relic_trashed', 'role_key' => $actorRole, 'payload' => ['relic_key' => $relicKey]];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Perplexing Glyph: "When the Emperor plays a Location, Wanderers
+     * may choose to immediately move there at no cost." Not gated to
+     * the mover's own turn — the opportunity arises during the
+     * Emperor's phase, before any Wanderer turn exists yet, so (like
+     * equip/drop) this is always available rather than tied to
+     * actions_remaining.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function moveToNewLocation(GameState $state, string $actorRole): array
+    {
+        self::requireWandererWithCell($state, $actorRole);
+
+        if (! in_array('perplexing', $state->golem['glyphs'], true)) {
+            throw new InvalidMoveException('Perplexing is not active.');
+        }
+
+        $target = $state->locationJustBuiltCell;
+
+        if ($target === null) {
+            throw new InvalidMoveException('No Location has been played yet.');
+        }
+
+        if (Board::key($state->wanderers[$actorRole]['cell']) === Board::key($target)) {
+            throw new InvalidMoveException('You are already there.');
+        }
+
+        if (self::catacombsBlocks($state, $actorRole, $target)) {
+            throw new InvalidMoveException('Catacombs: only a Wanderer who has been exhausted before may enter.');
+        }
+
+        $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['cell' => $target])]);
+
+        return [$state, [['type' => 'wanderer_moved', 'role_key' => $actorRole, 'payload' => ['to' => $target, 'free' => true]]]];
+    }
+
+    /**
+     * Parallel Glyph: "Once per round, Wanderers may choose to skip a
+     * drawn Golem card and draw the next card instead." The card
+     * about to resolve is whichever one is at the end of 'revealed'
+     * (resolution reads right-to-left, array_pop takes the last
+     * element) — discarding it unresolved and refilling from the draw
+     * pile is exactly "skip it, draw the next one instead." Shared
+     * across all Wanderers (not tracked per-Wanderer), free, no
+     * action cost.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function skipGolemCard(GameState $state, string $actorRole): array
+    {
+        self::requireWandererWithCell($state, $actorRole);
+
+        if (! in_array('parallel', $state->golem['glyphs'], true)) {
+            throw new InvalidMoveException('Parallel is not active.');
+        }
+
+        if ($state->parallelUsedThisRound) {
+            throw new InvalidMoveException('Parallel has already been used this round.');
+        }
+
+        $golem = $state->golem;
+
+        if ($golem['revealed'] === []) {
+            throw new InvalidMoveException('There is no Golem card to skip.');
+        }
+
+        $skipped = array_pop($golem['revealed']);
+        $golem['discard_pile'][] = $skipped['key'];
+        $state = $state->with(['golem' => $golem, 'parallelUsedThisRound' => true]);
+        $state = self::refillGolemRevealed($state);
+
+        return [$state, [['type' => 'golem_card_skipped', 'role_key' => $actorRole, 'payload' => ['card_key' => $skipped['key']]]]];
     }
 
     /**
