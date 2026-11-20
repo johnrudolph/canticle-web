@@ -126,6 +126,8 @@ final readonly class GameState
         public ?array $locationJustBuiltCell = null, // Perplexing Glyph — the cell of whichever Location the Emperor most recently played; overwritten every time a new one is played, never otherwise cleared (a Wanderer may use it at their leisure, not strictly "immediately")
         public bool $parallelUsedThisRound = false, // Parallel Glyph — "once per round," shared across all Wanderers (not per-Wanderer); cleared at the start of each new round
         public ?string $pendingInvigoration = null, // Invigoration's "you may lose 7 Health..." choice can't be supplied in the same move that triggered the search (the Wanderer doesn't know they found it yet) — this holds who must decide via a separate resolve_invigoration move before anything else happens
+        public ?string $pendingRiftInTime = null, // Rift in time's "choose a face-up Glyph to replace" choice — same can't-supply-it-in-the-same-move problem as Invigoration; resolved via resolve_rift_in_time
+        public ?string $pendingEpiphany = null, // Epiphany's "choose another Location to search as if you were there" choice — same problem again; resolved via resolve_epiphany
     ) {}
 
     /**
@@ -294,6 +296,8 @@ final readonly class GameState
             'prophecy' => $this->prophecy,
             'golem_skipped' => $this->golemSkipped,
             'pending_invigoration' => $this->pendingInvigoration,
+            'pending_rift_in_time' => $this->pendingRiftInTime,
+            'pending_epiphany' => $this->pendingEpiphany,
             'location_just_built_cell' => $this->locationJustBuiltCell,
             'parallel_used_this_round' => $this->parallelUsedThisRound,
             'outcome' => $this->phase === 'finished' ? $this->outcome() : null,

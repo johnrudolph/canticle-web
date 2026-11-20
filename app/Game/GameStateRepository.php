@@ -92,6 +92,8 @@ final class GameStateRepository
             locationJustBuiltCell: $data['location_just_built_cell'] ?? null,
             parallelUsedThisRound: $data['parallel_used_this_round'] ?? false,
             pendingInvigoration: $data['pending_invigoration'] ?? null,
+            pendingRiftInTime: $data['pending_rift_in_time'] ?? null,
+            pendingEpiphany: $data['pending_epiphany'] ?? null,
         );
     }
 
@@ -126,6 +128,8 @@ final class GameStateRepository
                 'location_just_built_cell' => $state->locationJustBuiltCell,
                 'parallel_used_this_round' => $state->parallelUsedThisRound,
                 'pending_invigoration' => $state->pendingInvigoration,
+                'pending_rift_in_time' => $state->pendingRiftInTime,
+                'pending_epiphany' => $state->pendingEpiphany,
             ],
         ]);
     }

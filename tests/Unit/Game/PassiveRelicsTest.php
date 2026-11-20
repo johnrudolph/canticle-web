@@ -728,7 +728,20 @@ test('Emperor\'s Timepiece does nothing with fewer than all 5 Emperor\'s Relics 
         ->and(collect($events)->pluck('type'))->not->toContain('emperor_timepiece_swap');
 });
 
-test('Rift in time discards a chosen face-up Glyph and replaces it with another of the same type', function () {
+test('finding Rift in time parks the choice on pendingRiftInTime instead of resolving immediately', function () {
+    $state = startedGame();
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['inverted']])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'resolveEventRelic');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state, 'wanderer_a', 'rift-in-time', []);
+
+    expect($state->pendingRiftInTime)->toBe('wanderer_a')
+        ->and($state->golem['glyphs'])->toBe(['inverted']) // unchanged — not yet resolved
+        ->and(collect($events)->pluck('type'))->toContain('rift_in_time_offered');
+});
+
+test('resolve_rift_in_time discards a chosen face-up Glyph and replaces it with another of the same type', function () {
     $state = startedGame();
     $glyphDeck = $state->glyphDeck;
     $chosen = $glyphDeck[0];
@@ -738,27 +751,39 @@ test('Rift in time discards a chosen face-up Glyph and replaces it with another 
     $state = $state->with([
         'golem' => $state->golemWith(['glyphs' => [$chosen]]),
         'glyphDeck' => array_values(array_slice($glyphDeck, 1)),
+        'pendingRiftInTime' => 'wanderer_a',
     ]);
 
-    $reflection = new ReflectionMethod(GameEngine::class, 'resolveEventRelic');
-    $reflection->setAccessible(true);
-    [$state, $events] = $reflection->invoke(null, $state, 'wanderer_a', 'rift-in-time', ['glyph_key' => $chosen]);
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_rift_in_time', 'glyph_key' => $chosen]);
 
-    expect($state->golem['glyphs'])->not->toContain($chosen)
+    expect($state->pendingRiftInTime)->toBeNull()
+        ->and($state->golem['glyphs'])->not->toContain($chosen)
         ->and($state->golem['glyphs'])->toHaveCount(1)
         ->and($state->glyphDiscardPile)->toContain($chosen)
         ->and(collect($events)->pluck('type'))->toContain('glyph_discarded', 'glyph_added');
 });
 
-test('Rift in time does nothing if there are no face-up Glyphs', function () {
+test('Rift in time does nothing immediately if there are no face-up Glyphs', function () {
     $state = startedGame();
     $state = $state->with(['golem' => $state->golemWith(['glyphs' => []])]);
 
     $reflection = new ReflectionMethod(GameEngine::class, 'resolveEventRelic');
     $reflection->setAccessible(true);
-    [$state, $events] = $reflection->invoke(null, $state, 'wanderer_a', 'rift-in-time', ['glyph_key' => 'nonexistent']);
+    [$state, $events] = $reflection->invoke(null, $state, 'wanderer_a', 'rift-in-time', []);
 
-    expect($events)->toBe([]);
+    expect($state->pendingRiftInTime)->toBeNull()
+        ->and($events)->toBe([]);
+});
+
+test('resolve_rift_in_time does nothing for a glyph_key that is not actually active', function () {
+    $state = startedGame();
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['inverted']]), 'pendingRiftInTime' => 'wanderer_a']);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_rift_in_time', 'glyph_key' => 'nonexistent']);
+
+    expect($state->pendingRiftInTime)->toBeNull()
+        ->and($state->golem['glyphs'])->toBe(['inverted'])
+        ->and($events)->toBe([]);
 });
 
 test('Prohibition of inscribing gives the actor who added a Glyph 1 Shame token, while equipped by anyone', function () {

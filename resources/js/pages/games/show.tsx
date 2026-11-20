@@ -2,6 +2,7 @@ import { Head, Link, router } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ActivityLog } from '@/components/game/activity-log';
+import { EpiphanyDialog } from '@/components/game/epiphany-dialog';
 import { EventRelicDialog } from '@/components/game/event-relic-dialog';
 import { GolemPanel } from '@/components/game/golem-panel';
 import { GolemTurnSpotlightDialog } from '@/components/game/golem-turn-spotlight-dialog';
@@ -10,6 +11,7 @@ import { InsightFromTheFutureDialog } from '@/components/game/insight-from-the-f
 import { InvigorationDialog } from '@/components/game/invigoration-dialog';
 import { LocationDetailDialog } from '@/components/game/location-detail-dialog';
 import { NewRelicDialog } from '@/components/game/new-relic-dialog';
+import { RiftInTimeDialog } from '@/components/game/rift-in-time-dialog';
 import { WandererRelicPanel } from '@/components/game/wanderer-relic-panel';
 import { WandererSummaryRow } from '@/components/game/wanderer-summary-row';
 import { Button } from '@/components/ui/button';
@@ -234,11 +236,15 @@ export default function GameShow({ game }: { game: GameSummary }) {
                 e.id > lastSeen &&
                 e.type === 'location_searched' &&
                 e.payload.trashed_as_event === true &&
-                // Invigoration doesn't resolve on the spot — it blocks on
-                // InvigorationDialog (driven by pending_invigoration)
-                // instead of the generic "found an Event, it resolved"
-                // notification, which would be false for it right now.
-                e.payload.found !== 'invigoration',
+                // Invigoration/Rift in time/Epiphany don't resolve on the
+                // spot — each blocks on its own dedicated dialog (driven
+                // by pending_invigoration/pending_rift_in_time/
+                // pending_epiphany) instead of the generic "found an
+                // Event, it resolved" notification, which would be false
+                // for all three right now.
+                e.payload.found !== 'invigoration' &&
+                e.payload.found !== 'rift-in-time' &&
+                e.payload.found !== 'epiphany',
         );
 
         if (found.length > 0) {
@@ -502,6 +508,23 @@ export default function GameShow({ game }: { game: GameSummary }) {
     }
 
     const locationCatalog = game.location_catalog;
+
+    const epiphanyCasterCell = state.pending_epiphany
+        ? state.wanderers[state.pending_epiphany]?.cell
+        : null;
+    const epiphanyCandidates = epiphanyCasterCell
+        ? Object.entries(state.board)
+              .filter(
+                  ([key, cellData]) =>
+                      key !== cellKey(epiphanyCasterCell) &&
+                      cellData.relics.length > 0,
+              )
+              .map(([key, cellData]) => ({
+                  cell: key.split(',').map(Number) as [number, number],
+                  cellKey: key,
+                  cellData,
+              }))
+        : [];
 
     let highlightedCells = new Set<string>();
     let onCellClick: ((cell: Cell) => void) | undefined;
@@ -1492,6 +1515,40 @@ export default function GameShow({ game }: { game: GameSummary }) {
                     submitMove(state.pending_invigoration, {
                         type: 'resolve_invigoration',
                         take,
+                    })
+                }
+            />
+
+            <RiftInTimeDialog
+                open={
+                    state.pending_rift_in_time !== null &&
+                    myRoles.includes(state.pending_rift_in_time)
+                }
+                activeGlyphs={state.golem.glyphs}
+                glyphCatalog={game.glyph_catalog}
+                processing={processing}
+                onChoose={(glyphKey) =>
+                    state.pending_rift_in_time &&
+                    submitMove(state.pending_rift_in_time, {
+                        type: 'resolve_rift_in_time',
+                        glyph_key: glyphKey,
+                    })
+                }
+            />
+
+            <EpiphanyDialog
+                open={
+                    state.pending_epiphany !== null &&
+                    myRoles.includes(state.pending_epiphany)
+                }
+                candidates={epiphanyCandidates}
+                locationCatalog={locationCatalog}
+                processing={processing}
+                onChoose={(cell) =>
+                    state.pending_epiphany &&
+                    submitMove(state.pending_epiphany, {
+                        type: 'resolve_epiphany',
+                        cell,
                     })
                 }
             />

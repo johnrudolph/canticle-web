@@ -75,6 +75,24 @@ test('a Wanderer cannot end their turn with an Invigoration choice still pending
         ->toThrow(InvalidMoveException::class, 'You must decide on Invigoration before ending your turn.');
 });
 
+test('a Wanderer cannot end their turn with a Rift in time choice still pending', function () {
+    $state = startedGame();
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+    $state = $state->with(['pendingRiftInTime' => 'wanderer_a']);
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'end_wanderer_turn']))
+        ->toThrow(InvalidMoveException::class, 'You must decide on Rift in time before ending your turn.');
+});
+
+test('a Wanderer cannot end their turn with an Epiphany choice still pending', function () {
+    $state = startedGame();
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+    $state = $state->with(['pendingEpiphany' => 'wanderer_a']);
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'end_wanderer_turn']))
+        ->toThrow(InvalidMoveException::class, 'You must decide on Epiphany before ending your turn.');
+});
+
 test('Bazaar lets a Wanderer tuck a Relic for free (no action cost) and heals 1', function () {
     $state = startedGame();
     $board = $state->board;

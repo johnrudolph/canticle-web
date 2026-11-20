@@ -110,23 +110,34 @@ test('Time spasm never moves the round below 1', function () {
     expect($state->round)->toBe(1);
 });
 
-test('Epiphany pulls a random face-down Relic from a chosen different Location', function () {
+test('finding Epiphany parks the choice on pendingEpiphany instead of resolving immediately', function () {
+    $state = startedGame();
+
+    [$state, $events] = resolveEventRelicForTest($state, 'wanderer_a', 'epiphany');
+
+    expect($state->pendingEpiphany)->toBe('wanderer_a')
+        ->and(collect($events)->pluck('type'))->toContain('epiphany_offered');
+});
+
+test('resolve_epiphany pulls a random face-down Relic from a chosen different Location', function () {
     $state = startedGame();
     $board = $state->board;
     $board['0,0'] = [...$board['0,0'], 'relics' => ['burial-robes']];
-    $state = $state->with(['board' => $board]);
+    $state = $state->with(['board' => $board, 'pendingEpiphany' => 'wanderer_a']);
 
-    [$state, $events] = resolveEventRelicForTest($state, 'wanderer_a', 'epiphany', ['cell' => [0, 0]]);
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_epiphany', 'cell' => [0, 0]]);
 
-    expect($state->wanderers['wanderer_a']['holding'])->toContain('burial-robes')
+    expect($state->pendingEpiphany)->toBeNull()
+        ->and($state->wanderers['wanderer_a']['holding'])->toContain('burial-robes')
         ->and($state->board['0,0']['relics'])->toBe([])
         ->and(collect($events)->pluck('type'))->toContain('location_searched');
 });
 
-test('Epiphany does nothing targeting the caster\'s own space', function () {
+test('resolve_epiphany does nothing targeting the caster\'s own space', function () {
     $state = startedGame();
+    $state = $state->with(['pendingEpiphany' => 'wanderer_a']);
 
-    [$state] = resolveEventRelicForTest($state, 'wanderer_a', 'epiphany', ['cell' => [1, 0]]);
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_epiphany', 'cell' => [1, 0]]);
 
     expect($state->wanderers['wanderer_a']['holding'])->toBe([]);
 });

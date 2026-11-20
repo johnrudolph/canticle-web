@@ -39,6 +39,10 @@ export function describe(
             return `${role} found Invigoration — deciding whether to take it.`;
         case 'invigoration_declined':
             return `${role} declines Invigoration.`;
+        case 'rift_in_time_offered':
+            return `${role} found Rift in time — choosing a Glyph to replace.`;
+        case 'epiphany_offered':
+            return `${role} found Epiphany — choosing a Location to search.`;
         case 'emperor_hand_mulliganed': {
             const count = event.payload.count as number;
             return `${role}'s hand had no playable Location — redrew ${count} time${count === 1 ? '' : 's'} until one turned up.`;

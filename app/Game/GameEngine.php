@@ -64,6 +64,8 @@ final class GameEngine
             'move_to_new_location' => self::moveToNewLocation($state, $actorRole),
             'skip_golem_card' => self::skipGolemCard($state, $actorRole),
             'resolve_invigoration' => self::resolveInvigoration($state, $actorRole, $move),
+            'resolve_rift_in_time' => self::resolveRiftInTime($state, $actorRole, $move),
+            'resolve_epiphany' => self::resolveEpiphany($state, $actorRole, $move),
             'end_wanderer_turn' => self::endWandererTurn($state, $actorRole),
             default => throw new InvalidMoveException('Unknown move type.'),
         };
@@ -1385,15 +1387,16 @@ final class GameEngine
      * subset have real, executed behavior; everything else is logged
      * (via location_searched's trashed_as_event flag) but not applied,
      * same honesty pattern as every other unimplemented Relic/Golem
-     * card. $move carries any extra choice a specific Event needs
-     * (e.g. Epiphany's target cell) — empty when resolved via a bonus
-     * search from another Relic's effect rather than the top-level
-     * search_location move. Invigoration is the one exception to
-     * "resolve immediately": its choice genuinely can't be supplied in
-     * $move (the Wanderer doesn't know they found it until this move
-     * already returns), so it parks itself on `pendingInvigoration`
-     * instead of resolving here — see offerInvigoration()/
-     * resolveInvigoration().
+     * card. $move carries any extra choice a specific Event needs —
+     * empty when resolved via a bonus search from another Relic's
+     * effect rather than the top-level search_location move, which is
+     * exactly why Invigoration/Rift in time/Epiphany are each a real
+     * exception to "resolve immediately": their choice genuinely can't
+     * be supplied in $move (the Wanderer doesn't know they found the
+     * Relic until this move already returns), so each parks itself on
+     * its own pendingXxx field instead of resolving here — see
+     * offerInvigoration()/offerRiftInTime()/offerEpiphany() and their
+     * matching resolveXxx() methods.
      *
      * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
@@ -1408,12 +1411,12 @@ final class GameEngine
             'buoyant-spirit' => self::relicActionDelta($state, $actorRole, 2),
             'lost-in-thought' => self::relicActionDelta($state, $actorRole, -1),
             'time-spasm' => self::relicTimeSpasm($state),
-            'epiphany' => self::relicEpiphany($state, $actorRole, $move),
+            'epiphany' => self::offerEpiphany($state, $actorRole),
             'golem-avarice' => self::relicGolemAvarice($state, $actorRole),
             'magic-explosion' => self::relicMagicExplosion($state, $actorRole),
             'a-rush-of-companionship' => self::relicRushOfCompanionship($state),
             'invigoration' => self::offerInvigoration($state, $actorRole),
-            'rift-in-time' => self::relicRiftInTime($state, $actorRole, $move),
+            'rift-in-time' => self::offerRiftInTime($state, $actorRole),
             default => [$state, []],
         };
     }
@@ -1421,15 +1424,40 @@ final class GameEngine
     /**
      * Rift in time: "Choose a face-up Golem Glyph (if there are any),
      * discard it, and replace it with another Glyph of the same type."
+     * Same can't-supply-the-choice-in-the-same-move problem as
+     * Invigoration/Epiphany — parks the choice on pendingRiftInTime for
+     * resolve_rift_in_time instead of resolving here. "If there are
+     * any" — a genuinely empty Glyph row is a no-op right away, nothing
+     * to offer a choice between.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function offerRiftInTime(GameState $state, string $actorRole): array
+    {
+        if ($state->golem['glyphs'] === []) {
+            return [$state, []];
+        }
+
+        $state = $state->with(['pendingRiftInTime' => $actorRole]);
+
+        return [$state, [['type' => 'rift_in_time_offered', 'role_key' => $actorRole, 'payload' => []]]];
+    }
+
+    /**
      * $move['glyph_key'] picks which currently-active Glyph; a missing
-     * key, one not actually active, or an empty active row is a no-op
-     * ("if there are any").
+     * key or one not actually active is a no-op.
      *
      * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
-    private static function relicRiftInTime(GameState $state, string $actorRole, array $move): array
+    private static function resolveRiftInTime(GameState $state, string $actorRole, array $move): array
     {
+        if ($state->pendingRiftInTime !== $actorRole) {
+            throw new InvalidMoveException('There is no Rift in time choice pending for you.');
+        }
+
+        $state = $state->with(['pendingRiftInTime' => null]);
+
         $glyphKey = (string) ($move['glyph_key'] ?? '');
         $glyphs = $state->golem['glyphs'];
         $index = array_search($glyphKey, $glyphs, true);
@@ -1502,14 +1530,36 @@ final class GameEngine
 
     /**
      * Epiphany: "Gain a face-down Relic on a different Location you
-     * choose." $move['cell'] picks which built, non-empty, non-caster
-     * Location to pull a random face-down Relic from.
+     * choose." Same can't-supply-the-choice-in-the-same-move problem
+     * as Invigoration/Rift in time (the Wanderer doesn't know they
+     * found this until the search_location move already returned) —
+     * parks the choice on pendingEpiphany for resolve_epiphany instead
+     * of resolving here.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function offerEpiphany(GameState $state, string $actorRole): array
+    {
+        $state = $state->with(['pendingEpiphany' => $actorRole]);
+
+        return [$state, [['type' => 'epiphany_offered', 'role_key' => $actorRole, 'payload' => []]]];
+    }
+
+    /**
+     * $move['cell'] picks which built, non-empty, non-caster Location
+     * to pull a random face-down Relic from.
      *
      * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
-    private static function relicEpiphany(GameState $state, string $actorRole, array $move): array
+    private static function resolveEpiphany(GameState $state, string $actorRole, array $move): array
     {
+        if ($state->pendingEpiphany !== $actorRole) {
+            throw new InvalidMoveException('There is no Epiphany choice pending for you.');
+        }
+
+        $state = $state->with(['pendingEpiphany' => null]);
+
         $targetCell = $move['cell'] ?? null;
 
         if (! is_array($targetCell) || count($targetCell) !== 2) {
@@ -4110,6 +4160,14 @@ final class GameEngine
 
         if ($state->pendingInvigoration === $actorRole) {
             throw new InvalidMoveException('You must decide on Invigoration before ending your turn.');
+        }
+
+        if ($state->pendingRiftInTime === $actorRole) {
+            throw new InvalidMoveException('You must decide on Rift in time before ending your turn.');
+        }
+
+        if ($state->pendingEpiphany === $actorRole) {
+            throw new InvalidMoveException('You must decide on Epiphany before ending your turn.');
         }
 
         $events = [];
