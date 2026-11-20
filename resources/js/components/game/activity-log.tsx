@@ -103,8 +103,21 @@ export function describe(
             return `Golem log's progress is lost — its tucked cards return to the Golem's discard pile.`;
         case 'wanderer_healed':
             return `${role} heals to ${event.payload.hp} Health.`;
-        case 'wanderer_damaged':
-            return `${role} loses ${event.payload.amount} Health.`;
+        case 'wanderer_damaged': {
+            const amount = event.payload.amount as number;
+            const rawAmount = event.payload.raw_amount as number | undefined;
+            const modifiers = event.payload.modifiers as string[] | undefined;
+
+            if (
+                rawAmount === undefined ||
+                modifiers === undefined ||
+                modifiers.length === 0
+            ) {
+                return `${role} loses ${amount} Health.`;
+            }
+
+            return `${role} loses ${amount} Health (${rawAmount} base, modified by ${modifiers.join(', ')}).`;
+        }
         case 'wanderer_hp_set':
             return `${role}'s Health is set to ${event.payload.hp}.`;
         case 'cabalist_wraps_triggered':

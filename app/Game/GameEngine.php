@@ -3057,7 +3057,6 @@ final class GameEngine
 
             [$state, $damageEvents] = self::applyDamage($state, $role, 10);
             $events = [...$events, ...$damageEvents];
-            $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => 10]];
         }
 
         foreach ($darkKeys as $darkKey) {
@@ -3979,7 +3978,6 @@ final class GameEngine
         if ($state->board[$toKey]['location_key'] === 'beds-of-poison') {
             [$state, $damageEvents] = self::applyDamage($state, $actorRole, 5);
             $events = [...$events, ...$damageEvents];
-            $events[] = ['type' => 'wanderer_damaged', 'role_key' => $actorRole, 'payload' => ['amount' => 5]];
         }
 
         // Guide rope: "When moving from a space with other Wanderers, you
@@ -4011,7 +4009,6 @@ final class GameEngine
                 if ($state->board[$toKey]['location_key'] === 'beds-of-poison') {
                     [$state, $damageEvents] = self::applyDamage($state, $otherRole, 5);
                     $events = [...$events, ...$damageEvents];
-                    $events[] = ['type' => 'wanderer_damaged', 'role_key' => $otherRole, 'payload' => ['amount' => 5]];
                 }
             }
         }
@@ -4818,7 +4815,7 @@ final class GameEngine
 
                     if ($shame > 0) {
                         [$state, $damageEvents] = self::applyDamage($state, $target, 3 * $shame, true);
-                        $events = [...$events, ...self::withDamagedEvent($damageEvents, $target, 3 * $shame)];
+                        $events = [...$events, ...$damageEvents];
                     }
                 }
                 break;
@@ -4832,7 +4829,7 @@ final class GameEngine
                     }
 
                     [$state, $damageEvents] = self::applyDamage($state, $role, 2 * $shame, true);
-                    $events = [...$events, ...self::withDamagedEvent($damageEvents, $role, 2 * $shame)];
+                    $events = [...$events, ...$damageEvents];
                 }
                 break;
 
@@ -5218,7 +5215,7 @@ final class GameEngine
 
             $hpBefore = $state->wanderers[$role]['hp'];
             [$state, $damageEvents] = self::applyDamage($state, $role, 3, true);
-            $events = [...$events, ...self::withDamagedEvent($damageEvents, $role, 3)];
+            $events = [...$events, ...$damageEvents];
 
             // "Each Wanderer who lost Health as a result" — checked
             // against actual HP lost, not just hpBefore > 0, since Dark
@@ -5250,7 +5247,7 @@ final class GameEngine
 
             $hpBefore = $state->wanderers[$role]['hp'];
             [$state, $damageEvents] = self::applyDamage($state, $role, 5, true);
-            $events = [...$events, ...self::withDamagedEvent($damageEvents, $role, 5)];
+            $events = [...$events, ...$damageEvents];
 
             // "Give a Scar token to all Wanderers who lost Health" —
             // checked against actual HP lost, not just hpBefore > 0, since
@@ -5290,7 +5287,7 @@ final class GameEngine
             }
 
             [$state, $damageEvents] = self::applyDamage($state, $role, $count, true);
-            $events = [...$events, ...self::withDamagedEvent($damageEvents, $role, $count)];
+            $events = [...$events, ...$damageEvents];
         }
 
         return [$state, $events];
@@ -5322,7 +5319,7 @@ final class GameEngine
                 }
 
                 [$state, $damageEvents] = self::applyDamage($state, $role, 2, true);
-                $events = [...$events, ...self::withDamagedEvent($damageEvents, $role, 2)];
+                $events = [...$events, ...$damageEvents];
             }
         }
 
@@ -5365,7 +5362,7 @@ final class GameEngine
             }
 
             [$state, $damageEvents] = self::applyDamage($state, $role, 3, true);
-            $events = [...$events, ...self::withDamagedEvent($damageEvents, $role, 3)];
+            $events = [...$events, ...$damageEvents];
             $affectedRoles[] = $role;
         }
 
@@ -5589,11 +5586,11 @@ final class GameEngine
         }
 
         [$state, $damageEvents] = self::applyDamage($state, $target, 5, true);
-        $events = [...$events, ...self::withDamagedEvent($damageEvents, $target, 5)];
+        $events = [...$events, ...$damageEvents];
 
         foreach ($allies as $role) {
             [$state, $damageEvents] = self::applyDamage($state, $role, 5, true);
-            $events = [...$events, ...self::withDamagedEvent($damageEvents, $role, 5)];
+            $events = [...$events, ...$damageEvents];
         }
 
         return [$state, $events];
@@ -5638,7 +5635,7 @@ final class GameEngine
 
         foreach (self::activeWanderers($state) as $role => $cell) {
             [$state, $damageEvents] = self::applyDamage($state, $role, $damage, true);
-            $events = [...$events, ...self::withDamagedEvent($damageEvents, $role, $damage)];
+            $events = [...$events, ...$damageEvents];
         }
 
         return [$state, $events];
@@ -5665,7 +5662,7 @@ final class GameEngine
 
             foreach ($roles as $role) {
                 [$state, $damageEvents] = self::applyDamage($state, $role, $damage, true);
-                $events = [...$events, ...self::withDamagedEvent($damageEvents, $role, $damage)];
+                $events = [...$events, ...$damageEvents];
             }
         }
 
@@ -5719,33 +5716,10 @@ final class GameEngine
             }
 
             [$state, $damageEvents] = self::applyDamage($state, $role, $damage, $isGolemAttack);
-            $events = [...$events, ...self::withDamagedEvent($damageEvents, $role, $damage)];
+            $events = [...$events, ...$damageEvents];
         }
 
         return [$state, $events];
-    }
-
-    /**
-     * Appends the caller's own "wanderer_damaged" log line after a call
-     * to applyDamage() — unless applyDamage() already reported a
-     * contradicting outcome for this Wanderer (currently: Inverted
-     * Glyph turning the attack into a heal), in which case the heal
-     * event it already returned describes what actually happened, and
-     * logging "lost N Health" right after it would be a flat
-     * contradiction.
-     *
-     * @param  list<array{type: string, role_key: ?string, payload: array<string, mixed>}>  $damageEvents
-     * @return list<array{type: string, role_key: ?string, payload: array<string, mixed>}>
-     */
-    private static function withDamagedEvent(array $damageEvents, string $role, int $damage): array
-    {
-        foreach ($damageEvents as $event) {
-            if ($event['type'] === 'wanderer_healed' && $event['role_key'] === $role) {
-                return $damageEvents;
-            }
-        }
-
-        return [...$damageEvents, ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => $damage]]];
     }
 
     /**
@@ -5755,9 +5729,13 @@ final class GameEngine
      * 2" save. $isGolemAttack additionally triggers every passive
      * Relic keyed off "when/after the Golem 👊 you" specifically (not
      * damage from any other source, like a Wanderer's own Relic).
-     * Returns any extra events those passive Relics caused, to merge
-     * into the caller's own event list alongside its own
-     * 'wanderer_damaged' event.
+     * Emits its own 'wanderer_damaged' event using the actual Health
+     * lost (not the raw $damage parameter — see the comment at its
+     * construction below) unless the attack turned into a heal instead
+     * (Inverted Glyph) or was fully absorbed before any Health math
+     * happens (Cabalist's Gown). Callers merge the returned events
+     * directly; they should not construct their own 'wanderer_damaged'
+     * event for this call.
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
@@ -5794,6 +5772,8 @@ final class GameEngine
         }
 
         $events = [];
+        $rawDamage = $damage;
+        $modifiers = [];
 
         // Golem insight: "Once per round, when the Golem attacks you,
         // you may 🦶1 before the attack." Always taken — healing before
@@ -5852,6 +5832,7 @@ final class GameEngine
                 $holderHp = max(0, $state->wanderers[$otherRole]['hp'] - $sacrificed);
                 $state = $state->with(['wanderers' => $state->wanderersWith($otherRole, ['hp' => $holderHp])]);
                 $events[] = ['type' => 'wanderer_damaged', 'role_key' => $otherRole, 'payload' => ['amount' => $sacrificed]];
+                $modifiers[] = "Divine sack cloth of sacrifice (-{$sacrificed}, redirected)";
 
                 if ($holderHp === 0) {
                     $state = $state->with(['wanderers' => $state->wanderersWith($otherRole, ['was_ever_exhausted' => true])]);
@@ -5861,10 +5842,23 @@ final class GameEngine
             break;
         }
 
-        $darkCount = count(array_filter(
-            $equipped,
-            fn (mixed $key) => is_string($key) && str_starts_with((string) RelicCatalog::find($key)?->name, 'Dark')
-        ));
+        // Dark sacrifice: "For each Relic you have equipped with 'Dark
+        // ...' in its name, reduce incoming damage by 1." The ability
+        // belongs to Dark sacrifice itself — merely having OTHER Dark
+        // Relics equipped (Dark chains/limitations/sigil) without Dark
+        // sacrifice grants no reduction, same bug shape as Emperor's
+        // Knowledge applying its bonus without Emperor's Knowledge
+        // itself equipped.
+        $darkCount = 0;
+        if (in_array('dark-sacrifice', $equipped, true)) {
+            $darkCount = count(array_filter(
+                $equipped,
+                fn (mixed $key) => is_string($key) && str_starts_with((string) RelicCatalog::find($key)?->name, 'Dark')
+            ));
+        }
+        if ($darkCount > 0) {
+            $modifiers[] = "Dark sacrifice (-{$darkCount})";
+        }
         $damage = max(0, $damage - $darkCount);
 
         // Combat Glyphs — all five only ever modify a Golem attack's
@@ -5875,17 +5869,23 @@ final class GameEngine
             // Cruel: "+1 for all 👊."
             if (in_array('cruel', $golemGlyphs, true)) {
                 $damage += 1;
+                $modifiers[] = 'Cruel (+1)';
             }
 
             // Legalistic: "+1👊 for each Shame the Wanderer has" — the
             // Wanderer being hit, not the Golem's own Shame.
             if (in_array('legalistic', $golemGlyphs, true)) {
-                $damage += self::countStatusTokens($equipped, 'shame_token');
+                $legalisticBonus = self::countStatusTokens($equipped, 'shame_token');
+                $damage += $legalisticBonus;
+                if ($legalisticBonus > 0) {
+                    $modifiers[] = "Legalistic (+{$legalisticBonus})";
+                }
             }
 
             // Merciful: "-1👊."
             if (in_array('merciful', $golemGlyphs, true)) {
                 $damage = max(0, $damage - 1);
+                $modifiers[] = 'Merciful (-1)';
             }
 
             // Enchanted: "-2👊 if the Golem is on a space with a
@@ -5895,6 +5895,7 @@ final class GameEngine
             if (in_array('enchanted', $golemGlyphs, true) && $golemCell !== null
                 && in_array('monolith_shard', $state->board[Board::key($golemCell)]['infrastructure'], true)) {
                 $damage = max(0, $damage - 2);
+                $modifiers[] = 'Enchanted (-2)';
             }
 
             // Outnumbered: "-3👊 when attacking Wanderers who are in a
@@ -5903,6 +5904,7 @@ final class GameEngine
                 foreach (self::activeWanderers($state) as $otherRole => $otherCell) {
                     if ($otherRole !== $role && Board::key($otherCell) === Board::key($cell)) {
                         $damage = max(0, $damage - 3);
+                        $modifiers[] = 'Outnumbered (-3)';
                         break;
                     }
                 }
@@ -5911,8 +5913,9 @@ final class GameEngine
 
         // Poison Charm: the Golem's current attack card is -3, for
         // everyone it hits.
-        if ($isGolemAttack) {
+        if ($isGolemAttack && $state->golem['active_attack_reduction'] > 0) {
             $damage = max(0, $damage - $state->golem['active_attack_reduction']);
+            $modifiers[] = "Poison Charm (-{$state->golem['active_attack_reduction']})";
         }
 
         $hpBefore = $state->wanderers[$role]['hp'];
@@ -5928,8 +5931,26 @@ final class GameEngine
             $events = [...$events, ...$shameEvents];
         }
 
+        // The actual Health lost, not the raw $damage parameter — every
+        // caller used to log the raw figure regardless of any reduction
+        // applied above, so e.g. a hit reduced from 2 to 1 by Dark
+        // sacrifice was reported in the activity log/Golem Turn
+        // Spotlight as "lost 2 Health" even though the real loss was 1.
+        // Built once here (instead of each of applyDamage()'s ~15
+        // callers re-deriving it) and inserted as the first event of
+        // whichever branch runs below, so it stays ahead of any
+        // follow-up event that branch adds (e.g. Miraculous's heal).
+        $finalHp = ($hp <= 0 && $hpBefore > 0 && in_array('cabalist-wraps', $equipped, true)) ? 1 : $hp;
+        $damagePayload = ['amount' => $hpBefore - $finalHp];
+        if ($modifiers !== []) {
+            $damagePayload['raw_amount'] = $rawDamage;
+            $damagePayload['modifiers'] = $modifiers;
+        }
+        $damagedEvent = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => $damagePayload];
+
         if ($hp <= 0 && $hpBefore > 0 && in_array('cabalist-wraps', $equipped, true)) {
             $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => 1])]);
+            $events[] = $damagedEvent;
             $events[] = ['type' => 'cabalist_wraps_triggered', 'role_key' => $role, 'payload' => []];
 
             $cell = $state->wanderers[$role]['cell'];
@@ -5951,6 +5972,7 @@ final class GameEngine
             $events = [...$events, ...$tapEvents];
         } else {
             $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
+            $events[] = $damagedEvent;
 
             // Catacombs: "A Wanderer can only enter this space if they
             // were exhausted earlier in the game." Cabalist wraps
@@ -6880,7 +6902,6 @@ final class GameEngine
         if ($destinationLocationKey === 'beds-of-poison') {
             [$state, $damageEvents] = self::applyDamage($state, $actorRole, 5);
             $events = [...$events, ...$damageEvents];
-            $events[] = ['type' => 'wanderer_damaged', 'role_key' => $actorRole, 'payload' => ['amount' => 5]];
         }
 
         if (self::hasMonolithShardFor($state, $actorRole, $toCell) && in_array('rejuvenation-gown', $wanderer['equipped'], true)) {
@@ -6964,7 +6985,6 @@ final class GameEngine
             if ($state->board[$toKey]['location_key'] === 'beds-of-poison') {
                 [$state, $damageEvents] = self::applyDamage($state, $role, 5);
                 $events = [...$events, ...$damageEvents];
-                $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => 5]];
             }
         }
 

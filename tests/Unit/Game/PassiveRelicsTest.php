@@ -18,11 +18,40 @@ test('Dark sacrifice reduces incoming damage by 1 per equipped Dark Relic', func
 
     $reflection = new ReflectionMethod(GameEngine::class, 'applyDamage');
     $reflection->setAccessible(true);
-    [$state] = $reflection->invoke(null, $state, 'wanderer_a', 5);
+    [$state, $events] = $reflection->invoke(null, $state, 'wanderer_a', 5);
 
     // 2 Dark Relics equipped (dark-chains + dark-sacrifice itself counts
     // too, it's an equipped "Dark ..." Relic the same as any other) => -2.
     expect($state->wanderers['wanderer_a']['hp'])->toBe(12);
+
+    $damaged = collect($events)->firstWhere('type', 'wanderer_damaged');
+    expect($damaged['payload']['amount'])->toBe(3) // 5 - 2, the ACTUAL loss
+        ->and($damaged['payload']['raw_amount'])->toBe(5)
+        ->and($damaged['payload']['modifiers'])->toBe(['Dark sacrifice (-2)']);
+});
+
+test('Dark sacrifice\'s reduction requires Dark sacrifice itself equipped, not just any other Dark Relic', function () {
+    // The ability belongs to the Dark sacrifice card specifically —
+    // merely having a DIFFERENT Dark Relic equipped (here, Dark chains
+    // alone, no Dark sacrifice) grants no reduction. Same bug shape as
+    // Emperor's Knowledge applying its bonus without the card itself
+    // equipped.
+    $state = startedGame();
+    $equipped = [
+        'body' => 'dark-chains', 'mind' => null,
+        'hand_left' => null, 'hand_right' => null, 'bag' => null,
+    ];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyDamage');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state, 'wanderer_a', 5);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(10); // full 5, no reduction
+
+    $damaged = collect($events)->firstWhere('type', 'wanderer_damaged');
+    expect($damaged['payload']['amount'])->toBe(5)
+        ->and($damaged['payload'])->not->toHaveKey('modifiers');
 });
 
 test('Cabalist wraps saves its holder from exhaustion, damages nearby Allies, and taps the Golem', function () {
@@ -39,6 +68,14 @@ test('Cabalist wraps saves its holder from exhaustion, damages nearby Allies, an
     expect($state->wanderers['wanderer_a']['hp'])->toBe(1)
         ->and($state->wanderers['wanderer_b']['hp'])->toBe(5) // Ally sharing the hub cell, -5
         ->and(collect($events)->pluck('type'))->toContain('cabalist_wraps_triggered');
+
+    // Cabalist wraps caps the real loss at hpBefore-1 (3 -> 1, a loss of
+    // 2), not the raw 10 damage the card dealt — the logged event must
+    // say what actually happened, not the attack's raw number.
+    $damaged = collect($events)->firstWhere(
+        fn ($e) => $e['type'] === 'wanderer_damaged' && $e['role_key'] === 'wanderer_a',
+    );
+    expect($damaged['payload']['amount'])->toBe(2);
 });
 
 test('Cabalist wraps does not trigger if the Wanderer survives above 0', function () {
