@@ -94,6 +94,7 @@ final class GameStateRepository
             pendingInvigoration: $data['pending_invigoration'] ?? null,
             pendingRiftInTime: $data['pending_rift_in_time'] ?? null,
             pendingEpiphany: $data['pending_epiphany'] ?? null,
+            pendingGolemLog: $data['pending_golem_log'] ?? null,
         );
     }
 
@@ -130,6 +131,7 @@ final class GameStateRepository
                 'pending_invigoration' => $state->pendingInvigoration,
                 'pending_rift_in_time' => $state->pendingRiftInTime,
                 'pending_epiphany' => $state->pendingEpiphany,
+                'pending_golem_log' => $state->pendingGolemLog,
             ],
         ]);
     }

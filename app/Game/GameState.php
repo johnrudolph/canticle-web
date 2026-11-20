@@ -128,6 +128,7 @@ final readonly class GameState
         public ?string $pendingInvigoration = null, // Invigoration's "you may lose 7 Health..." choice can't be supplied in the same move that triggered the search (the Wanderer doesn't know they found it yet) — this holds who must decide via a separate resolve_invigoration move before anything else happens
         public ?string $pendingRiftInTime = null, // Rift in time's "choose a face-up Glyph to replace" choice — same can't-supply-it-in-the-same-move problem as Invigoration; resolved via resolve_rift_in_time
         public ?string $pendingEpiphany = null, // Epiphany's "choose another Location to search as if you were there" choice — same problem again; resolved via resolve_epiphany
+        public ?string $pendingGolemLog = null, // Golem log's "look at the top 3 cards, then tuck one" choice — same problem again; resolved via resolve_golem_log
     ) {}
 
     /**
@@ -298,6 +299,7 @@ final readonly class GameState
             'pending_invigoration' => $this->pendingInvigoration,
             'pending_rift_in_time' => $this->pendingRiftInTime,
             'pending_epiphany' => $this->pendingEpiphany,
+            'pending_golem_log' => $this->pendingGolemLog,
             'location_just_built_cell' => $this->locationJustBuiltCell,
             'parallel_used_this_round' => $this->parallelUsedThisRound,
             'outcome' => $this->phase === 'finished' ? $this->outcome() : null,

@@ -45,6 +45,23 @@ function baseRelicKey(key: string): string {
     return key.replace(/-\d+$/, '');
 }
 
+/** Relics whose "Use" needs more input than the generic submit supplies, routed through onUsePrompted instead of firing use_relic directly. */
+const PROMPTED_RELICS = new Set([
+    'holy-water',
+    'quantum-robes',
+    'teleportation-stone',
+    'hands-of-deliverance',
+    'warlocks-robes',
+    'magistrates-robes',
+    'divine-cabalist-pyre',
+    'show-solidarity',
+    'cabalist-brew',
+    'golem-log',
+    'merchants-gloves',
+    'artists-insight',
+    'golem-prod',
+]);
+
 const TUCK_LABELS: Record<'bazaar' | 'cathedral', string> = {
     bazaar: 'Tuck (Bazaar, 🌿1)',
     cathedral: 'Tuck (Cathedral)',
@@ -130,11 +147,11 @@ export function WandererRelicPanel({
     isActive = false,
     allies,
     tuckLocationKey = null,
-    perplexingTargetLabel = null,
-    parallelAvailable = false,
+    freeActions = [],
     relicUnusableReasons = {},
     onUseInsightFromTheFuture,
     onUseCabalistBrand,
+    onUsePrompted,
 }: {
     role: 'wanderer_a' | 'wanderer_b' | 'wanderer_c';
     wanderer: WandererState;
@@ -155,17 +172,14 @@ export function WandererRelicPanel({
      */
     tuckLocationKey?: 'bazaar' | 'cathedral' | null;
     /**
-     * Set to the just-built Location's name when the Perplexing Glyph is
-     * active and one has been played this game — lets this Wanderer
-     * move there for free, any time, regardless of actions remaining.
+     * Stand-alone free actions not tied to any particular equipped
+     * Relic slot — Perplexing's move-to-new-Location, Parallel's
+     * skip-next-card, Purification pools' cleanse, Smoldering's trash-
+     * for-health, Neighborly's assist, Magnetic mail/Telekinesis/
+     * Laborer's Jacket's movement — whatever's currently available,
+     * computed by the caller from board/Glyph/equipped state.
      */
-    perplexingTargetLabel?: string | null;
-    /**
-     * Set when the Parallel Glyph is active and hasn't been used yet
-     * this round — lets this Wanderer skip the next Golem card about to
-     * resolve, drawing a replacement instead, for free.
-     */
-    parallelAvailable?: boolean;
+    freeActions?: { label: string; onClick: () => void }[];
     /** Per equip-slot: why that Relic can't be used right now, or null if it can. Only the slots whose condition is checkable without a target are present. */
     relicUnusableReasons?: Record<string, string | null>;
     /**
@@ -182,6 +196,16 @@ export function WandererRelicPanel({
      * can't supply it directly, routes here instead.
      */
     onUseCabalistBrand?: (relicKey: string) => void;
+    /**
+     * Catch-all for every other Relic whose "Use" (self or "Use on
+     * {ally}") needs more input than the generic submit can supply —
+     * Quantum robes, Teleportation stone, Hands of deliverance,
+     * Warlock's robes, Magistrate's robes, Divine Cabalist pyre, Show
+     * solidarity, Cabalist brew, Golem log, Merchant's gloves, Artist's
+     * insight, Golem prod. Called with the ally's role when triggered
+     * from a "Use on {ally}" button, undefined for the plain "Use".
+     */
+    onUsePrompted?: (relicKey: string, allyRole?: string) => void;
 }) {
     const [detailOpen, setDetailOpen] = useState(false);
     const label = `Wanderer ${role.replace('wanderer_', '').toUpperCase()}`;
@@ -231,34 +255,20 @@ export function WandererRelicPanel({
                 </Button>
             )}
 
-            {(perplexingTargetLabel || parallelAvailable) && (
+            {freeActions.length > 0 && (
                 <div className="mb-1.5 flex flex-wrap gap-1">
-                    {perplexingTargetLabel && (
+                    {freeActions.map(({ label: actionLabel, onClick }) => (
                         <Button
+                            key={actionLabel}
                             size="sm"
                             variant="outline"
                             className="h-6 flex-1 px-1.5 text-[10px]"
                             disabled={processing}
-                            onClick={() =>
-                                onSubmit({ type: 'move_to_new_location' })
-                            }
+                            onClick={onClick}
                         >
-                            Move to {perplexingTargetLabel} (Perplexing)
+                            {actionLabel}
                         </Button>
-                    )}
-                    {parallelAvailable && (
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-6 flex-1 px-1.5 text-[10px]"
-                            disabled={processing}
-                            onClick={() =>
-                                onSubmit({ type: 'skip_golem_card' })
-                            }
-                        >
-                            Skip next Golem card (Parallel)
-                        </Button>
-                    )}
+                    ))}
                 </div>
             )}
 
@@ -334,6 +344,15 @@ export function WandererRelicPanel({
                                                                     onUseCabalistBrand(
                                                                         relicKey,
                                                                     );
+                                                                } else if (
+                                                                    PROMPTED_RELICS.has(
+                                                                        base,
+                                                                    ) &&
+                                                                    onUsePrompted
+                                                                ) {
+                                                                    onUsePrompted(
+                                                                        relicKey,
+                                                                    );
                                                                 } else {
                                                                     onSubmit({
                                                                         type: 'use_relic',
@@ -372,15 +391,31 @@ export function WandererRelicPanel({
                                                         variant="outline"
                                                         className="h-5 px-1.5 text-[10px]"
                                                         disabled={processing}
-                                                        onClick={() =>
-                                                            onSubmit({
-                                                                type: 'use_relic',
-                                                                relic_key:
+                                                        onClick={() => {
+                                                            const base =
+                                                                baseRelicKey(
                                                                     relicKey,
-                                                                target_role:
+                                                                );
+                                                            if (
+                                                                PROMPTED_RELICS.has(
+                                                                    base,
+                                                                ) &&
+                                                                onUsePrompted
+                                                            ) {
+                                                                onUsePrompted(
+                                                                    relicKey,
                                                                     ally.role,
-                                                            })
-                                                        }
+                                                                );
+                                                            } else {
+                                                                onSubmit({
+                                                                    type: 'use_relic',
+                                                                    relic_key:
+                                                                        relicKey,
+                                                                    target_role:
+                                                                        ally.role,
+                                                                });
+                                                            }
+                                                        }}
                                                     >
                                                         Use on {ally.label}
                                                     </Button>

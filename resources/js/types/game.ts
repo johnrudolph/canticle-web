@@ -34,6 +34,12 @@ export interface WandererState {
     actions_remaining: number;
     equipped: Record<EquipSlot, string | null>;
     holding: string[];
+    move_blocked_this_turn: boolean;
+    tucked_cards: Record<string, string[]>;
+    was_ever_exhausted: boolean;
+    golem_insight_used_this_round: boolean;
+    laborers_jacket_used_this_round: boolean;
+    pending_bonus_actions: number;
 }
 
 export interface GolemCardEntry {

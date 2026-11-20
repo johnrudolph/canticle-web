@@ -66,6 +66,7 @@ final class GameEngine
             'resolve_invigoration' => self::resolveInvigoration($state, $actorRole, $move),
             'resolve_rift_in_time' => self::resolveRiftInTime($state, $actorRole, $move),
             'resolve_epiphany' => self::resolveEpiphany($state, $actorRole, $move),
+            'resolve_golem_log' => self::resolveGolemLog($state, $actorRole, $move),
             'end_wanderer_turn' => self::endWandererTurn($state, $actorRole),
             default => throw new InvalidMoveException('Unknown move type.'),
         };
@@ -1269,7 +1270,7 @@ final class GameEngine
             're-creation' => self::relicReCreation($state, $actorRole),
             'cabalist-brew' => self::relicCabalistBrew($state, $actorRole, $move),
             'defanging-tool' => self::relicDefangingTool($state, $actorRole),
-            'golem-log' => self::relicGolemLog($state, $actorRole, $move),
+            'golem-log' => self::offerGolemLog($state, $actorRole),
             'merchants-gloves' => [...self::relicMerchantsGloves($state, $actorRole, $move), false],
             'emperors-timepiece' => self::relicEmperorsTimepiece($state, $actorRole),
             default => [$state, [], false],
@@ -3431,20 +3432,51 @@ final class GameEngine
 
     /**
      * Golem log: "If you are in the Golem's space: look at the top 3
-     * cards of its draw pile, then tuck one of them here. When there
-     * are 3 cards tucked here, move them to the Golem discard pile,
-     * trash this, and gain 📜. If you drop this Relic, return the
-     * cards to its discard pile and lose your progress" (see
-     * dropRelic). $move['card_key'] picks which of the revealed top 3.
+     * cards of its draw pile, then tuck one of them here." Same
+     * can't-supply-the-choice-in-the-same-move problem as Invigoration/
+     * Rift in time/Epiphany — the Wanderer doesn't know which 3 cards
+     * are up top until this Use already reveals them, so the pick
+     * parks on pendingGolemLog for a free (no extra action cost)
+     * resolve_golem_log move instead of taking $move['card_key'] here.
      *
-     * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
      */
-    private static function relicGolemLog(GameState $state, string $actorRole, array $move): array
+    private static function offerGolemLog(GameState $state, string $actorRole): array
     {
         if (! self::golemSharesCellWith($state, $actorRole)) {
             return [$state, [], false];
         }
+
+        $topThree = array_slice($state->golem['draw_pile'], 0, 3);
+        $state = $state->with(['pendingGolemLog' => $actorRole]);
+
+        $events = [[
+            'type' => 'golem_draw_pile_revealed', 'role_key' => $actorRole,
+            'payload' => ['card_keys' => array_map(fn (array $c) => $c['key'], $topThree)],
+        ]];
+
+        return [$state, $events, false];
+    }
+
+    /**
+     * "...then tuck one of them here. When there are 3 cards tucked
+     * here, move them to the Golem discard pile, trash this, and gain
+     * 📜. If you drop this Relic, return the cards to its discard pile
+     * and lose your progress" (see dropRelic). $move['card_key'] picks
+     * which of the top 3 revealed by offerGolemLog(); not re-checking
+     * golemSharesCellWith here — the choice was already earned by the
+     * original Use, same as every other pendingXxx resolve move.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function resolveGolemLog(GameState $state, string $actorRole, array $move): array
+    {
+        if ($state->pendingGolemLog !== $actorRole) {
+            throw new InvalidMoveException('There is no Golem log choice pending for you.');
+        }
+
+        $state = $state->with(['pendingGolemLog' => null]);
 
         $drawPile = $state->golem['draw_pile'];
         $topThree = array_slice($drawPile, 0, 3);
@@ -3458,13 +3490,8 @@ final class GameEngine
             }
         }
 
-        $events = [[
-            'type' => 'golem_draw_pile_revealed', 'role_key' => $actorRole,
-            'payload' => ['card_keys' => array_map(fn (array $c) => $c['key'], $topThree)],
-        ]];
-
         if ($pileIndex === null) {
-            return [$state, $events, false];
+            return [$state, []];
         }
 
         unset($drawPile[$pileIndex]);
@@ -3474,20 +3501,23 @@ final class GameEngine
         $tuckedCards = $state->wanderers[$actorRole]['tucked_cards'];
         $tuckedCards['golem-log'] = [...($tuckedCards['golem-log'] ?? []), $chosenKey];
         $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['tucked_cards' => $tuckedCards])]);
-        $events[] = ['type' => 'card_tucked', 'role_key' => $actorRole, 'payload' => ['relic_key' => 'golem-log', 'card_key' => $chosenKey]];
+        $events = [['type' => 'card_tucked', 'role_key' => $actorRole, 'payload' => ['relic_key' => 'golem-log', 'card_key' => $chosenKey]]];
 
         if (count($tuckedCards['golem-log']) < 3) {
-            return [$state, $events, false];
+            return [$state, $events];
         }
 
         $golem = $state->golem;
         $golem['discard_pile'] = [...$golem['discard_pile'], ...$tuckedCards['golem-log']];
         $state = $state->with(['golem' => $golem]);
 
+        $state = self::trashEquippedRelic($state, $actorRole, 'golem-log');
+        $events[] = ['type' => 'relic_trashed', 'role_key' => $actorRole, 'payload' => ['relic_key' => 'golem-log']];
+
         $state = $state->with(['prophecy' => $state->prophecy + 1]);
         $events[] = ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => 1]];
 
-        return [$state, $events, true];
+        return [$state, $events];
     }
 
     /**
@@ -4168,6 +4198,10 @@ final class GameEngine
 
         if ($state->pendingEpiphany === $actorRole) {
             throw new InvalidMoveException('You must decide on Epiphany before ending your turn.');
+        }
+
+        if ($state->pendingGolemLog === $actorRole) {
+            throw new InvalidMoveException('You must decide on Golem log before ending your turn.');
         }
 
         $events = [];

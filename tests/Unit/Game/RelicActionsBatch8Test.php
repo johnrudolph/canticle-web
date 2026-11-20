@@ -146,7 +146,7 @@ test('Dropping Defanging tool loses its tucked progress entirely', function () {
         ->and(collect($events)->pluck('type'))->toContain('tucked_progress_lost');
 });
 
-test('Golem log looks at the top 3, tucks the chosen one, and moves all 3 to discard on completion', function () {
+test('Golem log\'s "Use" only peeks (parking the choice on pendingGolemLog); resolve_golem_log tucks, with no extra action cost', function () {
     $state = startedGame();
     $golem = $state->golem;
     $golem['draw_pile'] = [
@@ -160,14 +160,28 @@ test('Golem log looks at the top 3, tucks the chosen one, and moves all 3 to dis
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
-    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'golem-log', 'card_key' => 'spew']);
+    $actionsBefore = $state->wanderers['wanderer_a']['actions_remaining'];
 
-    expect($state->wanderers['wanderer_a']['tucked_cards']['golem-log'])->toBe(['spew'])
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'golem-log']);
+
+    expect($state->pendingGolemLog)->toBe('wanderer_a')
+        ->and($state->wanderers['wanderer_a']['tucked_cards']['golem-log'] ?? [])->toBe([])
+        ->and(collect($events)->pluck('type'))->toContain('golem_draw_pile_revealed')
+        // Using it costs the normal action; resolving the choice afterward doesn't.
+        ->and($state->wanderers['wanderer_a']['actions_remaining'])->toBe($actionsBefore - 1);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_golem_log', 'card_key' => 'spew']);
+
+    expect($state->pendingGolemLog)->toBeNull()
+        ->and($state->wanderers['wanderer_a']['tucked_cards']['golem-log'])->toBe(['spew'])
         ->and($state->golem['draw_pile'])->toHaveCount(3) // "spew" removed, 1 card shifted up from beyond the top 3
-        ->and(collect($events)->pluck('type'))->toContain('golem_draw_pile_revealed');
+        ->and($state->wanderers['wanderer_a']['actions_remaining'])->toBe($actionsBefore - 1) // unchanged
+        ->and(collect($events)->pluck('type'))->toContain('card_tucked');
 
-    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'golem-log', 'card_key' => 'storm']);
-    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'golem-log', 'card_key' => 'scar']);
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'golem-log']);
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_golem_log', 'card_key' => 'storm']);
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'golem-log']);
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_golem_log', 'card_key' => 'scar']);
 
     expect($state->wanderers['wanderer_a']['equipped']['bag'])->toBeNull()
         ->and($state->golem['discard_pile'])->toContain('spew', 'storm', 'scar')
@@ -175,7 +189,7 @@ test('Golem log looks at the top 3, tucks the chosen one, and moves all 3 to dis
         ->and($state->prophecy)->toBe(1);
 });
 
-test('Golem log does nothing for a card not actually in the top 3', function () {
+test('resolve_golem_log does nothing for a card not actually in the top 3', function () {
     $state = startedGame();
     $golem = $state->golem;
     $golem['draw_pile'] = [
@@ -188,7 +202,8 @@ test('Golem log does nothing for a card not actually in the top 3', function () 
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
-    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'golem-log', 'card_key' => 'dissent']);
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'golem-log']);
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_golem_log', 'card_key' => 'dissent']);
 
     expect($state->wanderers['wanderer_a']['tucked_cards']['golem-log'] ?? [])->toBe([]);
 });

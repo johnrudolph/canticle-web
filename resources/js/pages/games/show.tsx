@@ -12,7 +12,9 @@ import { InsightFromTheFutureDialog } from '@/components/game/insight-from-the-f
 import { InvigorationDialog } from '@/components/game/invigoration-dialog';
 import { LocationDetailDialog } from '@/components/game/location-detail-dialog';
 import { NewRelicDialog } from '@/components/game/new-relic-dialog';
+import { RelicPickerDialog } from '@/components/game/relic-picker-dialog';
 import { RiftInTimeDialog } from '@/components/game/rift-in-time-dialog';
+import { WandererPickerDialog } from '@/components/game/wanderer-picker-dialog';
 import { WandererRelicPanel } from '@/components/game/wanderer-relic-panel';
 import { WandererSummaryRow } from '@/components/game/wanderer-summary-row';
 import { Button } from '@/components/ui/button';
@@ -141,6 +143,29 @@ export default function GameShow({ game }: { game: GameSummary }) {
     const [cabalistBrandPrompt, setCabalistBrandPrompt] = useState<{
         role: RoleKey;
         relicKey: string;
+    } | null>(null);
+    const [wandererPrompt, setWandererPrompt] = useState<{
+        title: string;
+        description?: string;
+        candidates: { role: string; label: string }[];
+        onChoose: (role: string) => void;
+    } | null>(null);
+    const [relicPrompt, setRelicPrompt] = useState<{
+        title: string;
+        description?: string;
+        candidates: { key: string; label: string }[];
+        multiple?: boolean;
+        confirmLabel?: string;
+        onConfirm: (keys: string[]) => void;
+    } | null>(null);
+    const [boardPick, setBoardPick] = useState<{
+        description: string;
+        eligible: Set<string>;
+        onPick: (cell: Cell) => void;
+    } | null>(null);
+    const [golemLogPeek, setGolemLogPeek] = useState<{
+        role: RoleKey;
+        cardKeys: string[];
     } | null>(null);
     const [eventRelicQueue, setEventRelicQueue] = useState<
         { role: RoleKey; relicKey: string }[]
@@ -349,6 +374,538 @@ export default function GameShow({ game }: { game: GameSummary }) {
             return null;
         } finally {
             setProcessing(false);
+        }
+    }
+
+    function wandererLabelFor(role: string): string {
+        return ROLE_LABELS[role as RoleKey] ?? role;
+    }
+
+    /**
+     * Routes every Relic whose "Use" needs more input than the generic
+     * submit can supply — see PROMPTED_RELICS in WandererRelicPanel.
+     * Each case gathers whatever extra choice(s) that Relic's engine
+     * code actually reads (see GameEngine.php's matching resolveRelicXxx
+     * for the exact fields), via a chain of wandererPrompt/relicPrompt/
+     * boardPick dialogs, then calls submitMove with the full payload.
+     */
+    function handleUsePrompted(
+        role: RoleKey,
+        relicKey: string,
+        allyRole?: string,
+    ) {
+        if (!state) return;
+        const base = relicKey.replace(/-\d+$/, '');
+        const wanderer = state.wanderers[role];
+        const casterCell = wanderer.cell;
+        const relicCatalog = game.relic_catalog;
+
+        const otherWanderers = Object.keys(state.wanderers).filter(
+            (r) => r !== role,
+        );
+
+        switch (base) {
+            case 'holy-water': {
+                const targetRole = allyRole ?? role;
+                const targetEquipped = Object.values(
+                    state.wanderers[targetRole].equipped,
+                );
+                const hasShame = targetEquipped.includes('shame_token');
+                const hasScar = targetEquipped.includes('scar_token');
+
+                if (hasShame && hasScar) {
+                    setRelicPrompt({
+                        title: 'Holy water',
+                        description: `Remove which token from ${wandererLabelFor(targetRole)}?`,
+                        candidates: [
+                            { key: 'shame_token', label: 'Shame token' },
+                            { key: 'scar_token', label: 'Scar token' },
+                        ],
+                        onConfirm: (keys) => {
+                            setRelicPrompt(null);
+                            submitMove(role, {
+                                type: 'use_relic',
+                                relic_key: relicKey,
+                                target_role: allyRole,
+                                remove_type: keys[0],
+                            });
+                        },
+                    });
+                } else {
+                    submitMove(role, {
+                        type: 'use_relic',
+                        relic_key: relicKey,
+                        target_role: allyRole,
+                        remove_type: hasShame
+                            ? 'shame_token'
+                            : hasScar
+                              ? 'scar_token'
+                              : undefined,
+                    });
+                }
+                return;
+            }
+
+            case 'quantum-robes': {
+                setWandererPrompt({
+                    title: 'Quantum robes',
+                    description: 'Swap places with any other Wanderer.',
+                    candidates: otherWanderers.map((r) => ({
+                        role: r,
+                        label: wandererLabelFor(r),
+                    })),
+                    onChoose: (targetRole) => {
+                        setWandererPrompt(null);
+                        submitMove(role, {
+                            type: 'use_relic',
+                            relic_key: relicKey,
+                            target_role: targetRole,
+                        });
+                    },
+                });
+                return;
+            }
+
+            case 'golem-prod': {
+                if (!state.golem.cell) return;
+                setBoardPick({
+                    description: 'Golem prod: push the Golem which way?',
+                    eligible: new Set(neighbors(state.golem.cell).map(cellKey)),
+                    onPick: (cell) => {
+                        const direction = directionBetween(
+                            state.golem.cell as Cell,
+                            cell,
+                        );
+                        setBoardPick(null);
+                        if (!direction) return;
+                        submitMove(role, {
+                            type: 'use_relic',
+                            relic_key: relicKey,
+                            direction,
+                        });
+                    },
+                });
+                return;
+            }
+
+            case 'artists-insight': {
+                if (!casterCell) return;
+                const directions: string[] = [];
+                const stepPick = (fromCell: Cell) => {
+                    setBoardPick({
+                        description: `Artist's insight: move (step ${directions.length + 1} of 2) — or cancel to finish with ${directions.length}.`,
+                        eligible: new Set(
+                            occupiedNeighbors(fromCell, state.board).map(
+                                cellKey,
+                            ),
+                        ),
+                        onPick: (cell) => {
+                            const direction = directionBetween(fromCell, cell);
+                            if (!direction) return;
+                            directions.push(direction);
+                            if (directions.length >= 2) {
+                                setBoardPick(null);
+                                submitMove(role, {
+                                    type: 'use_relic',
+                                    relic_key: relicKey,
+                                    directions,
+                                });
+                            } else {
+                                stepPick(cell);
+                            }
+                        },
+                    });
+                };
+                stepPick(casterCell);
+                return;
+            }
+
+            case 'teleportation-stone': {
+                const allyCandidates = (
+                    allyRole ? [allyRole] : otherWanderers
+                ).filter(
+                    (r) =>
+                        state.wanderers[r].cell &&
+                        casterCell &&
+                        cellKey(state.wanderers[r].cell as Cell) ===
+                            cellKey(casterCell),
+                );
+                const pickDestination = (targetRole: string) => {
+                    const shardCells = Object.entries(state.board)
+                        .filter(([, cellData]) =>
+                            cellData.infrastructure.includes('monolith_shard'),
+                        )
+                        .map(([key]) => key);
+                    setBoardPick({
+                        description:
+                            'Teleportation stone: pick a Monolith Shard space.',
+                        eligible: new Set(shardCells),
+                        onPick: (cell) => {
+                            setBoardPick(null);
+                            submitMove(role, {
+                                type: 'use_relic',
+                                relic_key: relicKey,
+                                target_role: targetRole,
+                                cell,
+                            });
+                        },
+                    });
+                };
+                if (allyRole) {
+                    pickDestination(allyRole);
+                } else {
+                    setWandererPrompt({
+                        title: 'Teleportation stone',
+                        description: 'Move which Ally to a Shard space?',
+                        candidates: allyCandidates.map((r) => ({
+                            role: r,
+                            label: wandererLabelFor(r),
+                        })),
+                        onChoose: (targetRole) => {
+                            setWandererPrompt(null);
+                            pickDestination(targetRole);
+                        },
+                    });
+                }
+                return;
+            }
+
+            case 'hands-of-deliverance': {
+                setBoardPick({
+                    description:
+                        'Hands of deliverance: pick the space to move a Relic FROM.',
+                    eligible: new Set(
+                        Object.entries(state.board)
+                            .filter(
+                                ([, cellData]) =>
+                                    cellData.relics_face_up.length > 0,
+                            )
+                            .map(([key]) => key),
+                    ),
+                    onPick: (fromCell) => {
+                        const fromKey = cellKey(fromCell);
+                        const pile = state.board[fromKey].relics_face_up;
+                        setBoardPick(null);
+                        setRelicPrompt({
+                            title: 'Hands of deliverance',
+                            description: 'Which Relic to move?',
+                            candidates: pile.map((key, i) => ({
+                                key: `${key}:${i}`,
+                                label: relicCatalog[key]?.name ?? key,
+                            })),
+                            onConfirm: (keys) => {
+                                setRelicPrompt(null);
+                                const chosen = keys[0];
+                                if (!chosen) return;
+                                const boardRelicKey = chosen.split(':')[0];
+                                setBoardPick({
+                                    description:
+                                        'Hands of deliverance: pick the space to move it TO.',
+                                    eligible: new Set(Object.keys(state.board)),
+                                    onPick: (toCell) => {
+                                        setBoardPick(null);
+                                        submitMove(role, {
+                                            type: 'use_relic',
+                                            relic_key: relicKey,
+                                            from_cell: fromCell,
+                                            to_cell: toCell,
+                                            board_relic_key: boardRelicKey,
+                                        });
+                                    },
+                                });
+                            },
+                        });
+                    },
+                });
+                return;
+            }
+
+            case 'warlocks-robes': {
+                const pickRelicAndMode = (targetRole: string) => {
+                    setWandererPrompt(null);
+                    const myRelics = Object.values(wanderer.equipped).filter(
+                        (k): k is string =>
+                            !!k &&
+                            k !== 'shame_token' &&
+                            k !== 'scar_token' &&
+                            k.replace(/-\d+$/, '') !== 'warlocks-robes',
+                    );
+                    const theirRelics = Object.values(
+                        state.wanderers[targetRole].equipped,
+                    ).filter((k): k is string => !!k && !k.endsWith('_token'));
+                    setRelicPrompt({
+                        title: 'Warlock’s robes',
+                        description:
+                            'Pick one of your Relics for them to use, or one of theirs for you to use.',
+                        candidates: [
+                            ...myRelics.map((k) => ({
+                                key: `ally_uses_mine:${k}`,
+                                label: `They use yours: ${relicCatalog[k]?.name ?? k}`,
+                            })),
+                            ...theirRelics.map((k) => ({
+                                key: `i_use_theirs:${k}`,
+                                label: `You use theirs: ${relicCatalog[k]?.name ?? k}`,
+                            })),
+                        ],
+                        onConfirm: (keys) => {
+                            setRelicPrompt(null);
+                            const chosen = keys[0];
+                            if (!chosen) return;
+                            const [mode, otherRelicKey] = chosen.split(':');
+                            submitMove(role, {
+                                type: 'use_relic',
+                                relic_key: relicKey,
+                                target_role: targetRole,
+                                mode,
+                                other_relic_key: otherRelicKey,
+                            });
+                        },
+                    });
+                };
+                if (allyRole) {
+                    pickRelicAndMode(allyRole);
+                } else {
+                    setWandererPrompt({
+                        title: 'Warlock’s robes',
+                        description: 'Choose an Ally.',
+                        candidates: otherWanderers
+                            .filter(
+                                (r) =>
+                                    state.wanderers[r].cell &&
+                                    casterCell &&
+                                    cellKey(state.wanderers[r].cell as Cell) ===
+                                        cellKey(casterCell),
+                            )
+                            .map((r) => ({
+                                role: r,
+                                label: wandererLabelFor(r),
+                            })),
+                        onChoose: pickRelicAndMode,
+                    });
+                }
+                return;
+            }
+
+            case 'cabalist-brew': {
+                const pickRelic = (performerRole: string) => {
+                    const theirRelics = Object.values(
+                        state.wanderers[performerRole].equipped,
+                    ).filter(
+                        (k): k is string =>
+                            !!k &&
+                            !k.endsWith('_token') &&
+                            k.replace(/-\d+$/, '') !== 'cabalist-brew' &&
+                            !!relicCatalog[k]?.effect.includes('🌿'),
+                    );
+                    setRelicPrompt({
+                        title: 'Cabalist brew',
+                        description: `Which of ${wandererLabelFor(performerRole)}'s 🌿 Relics gets tripled?`,
+                        candidates: theirRelics.map((k) => ({
+                            key: k,
+                            label: relicCatalog[k]?.name ?? k,
+                        })),
+                        onConfirm: (keys) => {
+                            setRelicPrompt(null);
+                            const chosen = keys[0];
+                            submitMove(role, {
+                                type: 'use_relic',
+                                relic_key: relicKey,
+                                target_role: performerRole,
+                                other_relic_key: chosen,
+                            });
+                        },
+                    });
+                };
+                pickRelic(allyRole ?? role);
+                return;
+            }
+
+            case 'magistrates-robes': {
+                const allTargets = [
+                    ...Object.keys(state.wanderers).map((r) => ({
+                        role: r,
+                        label: wandererLabelFor(r),
+                    })),
+                    { role: 'golem', label: 'Golem' },
+                ];
+                setWandererPrompt({
+                    title: "Magistrate's robes",
+                    description: 'Move Shame FROM which Wanderer or Golem?',
+                    candidates: allTargets,
+                    onChoose: (fromRole) => {
+                        setWandererPrompt({
+                            title: "Magistrate's robes",
+                            description: `Move Shame TO which Wanderer or Golem? (from ${wandererLabelFor(fromRole)})`,
+                            candidates: allTargets.filter(
+                                (c) => c.role !== fromRole,
+                            ),
+                            onChoose: (toRole) => {
+                                setWandererPrompt(null);
+                                submitMove(role, {
+                                    type: 'use_relic',
+                                    relic_key: relicKey,
+                                    from_role: fromRole,
+                                    to_role: toRole,
+                                });
+                            },
+                        });
+                    },
+                });
+                return;
+            }
+
+            case 'divine-cabalist-pyre': {
+                if (!casterCell) return;
+                const pile =
+                    state.board[cellKey(casterCell)]?.relics_face_up ?? [];
+                setRelicPrompt({
+                    title: 'Divine Cabalist pyre',
+                    description: 'Burn which Relics on your space?',
+                    multiple: true,
+                    confirmLabel: 'Burn',
+                    candidates: pile.map((key, i) => ({
+                        key: `${key}:${i}`,
+                        label: relicCatalog[key]?.name ?? key,
+                    })),
+                    onConfirm: (keys) => {
+                        setRelicPrompt(null);
+                        submitMove(role, {
+                            type: 'use_relic',
+                            relic_key: relicKey,
+                            board_relic_keys: keys.map((k) => k.split(':')[0]),
+                        });
+                    },
+                });
+                return;
+            }
+
+            case 'show-solidarity': {
+                const golemCellKey = state.golem.cell
+                    ? cellKey(state.golem.cell)
+                    : null;
+                const candidates: { key: string; label: string }[] = [];
+                for (const [r, w] of Object.entries(state.wanderers)) {
+                    if (!w.cell || cellKey(w.cell) !== golemCellKey) continue;
+                    for (const [slot, relicKeyAt] of Object.entries(
+                        w.equipped,
+                    )) {
+                        if (!relicKeyAt || relicKeyAt.endsWith('_token'))
+                            continue;
+                        if (relicCatalog[relicKeyAt]?.is_bound) continue;
+                        candidates.push({
+                            key: `${r}:${slot}:${relicKeyAt}`,
+                            label: `${wandererLabelFor(r)}: ${relicCatalog[relicKeyAt]?.name ?? relicKeyAt}`,
+                        });
+                    }
+                }
+                setRelicPrompt({
+                    title: 'Show solidarity',
+                    description:
+                        'Which Relics (across everyone sharing the Golem’s space) get trashed? Every 5, 1 Golem discard card is trashed and you gain 📜.',
+                    multiple: true,
+                    confirmLabel: 'Trash',
+                    candidates,
+                    onConfirm: (keys) => {
+                        setRelicPrompt(null);
+                        submitMove(role, {
+                            type: 'use_relic',
+                            relic_key: relicKey,
+                            trashed: keys.map((k) => {
+                                const [r, , relicKeyAt] = k.split(':');
+                                return {
+                                    role: r,
+                                    relic_key: relicKeyAt,
+                                };
+                            }),
+                        });
+                    },
+                });
+                return;
+            }
+
+            case 'merchants-gloves': {
+                setWandererPrompt({
+                    title: "Merchant's gloves",
+                    description: 'Take a Relic FROM which Wanderer?',
+                    candidates: Object.keys(state.wanderers).map((r) => ({
+                        role: r,
+                        label: wandererLabelFor(r),
+                    })),
+                    onChoose: (fromRole) => {
+                        const fromRelics = [
+                            ...Object.values(
+                                state.wanderers[fromRole].equipped,
+                            ).filter(
+                                (k): k is string =>
+                                    !!k &&
+                                    !k.endsWith('_token') &&
+                                    !relicCatalog[k]?.is_bound,
+                            ),
+                            ...state.wanderers[fromRole].holding,
+                        ];
+                        setRelicPrompt({
+                            title: "Merchant's gloves",
+                            description: `Which of ${wandererLabelFor(fromRole)}'s Relics?`,
+                            candidates: fromRelics.map((k) => ({
+                                key: k,
+                                label: relicCatalog[k]?.name ?? k,
+                            })),
+                            onConfirm: (keys) => {
+                                setRelicPrompt(null);
+                                const chosenRelic = keys[0];
+                                if (!chosenRelic) return;
+                                setWandererPrompt({
+                                    title: "Merchant's gloves",
+                                    description: `Give ${relicCatalog[chosenRelic]?.name ?? chosenRelic} to whom?`,
+                                    candidates: Object.keys(state.wanderers)
+                                        .filter((r) => r !== fromRole)
+                                        .map((r) => ({
+                                            role: r,
+                                            label: wandererLabelFor(r),
+                                        })),
+                                    onChoose: (toRole) => {
+                                        setWandererPrompt(null);
+                                        submitMove(role, {
+                                            type: 'use_relic',
+                                            relic_key: relicKey,
+                                            exchanges: [
+                                                {
+                                                    from_role: fromRole,
+                                                    to_role: toRole,
+                                                    relic_key: chosenRelic,
+                                                },
+                                            ],
+                                        });
+                                    },
+                                });
+                            },
+                        });
+                    },
+                });
+                return;
+            }
+
+            case 'golem-log': {
+                submitMove(role, {
+                    type: 'use_relic',
+                    relic_key: relicKey,
+                }).then((response) => {
+                    if (!response) return;
+                    const revealed = [...response.events]
+                        .reverse()
+                        .find((e) => e.type === 'golem_draw_pile_revealed');
+                    const cardKeys = revealed?.payload.card_keys as
+                        | string[]
+                        | undefined;
+                    if (cardKeys && cardKeys.length > 0) {
+                        setGolemLogPeek({ role, cardKeys });
+                    }
+                });
+                return;
+            }
+
+            default:
+                return;
         }
     }
 
@@ -655,11 +1212,32 @@ export default function GameShow({ game }: { game: GameSummary }) {
         }
     }
 
+    // A pending interaction's own board-cell pick takes priority over
+    // the normal per-phase click behavior above — e.g. picking
+    // Teleportation stone's destination instead of just moving.
+    if (boardPick) {
+        highlightedCells = boardPick.eligible;
+        onCellClick = boardPick.onPick;
+    }
+
     return (
         <>
             <Head title={`Game ${game.code}`} />
             <div className="flex h-dvh gap-3 overflow-hidden p-3">
-                <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto">
+                <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-auto">
+                    {boardPick && (
+                        <div className="absolute top-2 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-xs shadow-md">
+                            <span>{boardPick.description}</span>
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 px-2 text-[10px]"
+                                onClick={() => setBoardPick(null)}
+                            >
+                                Cancel
+                            </Button>
+                        </div>
+                    )}
                     <HexBoard
                         board={state.board}
                         locationCatalog={locationCatalog}
@@ -1318,28 +1896,323 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                     tuckLocationKey === 'cathedral');
                             const isActiveAndMine =
                                 isActive && myRoles.includes(role);
-                            const perplexingTargetCell =
-                                state.location_just_built_cell;
-                            const perplexingTargetKey = perplexingTargetCell
-                                ? state.board[cellKey(perplexingTargetCell)]
-                                      ?.location_key
-                                : undefined;
-                            const perplexingTargetLabel =
-                                isActiveAndMine &&
-                                state.golem.glyphs.includes('perplexing') &&
-                                perplexingTargetCell &&
-                                (!wanderer.cell ||
-                                    cellKey(wanderer.cell) !==
-                                        cellKey(perplexingTargetCell))
-                                    ? (locationCatalog[
-                                          perplexingTargetKey ?? ''
-                                      ]?.name ?? null)
-                                    : null;
-                            const parallelAvailable =
-                                isActiveAndMine &&
-                                state.golem.glyphs.includes('parallel') &&
-                                !state.parallel_used_this_round &&
-                                state.golem.revealed.length > 0;
+                            const freeActions: {
+                                label: string;
+                                onClick: () => void;
+                            }[] = [];
+
+                            if (isActiveAndMine && wanderer.cell) {
+                                const myCell = wanderer.cell;
+                                const myCellKey = cellKey(myCell);
+                                const myLocation =
+                                    locationCatalog[
+                                        state.board[myCellKey]?.location_key
+                                    ];
+
+                                // Perplexing
+                                const perplexingTargetCell =
+                                    state.location_just_built_cell;
+                                if (
+                                    state.golem.glyphs.includes('perplexing') &&
+                                    perplexingTargetCell &&
+                                    cellKey(perplexingTargetCell) !== myCellKey
+                                ) {
+                                    const targetKey =
+                                        state.board[
+                                            cellKey(perplexingTargetCell)
+                                        ]?.location_key;
+                                    freeActions.push({
+                                        label: `Move to ${locationCatalog[targetKey ?? '']?.name ?? 'new Location'} (Perplexing)`,
+                                        onClick: () =>
+                                            submitMove(role, {
+                                                type: 'move_to_new_location',
+                                            }),
+                                    });
+                                }
+
+                                // Parallel
+                                if (
+                                    state.golem.glyphs.includes('parallel') &&
+                                    !state.parallel_used_this_round &&
+                                    state.golem.revealed.length > 0
+                                ) {
+                                    freeActions.push({
+                                        label: 'Skip next Golem card (Parallel)',
+                                        onClick: () =>
+                                            submitMove(role, {
+                                                type: 'skip_golem_card',
+                                            }),
+                                    });
+                                }
+
+                                // Purification pools
+                                if (
+                                    myLocation &&
+                                    state.board[myCellKey]?.location_key ===
+                                        'purification-pools'
+                                ) {
+                                    freeActions.push({
+                                        label: 'Cleanse (Purification pools)',
+                                        onClick: () =>
+                                            submitMove(role, {
+                                                type: 'cleanse_at_purification_pools',
+                                            }),
+                                    });
+                                }
+
+                                // Smoldering
+                                const nonBoundEquipped = Object.values(
+                                    wanderer.equipped,
+                                ).filter(
+                                    (k): k is string =>
+                                        !!k &&
+                                        !k.endsWith('_token') &&
+                                        !game.relic_catalog[k]?.is_bound,
+                                );
+                                if (
+                                    state.golem.glyphs.includes('smoldering') &&
+                                    nonBoundEquipped.length > 0
+                                ) {
+                                    freeActions.push({
+                                        label: 'Trash Relic(s) for Health (Smoldering)',
+                                        onClick: () =>
+                                            setRelicPrompt({
+                                                title: 'Smoldering',
+                                                description:
+                                                    'Trash any of your Relics for 2 Health each.',
+                                                multiple: true,
+                                                confirmLabel: 'Trash',
+                                                candidates:
+                                                    nonBoundEquipped.map(
+                                                        (k) => ({
+                                                            key: k,
+                                                            label:
+                                                                game
+                                                                    .relic_catalog[
+                                                                    k
+                                                                ]?.name ?? k,
+                                                        }),
+                                                    ),
+                                                onConfirm: (keys) => {
+                                                    setRelicPrompt(null);
+                                                    submitMove(role, {
+                                                        type: 'trash_relic_for_health',
+                                                        relic_keys: keys,
+                                                    });
+                                                },
+                                            }),
+                                    });
+                                }
+
+                                // Neighborly
+                                const myGreenRelics = Object.values(
+                                    wanderer.equipped,
+                                ).filter(
+                                    (k): k is string =>
+                                        !!k &&
+                                        !k.endsWith('_token') &&
+                                        !!game.relic_catalog[
+                                            k
+                                        ]?.effect.includes('🌿'),
+                                );
+                                const adjacentAllies = Object.entries(
+                                    state.wanderers,
+                                ).filter(
+                                    ([r, w]) =>
+                                        r !== role &&
+                                        w.cell &&
+                                        occupiedNeighbors(
+                                            myCell,
+                                            state.board,
+                                        ).some(
+                                            (n) =>
+                                                cellKey(n) ===
+                                                cellKey(w.cell as Cell),
+                                        ),
+                                );
+                                if (
+                                    state.golem.glyphs.includes('neighborly') &&
+                                    myGreenRelics.length > 0 &&
+                                    adjacentAllies.length > 0
+                                ) {
+                                    freeActions.push({
+                                        label: 'Assist an Ally (Neighborly)',
+                                        onClick: () =>
+                                            setWandererPrompt({
+                                                title: 'Neighborly',
+                                                description:
+                                                    'Move to which adjacent Ally?',
+                                                candidates: adjacentAllies.map(
+                                                    ([r]) => ({
+                                                        role: r,
+                                                        label: wandererLabelFor(
+                                                            r,
+                                                        ),
+                                                    }),
+                                                ),
+                                                onChoose: (toRole) => {
+                                                    setWandererPrompt(null);
+                                                    setRelicPrompt({
+                                                        title: 'Neighborly',
+                                                        description:
+                                                            'Use which of your own 🌿 Relics?',
+                                                        candidates:
+                                                            myGreenRelics.map(
+                                                                (k) => ({
+                                                                    key: k,
+                                                                    label:
+                                                                        game
+                                                                            .relic_catalog[
+                                                                            k
+                                                                        ]
+                                                                            ?.name ??
+                                                                        k,
+                                                                }),
+                                                            ),
+                                                        onConfirm: (keys) => {
+                                                            setRelicPrompt(
+                                                                null,
+                                                            );
+                                                            const chosen =
+                                                                keys[0];
+                                                            if (!chosen) return;
+                                                            submitMove(role, {
+                                                                type: 'neighborly_assist',
+                                                                to_role: toRole,
+                                                                relic_key:
+                                                                    chosen,
+                                                            });
+                                                        },
+                                                    });
+                                                },
+                                            }),
+                                    });
+                                }
+
+                                // Magnetic mail
+                                const shardAdjacentAllies =
+                                    adjacentAllies.filter(
+                                        ([, w]) =>
+                                            w.cell &&
+                                            state.board[
+                                                cellKey(w.cell)
+                                            ]?.infrastructure.includes(
+                                                'monolith_shard',
+                                            ),
+                                    );
+                                if (
+                                    Object.values(wanderer.equipped).includes(
+                                        'magnetic-mail',
+                                    ) &&
+                                    shardAdjacentAllies.length > 0
+                                ) {
+                                    freeActions.push({
+                                        label: 'Move to Ally on a Shard (Magnetic mail)',
+                                        onClick: () =>
+                                            setWandererPrompt({
+                                                title: 'Magnetic mail',
+                                                description:
+                                                    'Move to which Ally?',
+                                                candidates:
+                                                    shardAdjacentAllies.map(
+                                                        ([r]) => ({
+                                                            role: r,
+                                                            label: wandererLabelFor(
+                                                                r,
+                                                            ),
+                                                        }),
+                                                    ),
+                                                onChoose: (targetRole) => {
+                                                    setWandererPrompt(null);
+                                                    submitMove(role, {
+                                                        type: 'magnetic_mail_move',
+                                                        target_role: targetRole,
+                                                    });
+                                                },
+                                            }),
+                                    });
+                                }
+
+                                // Telekinesis
+                                if (
+                                    Object.values(wanderer.equipped).includes(
+                                        'telekenesis',
+                                    ) &&
+                                    state.board[
+                                        myCellKey
+                                    ]?.infrastructure.includes('monolith_shard')
+                                ) {
+                                    freeActions.push({
+                                        label: 'Move anywhere (Telekinesis)',
+                                        onClick: () =>
+                                            setBoardPick({
+                                                description:
+                                                    'Telekinesis: pick any Location.',
+                                                eligible: new Set(
+                                                    Object.keys(state.board),
+                                                ),
+                                                onPick: (cell) => {
+                                                    setBoardPick(null);
+                                                    submitMove(role, {
+                                                        type: 'telekinesis_move',
+                                                        cell,
+                                                    });
+                                                },
+                                            }),
+                                    });
+                                }
+
+                                // Laborer's Jacket
+                                if (
+                                    Object.values(wanderer.equipped).includes(
+                                        'laborers-jacket',
+                                    ) &&
+                                    !wanderer.laborers_jacket_used_this_round &&
+                                    myLocation?.produces_emoji === '🤝'
+                                ) {
+                                    const otherActive = Object.keys(
+                                        state.wanderers,
+                                    ).filter((r) => r !== role);
+                                    freeActions.push({
+                                        label: "Move Allies (Laborer's Jacket)",
+                                        onClick: () => {
+                                            const destinations: Record<
+                                                string,
+                                                Cell
+                                            > = {};
+                                            const pickFor = (
+                                                remaining: string[],
+                                            ) => {
+                                                if (remaining.length === 0) {
+                                                    submitMove(role, {
+                                                        type: 'laborers_jacket_move_allies',
+                                                        destinations,
+                                                    });
+                                                    return;
+                                                }
+                                                const [next, ...rest] =
+                                                    remaining;
+                                                setBoardPick({
+                                                    description: `Laborer's Jacket: move ${wandererLabelFor(next)} to which space?`,
+                                                    eligible: new Set(
+                                                        Object.keys(
+                                                            state.board,
+                                                        ),
+                                                    ),
+                                                    onPick: (cell) => {
+                                                        destinations[next] =
+                                                            cell;
+                                                        setBoardPick(null);
+                                                        pickFor(rest);
+                                                    },
+                                                });
+                                            };
+                                            pickFor(otherActive);
+                                        },
+                                    });
+                                }
+                            }
+
                             const allies = Object.entries(state.wanderers)
                                 .filter(
                                     ([otherRole, other]) =>
@@ -1388,10 +2261,7 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                                   | 'cathedral')
                                             : null
                                     }
-                                    perplexingTargetLabel={
-                                        perplexingTargetLabel
-                                    }
-                                    parallelAvailable={parallelAvailable}
+                                    freeActions={freeActions}
                                     relicUnusableReasons={
                                         state.active_wanderer_relic_reasons
                                     }
@@ -1403,6 +2273,13 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                             role,
                                             relicKey,
                                         })
+                                    }
+                                    onUsePrompted={(relicKey, allyRole) =>
+                                        handleUsePrompted(
+                                            role,
+                                            relicKey,
+                                            allyRole,
+                                        )
                                     }
                                 />
                             );
@@ -1546,6 +2423,51 @@ export default function GameShow({ game }: { game: GameSummary }) {
                     setCabalistBrandPrompt(null);
                 }}
                 onCancel={() => setCabalistBrandPrompt(null)}
+            />
+
+            <WandererPickerDialog
+                open={wandererPrompt !== null}
+                title={wandererPrompt?.title ?? ''}
+                description={wandererPrompt?.description}
+                candidates={wandererPrompt?.candidates ?? []}
+                processing={processing}
+                onChoose={(role) => wandererPrompt?.onChoose(role)}
+                onCancel={() => setWandererPrompt(null)}
+            />
+
+            <RelicPickerDialog
+                open={relicPrompt !== null}
+                title={relicPrompt?.title ?? ''}
+                description={relicPrompt?.description}
+                candidates={relicPrompt?.candidates ?? []}
+                relicCatalog={game.relic_catalog}
+                multiple={relicPrompt?.multiple}
+                confirmLabel={relicPrompt?.confirmLabel}
+                processing={processing}
+                onConfirm={(keys) => relicPrompt?.onConfirm(keys)}
+                onCancel={() => setRelicPrompt(null)}
+            />
+
+            <RelicPickerDialog
+                open={golemLogPeek !== null}
+                title="Golem log"
+                description="Tuck which of the top 3 revealed cards?"
+                candidates={(golemLogPeek?.cardKeys ?? []).map((key, i) => ({
+                    key: `${key}:${i}`,
+                    label: game.golem_card_catalog[key]?.name ?? key,
+                }))}
+                relicCatalog={{}}
+                processing={processing}
+                confirmLabel="Tuck"
+                onConfirm={(keys) => {
+                    if (!golemLogPeek) return;
+                    const chosen = keys[0]?.split(':')[0];
+                    submitMove(golemLogPeek.role, {
+                        type: 'resolve_golem_log',
+                        card_key: chosen,
+                    });
+                    setGolemLogPeek(null);
+                }}
             />
 
             <RiftInTimeDialog
