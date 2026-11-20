@@ -9,8 +9,10 @@ import {
     INFRASTRUCTURE_DESCRIPTIONS,
     INFRASTRUCTURE_LABELS,
 } from '@/lib/infrastructure';
+import { tucksGolemCards } from '@/lib/tucking';
 import type {
     BoardCell,
+    GolemCardCatalogEntry,
     InfrastructureType,
     LocationCatalogEntry,
     RelicCatalogEntry,
@@ -39,6 +41,7 @@ export function LocationDetailDialog({
     cellData,
     locationCatalog = {},
     relicCatalog = {},
+    golemCardCatalog = {},
     wanderersHere = [],
     golemHere = false,
     myRoleHere = null,
@@ -50,6 +53,7 @@ export function LocationDetailDialog({
     cellData: BoardCell | undefined;
     locationCatalog?: Record<string, LocationCatalogEntry>;
     relicCatalog?: Record<string, RelicCatalogEntry>;
+    golemCardCatalog?: Record<string, GolemCardCatalogEntry>;
     wanderersHere?: string[];
     golemHere?: boolean;
     myRoleHere?: string | null;
@@ -220,6 +224,33 @@ export function LocationDetailDialog({
                             </div>
                         )}
                     </div>
+
+                    {cellData && cellData.tucked.length > 0 && (
+                        <div className="rounded-md border p-3">
+                            <p className="mb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                Tucked ({cellData.tucked.length})
+                            </p>
+
+                            <div className="flex flex-wrap gap-1.5">
+                                {cellData.tucked.map((key, i) => {
+                                    const name = tucksGolemCards(
+                                        cellData.location_key,
+                                    )
+                                        ? golemCardCatalog[key]?.name
+                                        : relicCatalog[key]?.name;
+
+                                    return (
+                                        <span
+                                            key={`${key}-${i}`}
+                                            className="rounded-full border bg-muted/40 px-2 py-0.5 text-xs"
+                                        >
+                                            🔖 {name ?? key}
+                                        </span>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </DialogContent>
         </Dialog>

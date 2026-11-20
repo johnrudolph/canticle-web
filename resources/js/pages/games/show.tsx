@@ -664,6 +664,7 @@ export default function GameShow({ game }: { game: GameSummary }) {
                         board={state.board}
                         locationCatalog={locationCatalog}
                         relicCatalog={game.relic_catalog}
+                        golemCardCatalog={game.golem_card_catalog}
                         wanderers={state.wanderers}
                         golemCell={
                             golemSpotlightSegments[golemSpotlightIndex]

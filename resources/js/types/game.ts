@@ -25,6 +25,7 @@ export interface BoardCell {
     relics: string[];
     relics_face_up: string[];
     infrastructure: InfrastructureType[];
+    tucked: string[];
 }
 
 export interface WandererState {

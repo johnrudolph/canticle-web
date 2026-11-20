@@ -22,7 +22,7 @@ namespace App\Game;
  *     'relics' => list<string>,  // face-down pile still on this space — rules.md: "search" draws blind from here
  *     'relics_face_up' => list<string>,  // dropped (or displaced-on-equip) Relics sitting face-up — rules.md: "Dropping a relic leaves it face-up on your current space," pickupable by anyone, any time, by name, with no search roll
  *     'infrastructure' => list<'monolith_shard'|'road'|'walls'|'fruit_tree'>,
- *     'tucked' => list<string>,  // Bazaar/Golem sanctuary/Defenders' Guild/House of Cryptids tuck Relic or Golem card keys here, per their own back_text
+ *     'tucked' => list<string>,  // Bazaar/Cathedral/Golem sanctuary/Defenders' Guild/House of Cryptids tuck Relic or Golem card keys here, per their own back_text
  * ]
  *
  * wanderers[roleKey] = [

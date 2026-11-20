@@ -10,6 +10,7 @@ import {
 } from '@/lib/hex';
 import type {
     BoardCell,
+    GolemCardCatalogEntry,
     LocationCatalogEntry,
     RelicCatalogEntry,
     WandererState,
@@ -53,10 +54,27 @@ function FaceUpRelicBadge({ symbol }: { symbol: string }) {
     );
 }
 
+/**
+ * Bazaar/Cathedral/Golem sanctuary tuck Relics; Defenders' Guild/House
+ * of Cryptids tuck Golem cards — either way, a bookmark-shaped badge
+ * with the count, distinct from the face-down/face-up Relic badges.
+ */
+function TuckedBadge({ count }: { count: number }) {
+    return (
+        <div
+            className="flex h-6 items-center justify-center gap-0.5 rounded-sm border border-indigo-800 bg-indigo-700 px-1 text-xs font-bold text-white dark:border-indigo-600 dark:bg-indigo-800"
+            title={`${count} tucked`}
+        >
+            🔖 {count}
+        </div>
+    );
+}
+
 export function HexBoard({
     board,
     locationCatalog,
     relicCatalog,
+    golemCardCatalog,
     wanderers,
     golemCell,
     highlightedCells,
@@ -68,6 +86,7 @@ export function HexBoard({
     board: Record<string, BoardCell>;
     locationCatalog: Record<string, LocationCatalogEntry>;
     relicCatalog: Record<string, RelicCatalogEntry>;
+    golemCardCatalog: Record<string, GolemCardCatalogEntry>;
     wanderers: Record<string, WandererState>;
     golemCell?: Cell | null;
     highlightedCells?: Set<string>;
@@ -111,8 +130,7 @@ export function HexBoard({
                     const pos = cellTopLeft(cell);
                     const location = locationCatalog[cellData.location_key];
                     const isHighlighted = highlightedCells?.has(key) ?? false;
-                    const isActiveWandererCell =
-                        activeWandererCellKey === key;
+                    const isActiveWandererCell = activeWandererCellKey === key;
 
                     return (
                         <div
@@ -173,6 +191,11 @@ export function HexBoard({
                                                 }
                                             />
                                         ),
+                                    )}
+                                    {cellData.tucked.length > 0 && (
+                                        <TuckedBadge
+                                            count={cellData.tucked.length}
+                                        />
                                     )}
                                     {cellData.infrastructure.length > 0 && (
                                         <span className="text-xs">
@@ -267,6 +290,7 @@ export function HexBoard({
                 }
                 cellData={infoKey ? board[infoKey] : undefined}
                 relicCatalog={relicCatalog}
+                golemCardCatalog={golemCardCatalog}
                 wanderersHere={
                     infoKey ? (wandererByCell.get(infoKey) ?? []) : []
                 }
