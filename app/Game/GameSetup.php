@@ -52,7 +52,6 @@ final class GameSetup
         $board = [];
         foreach ($startingCells as $i => $cell) {
             $location = LocationCatalog::find($startingKeys[$i]);
-            [$relics, $relicDecks] = RelicDealer::dealForLocation($relicDecks, $location, $board);
 
             // Fixture outlines: a Location marked has_shard/has_tree on
             // the sheet starts with that fixture already on its space,
@@ -70,11 +69,26 @@ final class GameSetup
             $board[Board::key($cell)] = [
                 'location_key' => $startingKeys[$i],
                 'placed_round' => 1,
-                'relics' => $relics,
+                'relics' => [],
                 'relics_face_up' => [],
                 'infrastructure' => $infrastructure,
                 'tucked' => [],
             ];
+        }
+
+        // Relics are dealt in a separate pass, only once every starting
+        // Location's location_key is already on $board — Bazaar's "1 of
+        // each type already produced by the city" needs to see all 6
+        // starters, not just whichever ones happened to be placed earlier
+        // in the loop above (confirmed in production, game LPJGX6: Bazaar
+        // as a starter dealt only 1 Relic instead of 3, because 2 other
+        // Relic-producing starters hadn't been added to $board yet when
+        // Bazaar's turn in the loop came up).
+        foreach ($startingCells as $i => $cell) {
+            $location = LocationCatalog::find($startingKeys[$i]);
+            [$relics, $relicDecks] = RelicDealer::dealForLocation($relicDecks, $location, $board);
+            $cellKey = Board::key($cell);
+            $board[$cellKey] = [...$board[$cellKey], 'relics' => $relics];
         }
 
         $hand = array_splice($deck, 0, self::STARTING_HAND_SIZE);
