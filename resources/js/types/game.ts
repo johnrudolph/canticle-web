@@ -77,6 +77,8 @@ export interface GameStateDto {
     prophecy: number;
     golem_skipped: boolean;
     pending_invigoration: RoleKey | null;
+    location_just_built_cell: [number, number] | null;
+    parallel_used_this_round: boolean;
     outcome: 'elite_victory' | 'simple_victory' | 'defeat' | null;
 }
 

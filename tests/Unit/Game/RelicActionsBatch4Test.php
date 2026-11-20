@@ -117,7 +117,8 @@ test('Divine Chant requires the Cathedral, the Golem 2+ away, and all 3 instrume
     expect($state->wanderers['wanderer_a']['hp'])->toBe(15)
         ->and($state->wanderers['wanderer_b']['hp'])->toBe(15)
         ->and($state->wanderers['wanderer_a']['equipped']['mind'])->toBeNull()
-        ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
+        ->and(collect($events)->pluck('type'))->toContain('relic_trashed')
+        ->and($state->prophecy)->toBe(1);
 });
 
 test('Divine Chant is rejected outright if the Golem is less than 2 spaces away', function () {

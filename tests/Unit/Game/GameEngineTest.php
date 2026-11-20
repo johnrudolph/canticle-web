@@ -7,6 +7,7 @@ use App\Game\GameEngine;
 use App\Game\GameSetup;
 use App\Game\GameState;
 use App\Game\InvalidMoveException;
+use App\Game\RelicDealer;
 use App\Game\RoleKeys;
 
 /**
@@ -235,6 +236,54 @@ test('Bazaar deals 1 Relic per distinct branch already produced by the city, not
 
     $cell = Board::placeableCells($state->board)[0];
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'play_location', 'location_key' => 'bazaar', 'cell' => $cell]);
+
+    $dealt = $state->board[Board::key($cell)]['relics'];
+
+    expect(count($dealt))->toBeLessThanOrEqual($producedBranches->count());
+    foreach ($dealt as $relicKey) {
+        expect(RelicCatalog::find($relicKey)->symbol)->toBeIn($producedBranches->all());
+    }
+});
+
+test('Beds of poison deals Relics from the 🌑 branch despite producing nothing itself', function () {
+    // Beds of poison's "Relics" column is "6 🌑" but its own
+    // produces_emoji is blank (it doesn't produce anything
+    // adjacency-wise) — RelicDealer::deal() used to gate dealing
+    // entirely on producesEmoji being non-null, so this Location dealt
+    // zero Relics no matter what. Fixed by dealing from the branch
+    // symbol parsed out of the "Relics" column itself
+    // (Location::$dealsFromBranch), independent of production.
+    // Dealt independently of actually placing it on the board — Beds of
+    // poison costs adjacency to Dark + Agriculture, which startedGame()'s
+    // neutral hub setup doesn't satisfy, and that adjacency check is a
+    // separate concern from what this test is pinning down.
+    $state = startedGame();
+    $location = LocationCatalog::find('beds-of-poison');
+
+    [$dealt] = RelicDealer::dealForLocation($state->relicDecks, $location, $state->board);
+
+    expect($dealt)->not->toBeEmpty();
+    foreach ($dealt as $relicKey) {
+        expect(RelicCatalog::find($relicKey)->symbol)->toBe('🌑');
+    }
+});
+
+test('Library deals 1 Relic per distinct branch already produced by the city, same as Bazaar', function () {
+    // Same underlying bug and fix as Beds of poison above — Library's
+    // "Relics" column ("1 Relic of each type already produced by the
+    // city") is dynamic, city-wide dealing exactly like Bazaar's, just
+    // worded with an extra word, so it's routed through the same
+    // RelicDealer::dealBazaar().
+    $state = startedGame();
+    $state = $state->with(['locationHand' => ['library']]);
+
+    $producedBranches = collect($state->board)
+        ->map(fn ($entry) => LocationCatalog::find($entry['location_key'])->producesEmoji)
+        ->filter()
+        ->unique();
+
+    $cell = Board::placeableCells($state->board)[0];
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'play_location', 'location_key' => 'library', 'cell' => $cell]);
 
     $dealt = $state->board[Board::key($cell)]['relics'];
 

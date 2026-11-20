@@ -33,7 +33,12 @@ final class RelicDealer
      */
     public static function dealForLocation(array $relicDecks, Location $location, array $board): array
     {
-        if ($location->key === 'bazaar') {
+        // Library: "1 Relic of each type already produced by the city"
+        // — the same dynamic, city-wide dealing rule as Bazaar's "1 of
+        // each type already produced by the city," just worded with an
+        // extra word. Routed through the same method rather than a
+        // near-duplicate.
+        if ($location->key === 'bazaar' || $location->key === 'library') {
             return self::dealBazaar($relicDecks, $board);
         }
 
@@ -46,11 +51,11 @@ final class RelicDealer
      */
     public static function deal(array $relicDecks, Location $location): array
     {
-        if ($location->producesEmoji === null || $location->relicCount === 0) {
+        if ($location->dealsFromBranch === null || $location->relicCount === 0) {
             return [[], $relicDecks];
         }
 
-        $deck = $relicDecks[$location->producesEmoji] ?? [];
+        $deck = $relicDecks[$location->dealsFromBranch] ?? [];
 
         $locked = array_values(array_intersect(
             RelicCatalog::keysLockedToLocation($location->name),

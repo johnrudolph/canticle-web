@@ -1997,7 +1997,13 @@ final class GameEngine
             return [$state, [], false];
         }
 
-        [$state, $events] = self::tapGolemDrawPile($state, self::effectiveGolemShame($state));
+        [$state, $events, $tapped] = self::tapGolemDrawPile($state, self::effectiveGolemShame($state));
+
+        // "If you flipped 4 cards doing this, gain 📜."
+        if ($tapped >= 4) {
+            $state = $state->with(['prophecy' => $state->prophecy + 1]);
+            $events[] = ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => 1]];
+        }
 
         return [$state, $events, true];
     }
@@ -2056,6 +2062,9 @@ final class GameEngine
             $events = [...$events, ...$tapEvents];
         }
 
+        $state = $state->with(['prophecy' => $state->prophecy + 1]);
+        $events[] = ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => 1]];
+
         return [$state, $events, true];
     }
 
@@ -2090,6 +2099,9 @@ final class GameEngine
         }
 
         [$state, $events] = self::tapGolemDrawPile($state, 3);
+
+        $state = $state->with(['prophecy' => $state->prophecy + 1]);
+        $events[] = ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => 1]];
 
         return [$state, $events, true];
     }
@@ -2168,6 +2180,9 @@ final class GameEngine
 
         [$state, $e] = self::applyStatusToken($state, $actorRole, 'shame_token');
         $events = [...$events, ...$e];
+
+        $state = $state->with(['prophecy' => $state->prophecy + 1]);
+        $events[] = ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => 1]];
 
         return [$state, $events, true];
     }
@@ -2707,6 +2722,9 @@ final class GameEngine
             $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => 15]];
         }
 
+        $state = $state->with(['prophecy' => $state->prophecy + 1]);
+        $events[] = ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => 1]];
+
         return [$state, $events, true];
     }
 
@@ -2810,6 +2828,12 @@ final class GameEngine
         $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['hp' => $hp])]);
         $events[] = ['type' => 'wanderer_damaged', 'role_key' => $actorRole, 'payload' => ['amount' => $count]];
 
+        // "If you trashed 5 Relics doing this, gain 📜."
+        if ($count >= 5) {
+            $state = $state->with(['prophecy' => $state->prophecy + 1]);
+            $events[] = ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => 1]];
+        }
+
         return [$state, $events, false];
     }
 
@@ -2872,6 +2896,12 @@ final class GameEngine
                 $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
                 $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
             }
+        }
+
+        // "If you burn 10 Relics doing this, gain 📜📜."
+        if (count($burned) >= 10) {
+            $state = $state->with(['prophecy' => $state->prophecy + 2]);
+            $events[] = ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => 2]];
         }
 
         return [$state, $events, true];
@@ -2941,6 +2971,13 @@ final class GameEngine
             foreach ($removed as $cardKey) {
                 $events[] = ['type' => 'golem_card_removed_from_discard', 'role_key' => null, 'payload' => ['card_key' => $cardKey]];
             }
+
+            // "For every 5 Relics trashed, trash 1 card from the Golem
+            // discard pile, and gain 📜." — 1 Prophecy per group of 5,
+            // not per card actually removed (the discard pile can run
+            // out of cards to remove before the groups do).
+            $state = $state->with(['prophecy' => $state->prophecy + $groupsOf5]);
+            $events[] = ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => $groupsOf5]];
         }
 
         $drawPile = $state->golem['draw_pile'];
@@ -2995,6 +3032,9 @@ final class GameEngine
             $state = $state->with(['golem' => $state->golemWith(['glyphs' => $glyphs])]);
         }
 
+        $state = $state->with(['prophecy' => $state->prophecy + 1]);
+        $events[] = ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => 1]];
+
         [$state, $cardEvents] = self::golemPlayCards($state, 3);
         $events = [...$events, ...$cardEvents];
 
@@ -3025,9 +3065,12 @@ final class GameEngine
             return [$state, [], false];
         }
 
-        $state = $state->with(['golem' => $state->golemWith(['cell' => null]), 'golemSkipped' => true]);
+        $state = $state->with(['golem' => $state->golemWith(['cell' => null]), 'golemSkipped' => true, 'prophecy' => $state->prophecy + 3]);
 
-        return [$state, [['type' => 'golem_removed', 'role_key' => null, 'payload' => []]], true];
+        return [$state, [
+            ['type' => 'golem_removed', 'role_key' => null, 'payload' => []],
+            ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => 3]],
+        ], true];
     }
 
     /**
@@ -3063,6 +3106,9 @@ final class GameEngine
             $state = self::trashEquippedRelic($state, $actorRole, $darkKey);
             $events[] = ['type' => 'relic_trashed', 'role_key' => $actorRole, 'payload' => ['relic_key' => $darkKey]];
         }
+
+        $state = $state->with(['prophecy' => $state->prophecy + 2]);
+        $events[] = ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => 2]];
 
         return [$state, $events, true];
     }
@@ -3244,6 +3290,9 @@ final class GameEngine
         $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['hp' => $hp])]);
         $events = [['type' => 'wanderer_damaged', 'role_key' => $actorRole, 'payload' => ['amount' => 2]]];
 
+        $state = $state->with(['prophecy' => $state->prophecy + 1]);
+        $events[] = ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => 1]];
+
         $performerRole = self::resolveAllyTarget($state, $actorRole, $move) ?? $actorRole;
         $otherRelicKey = (string) ($move['other_relic_key'] ?? '');
         $otherBaseKey = (string) preg_replace('/-\d+$/', '', $otherRelicKey);
@@ -3319,7 +3368,15 @@ final class GameEngine
             ...$playEvents,
         ];
 
-        return [$state, $events, count($tuckedCards['defanging-tool']) >= 3];
+        $doneThreeTimes = count($tuckedCards['defanging-tool']) >= 3;
+
+        // "After doing this 3 times, trash this and gain 📜📜📜."
+        if ($doneThreeTimes) {
+            $state = $state->with(['prophecy' => $state->prophecy + 3]);
+            $events[] = ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => 3]];
+        }
+
+        return [$state, $events, $doneThreeTimes];
     }
 
     /**
@@ -3376,6 +3433,9 @@ final class GameEngine
         $golem = $state->golem;
         $golem['discard_pile'] = [...$golem['discard_pile'], ...$tuckedCards['golem-log']];
         $state = $state->with(['golem' => $golem]);
+
+        $state = $state->with(['prophecy' => $state->prophecy + 1]);
+        $events[] = ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => 1]];
 
         return [$state, $events, true];
     }

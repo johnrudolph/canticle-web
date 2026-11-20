@@ -23,6 +23,7 @@ final class Location
         public readonly ?string $producesEmoji,
         public readonly array $costs,
         public readonly int $relicCount,
+        public readonly ?string $dealsFromBranch, // which Relic deck this Location's pile is dealt from — usually the same symbol as $producesEmoji, but not always (Beds of poison deals 🌑 Relics despite producing nothing adjacency-wise); null for the few Locations with dynamic, city-wide dealing (Bazaar, Library) instead of a fixed branch
         public readonly bool $isStarter,
         public readonly bool $hasShard,
         public readonly bool $hasTree,

@@ -20,7 +20,25 @@ test('Immolation rags trashes every equipped Relic (including itself) and costs 
 
     expect($state->wanderers['wanderer_a']['equipped'])->toBe(['body' => null, 'mind' => null, 'hand_left' => null, 'hand_right' => null, 'bag' => null])
         ->and($state->wanderers['wanderer_a']['hp'])->toBe(12) // 3 Relics trashed => -3
-        ->and(collect($events)->where('type', 'relic_trashed'))->toHaveCount(3);
+        ->and(collect($events)->where('type', 'relic_trashed'))->toHaveCount(3)
+        // "If you trashed 5 Relics doing this, gain 📜" — only 3 here.
+        ->and($state->prophecy)->toBe(0);
+});
+
+test('Immolation rags grants 1 Prophecy only when it trashes 5 Relics', function () {
+    $state = startedGame();
+    $equipped = [
+        'body' => 'immolation-rags', 'mind' => 'golem-whistle', 'hand_left' => 'burial-robes',
+        'hand_right' => 'last-rites', 'bag' => 'divine-aura',
+    ];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 15])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'immolation-rags']);
+
+    expect(collect($events)->where('type', 'relic_trashed'))->toHaveCount(5)
+        ->and($state->prophecy)->toBe(1)
+        ->and(collect($events)->pluck('type'))->toContain('prophecy_gained');
 });
 
 test('Immolation rags does not touch status tokens, only Relics', function () {
@@ -58,7 +76,29 @@ test('Divine Cabalist pyre burns chosen board Relics and heals everyone sharing 
         ->and($state->wanderers['wanderer_a']['hp'])->toBe(9) // 2 burned => +4
         ->and($state->wanderers['wanderer_b']['hp'])->toBe(9)
         ->and($state->wanderers['wanderer_a']['equipped']['bag'])->toBeNull()
-        ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
+        ->and(collect($events)->pluck('type'))->toContain('relic_trashed')
+        // "If you burn 10 Relics doing this, gain 📜📜" — only 2 here.
+        ->and($state->prophecy)->toBe(0);
+});
+
+test('Divine Cabalist pyre grants 2 Prophecy when it burns 10 Relics', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $burnable = array_fill(0, 10, 'golem-whistle');
+    $board['1,0'] = [...$board['1,0'], 'relics_face_up' => $burnable];
+    $state = $state->with(['board' => $board]);
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'bag' => 'divine-cabalist-pyre'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 5])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', [
+        'type' => 'use_relic', 'relic_key' => 'divine-cabalist-pyre',
+        'board_relic_keys' => $burnable,
+    ]);
+
+    expect($state->board['1,0']['relics_face_up'])->toBe([])
+        ->and($state->prophecy)->toBe(2)
+        ->and(collect($events)->pluck('type'))->toContain('prophecy_gained');
 });
 
 test('Divine Cabalist pyre still trashes itself even if nothing is burned', function () {
@@ -73,7 +113,8 @@ test('Divine Cabalist pyre still trashes itself even if nothing is burned', func
 
     expect($state->wanderers['wanderer_a']['hp'])->toBe(5)
         ->and($state->wanderers['wanderer_a']['equipped']['bag'])->toBeNull()
-        ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
+        ->and(collect($events)->pluck('type'))->toContain('relic_trashed')
+        ->and($state->prophecy)->toBe(0);
 });
 
 test('Show solidarity always trashes itself, counting toward every 5 Relics trashed for a Golem discard removal', function () {
@@ -106,7 +147,9 @@ test('Show solidarity always trashes itself, counting toward every 5 Relics tras
     // trash=true rather than handling its own trash like Immolation rags).
     expect($state->golem['discard_pile'])->toHaveCount(1)
         ->and($state->wanderers['wanderer_b']['equipped'])->toBe(['body' => null, 'mind' => null, 'hand_left' => null, 'hand_right' => null, 'bag' => null])
-        ->and(collect($events)->where('type', 'relic_trashed'))->toHaveCount(5);
+        ->and(collect($events)->where('type', 'relic_trashed'))->toHaveCount(5)
+        // "For every 5 Relics trashed... gain 📜" — exactly 1 group of 5 here.
+        ->and($state->prophecy)->toBe(1);
 });
 
 test('Show solidarity ignores a requested trash for a Wanderer not sharing the Golem\'s space', function () {

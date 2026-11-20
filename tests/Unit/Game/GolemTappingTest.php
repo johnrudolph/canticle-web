@@ -78,7 +78,31 @@ test('Whip of Justice taps one card per Golem Shame and trashes itself, only on 
 
     expect($tappedCount)->toBe(2)
         ->and($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBeNull()
-        ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
+        ->and(collect($events)->pluck('type'))->toContain('relic_trashed')
+        // "If you flipped 4 cards doing this, gain 📜" — only 2 flipped here.
+        ->and($state->prophecy)->toBe(0);
+});
+
+test('Whip of Justice grants 1 Prophecy only when it flips 4 cards', function () {
+    $state = startedGame();
+    $golem = $state->golem;
+    $golem['shame'] = 4;
+    $state = $state->with(['golem' => $golem]);
+
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'whip-of-justice'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', [
+        'equipped' => $equipped,
+        'cell' => $state->golem['cell'],
+    ])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'whip-of-justice']);
+
+    $tappedCount = count(array_filter($state->golem['draw_pile'], fn ($c) => $c['tapped']));
+
+    expect($tappedCount)->toBe(4)
+        ->and($state->prophecy)->toBe(1)
+        ->and(collect($events)->pluck('type'))->toContain('prophecy_gained');
 });
 
 test('Whip of Justice is rejected outright off the Golem\'s space', function () {
@@ -130,7 +154,9 @@ test('Blinding explosion damages everyone on/adjacent to the caster, conditional
         ->and($state->wanderers['wanderer_b']['hp'])->toBe($hpBeforeB - 5) // startedGame shares a cell
         ->and($tappedCount)->toBe(4) // Golem shares the caster's cell by default
         ->and($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBeNull()
-        ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
+        ->and(collect($events)->pluck('type'))->toContain('relic_trashed')
+        ->and($state->prophecy)->toBe(1)
+        ->and(collect($events)->pluck('type'))->toContain('prophecy_gained');
 });
 
 test('Soothing Lullaby requires the Golem\'s space and all 3 instruments equipped in it', function () {
@@ -158,5 +184,6 @@ test('Soothing Lullaby requires the Golem\'s space and all 3 instruments equippe
 
     expect($tappedCount)->toBe(3)
         ->and($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBeNull()
-        ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
+        ->and(collect($events)->pluck('type'))->toContain('relic_trashed')
+        ->and($state->prophecy)->toBe(1);
 });

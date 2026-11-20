@@ -128,6 +128,8 @@ export function WandererRelicPanel({
     isActive = false,
     allies,
     tuckLocationKey = null,
+    perplexingTargetLabel = null,
+    parallelAvailable = false,
     relicUnusableReasons = {},
     onUseInsightFromTheFuture,
 }: {
@@ -149,6 +151,18 @@ export function WandererRelicPanel({
      * Relic regardless of whether any actions remain.
      */
     tuckLocationKey?: 'bazaar' | 'cathedral' | null;
+    /**
+     * Set to the just-built Location's name when the Perplexing Glyph is
+     * active and one has been played this game — lets this Wanderer
+     * move there for free, any time, regardless of actions remaining.
+     */
+    perplexingTargetLabel?: string | null;
+    /**
+     * Set when the Parallel Glyph is active and hasn't been used yet
+     * this round — lets this Wanderer skip the next Golem card about to
+     * resolve, drawing a replacement instead, for free.
+     */
+    parallelAvailable?: boolean;
     /** Per equip-slot: why that Relic can't be used right now, or null if it can. Only the slots whose condition is checkable without a target are present. */
     relicUnusableReasons?: Record<string, string | null>;
     /**
@@ -206,6 +220,37 @@ export function WandererRelicPanel({
                 >
                     🌿 Rest (+2 Health)
                 </Button>
+            )}
+
+            {(perplexingTargetLabel || parallelAvailable) && (
+                <div className="mb-1.5 flex flex-wrap gap-1">
+                    {perplexingTargetLabel && (
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 flex-1 px-1.5 text-[10px]"
+                            disabled={processing}
+                            onClick={() =>
+                                onSubmit({ type: 'move_to_new_location' })
+                            }
+                        >
+                            Move to {perplexingTargetLabel} (Perplexing)
+                        </Button>
+                    )}
+                    {parallelAvailable && (
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 flex-1 px-1.5 text-[10px]"
+                            disabled={processing}
+                            onClick={() =>
+                                onSubmit({ type: 'skip_golem_card' })
+                            }
+                        >
+                            Skip next Golem card (Parallel)
+                        </Button>
+                    )}
+                </div>
             )}
 
             <div className="grid grid-cols-2 gap-1">

@@ -74,7 +74,8 @@ test('Cabalist brew loses 2 Health, trashes itself, and triples the chosen Relic
         ->and($state->wanderers['wanderer_a']['equipped']['bag'])->toBeNull()
         ->and($state->wanderers['wanderer_a']['equipped']['body'])->toBe('divine-healing-oil') // no trash clause of its own
         ->and(collect($events)->pluck('type'))->toContain('wanderer_damaged')
-        ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
+        ->and(collect($events)->pluck('type'))->toContain('relic_trashed')
+        ->and($state->prophecy)->toBe(1);
 });
 
 test('Cabalist brew still costs the Health and trashes itself even with no valid Relic to triple', function () {
@@ -87,7 +88,8 @@ test('Cabalist brew still costs the Health and trashes itself even with no valid
 
     expect($state->wanderers['wanderer_a']['hp'])->toBe(8)
         ->and($state->wanderers['wanderer_a']['equipped']['bag'])->toBeNull()
-        ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
+        ->and(collect($events)->pluck('type'))->toContain('relic_trashed')
+        ->and($state->prophecy)->toBe(1);
 });
 
 test('Defanging tool tucks a card from the Golem\'s draw pile and makes it play 3, completing after the 3rd tuck', function () {
@@ -114,7 +116,9 @@ test('Defanging tool tucks a card from the Golem\'s draw pile and makes it play 
 
     expect($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBeNull()
         ->and(collect($events)->pluck('type'))->toContain('relic_trashed')
-        ->and(collect($events)->pluck('type'))->toContain('card_tucked');
+        ->and(collect($events)->pluck('type'))->toContain('card_tucked')
+        // "After doing this 3 times, trash this and gain 📜📜📜."
+        ->and($state->prophecy)->toBe(3);
 });
 
 test('Defanging tool is rejected outright off the Golem\'s space', function () {
@@ -167,7 +171,8 @@ test('Golem log looks at the top 3, tucks the chosen one, and moves all 3 to dis
 
     expect($state->wanderers['wanderer_a']['equipped']['bag'])->toBeNull()
         ->and($state->golem['discard_pile'])->toContain('spew', 'storm', 'scar')
-        ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
+        ->and(collect($events)->pluck('type'))->toContain('relic_trashed')
+        ->and($state->prophecy)->toBe(1);
 });
 
 test('Golem log does nothing for a card not actually in the top 3', function () {

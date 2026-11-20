@@ -44,7 +44,8 @@ test('Cabalist brand discards chosen Glyphs, makes the Golem play 3 cards, then 
         ->and(collect($events)->pluck('type'))->toContain('relic_trashed')
         ->and(collect($events)->pluck('type'))->toContain('golem_card_resolved')
         // 3 cards were popped off the revealed row, played, and discarded.
-        ->and(count($state->golem['discard_pile']))->toBe($discardCountBefore + 3);
+        ->and(count($state->golem['discard_pile']))->toBe($discardCountBefore + 3)
+        ->and($state->prophecy)->toBe(1);
 });
 
 test('Cabalist brand is rejected outright off the Golem\'s space', function () {

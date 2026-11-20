@@ -294,6 +294,8 @@ final readonly class GameState
             'prophecy' => $this->prophecy,
             'golem_skipped' => $this->golemSkipped,
             'pending_invigoration' => $this->pendingInvigoration,
+            'location_just_built_cell' => $this->locationJustBuiltCell,
+            'parallel_used_this_round' => $this->parallelUsedThisRound,
             'outcome' => $this->phase === 'finished' ? $this->outcome() : null,
         ];
     }

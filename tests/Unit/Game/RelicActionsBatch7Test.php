@@ -23,7 +23,9 @@ test('Poof removes the Golem and skips the Golem phase forever, once all 12 Mono
     expect($state->golem['cell'])->toBeNull()
         ->and($state->golemSkipped)->toBeTrue()
         ->and($state->wanderers['wanderer_a']['equipped']['bag'])->toBeNull()
-        ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
+        ->and(collect($events)->pluck('type'))->toContain('relic_trashed')
+        ->and($state->prophecy)->toBe(3)
+        ->and(collect($events)->pluck('type'))->toContain('prophecy_gained');
 });
 
 test('Poof is rejected outright short of all 12 Monolith Shards nearby', function () {
@@ -60,7 +62,8 @@ test('Scapegoat\'s catharsis damages Allies and trashes itself plus all 4 Dark R
     expect($state->wanderers['wanderer_b']['hp'])->toBe(5) // the Ally, sharing the hub cell
         ->and($state->wanderers['wanderer_a']['hp'])->toBe(15) // the caster is not an "Ally" to themselves
         ->and($state->wanderers['wanderer_a']['equipped'])->toBe(['body' => null, 'mind' => null, 'hand_left' => null, 'hand_right' => null, 'bag' => null])
-        ->and(collect($events)->where('type', 'relic_trashed'))->toHaveCount(5);
+        ->and(collect($events)->where('type', 'relic_trashed'))->toHaveCount(5)
+        ->and($state->prophecy)->toBe(2);
 });
 
 test('Scapegoat\'s catharsis is rejected outright without all 4 Dark Relics equipped', function () {

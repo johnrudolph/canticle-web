@@ -79,7 +79,8 @@ test('Pointed finger adds Shame to the Golem and the caster, then trashes itself
     expect($state->golem['shame'])->toBe($shameBefore + 1)
         ->and($state->wanderers['wanderer_a']['equipped'])->toContain('shame_token')
         ->and($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBeNull()
-        ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
+        ->and(collect($events)->pluck('type'))->toContain('relic_trashed')
+        ->and($state->prophecy)->toBe(1);
 });
 
 test('Divine aura heals everyone on/adjacent to a Monolith Shard space by 3', function () {

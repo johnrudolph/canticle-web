@@ -1287,6 +1287,30 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                 myRoles.includes(role) &&
                                 (tuckLocationKey === 'bazaar' ||
                                     tuckLocationKey === 'cathedral');
+                            const isActiveAndMine =
+                                isActive && myRoles.includes(role);
+                            const perplexingTargetCell =
+                                state.location_just_built_cell;
+                            const perplexingTargetKey = perplexingTargetCell
+                                ? state.board[cellKey(perplexingTargetCell)]
+                                      ?.location_key
+                                : undefined;
+                            const perplexingTargetLabel =
+                                isActiveAndMine &&
+                                state.golem.glyphs.includes('perplexing') &&
+                                perplexingTargetCell &&
+                                (!wanderer.cell ||
+                                    cellKey(wanderer.cell) !==
+                                        cellKey(perplexingTargetCell))
+                                    ? (locationCatalog[
+                                          perplexingTargetKey ?? ''
+                                      ]?.name ?? null)
+                                    : null;
+                            const parallelAvailable =
+                                isActiveAndMine &&
+                                state.golem.glyphs.includes('parallel') &&
+                                !state.parallel_used_this_round &&
+                                state.golem.revealed.length > 0;
                             const allies = Object.entries(state.wanderers)
                                 .filter(
                                     ([otherRole, other]) =>
@@ -1335,6 +1359,10 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                                   | 'cathedral')
                                             : null
                                     }
+                                    perplexingTargetLabel={
+                                        perplexingTargetLabel
+                                    }
+                                    parallelAvailable={parallelAvailable}
                                     relicUnusableReasons={
                                         state.active_wanderer_relic_reasons
                                     }

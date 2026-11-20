@@ -53,6 +53,7 @@ final class LocationCatalog
                 producesEmoji: self::nullableText($row['produces_emoji'] ?? null),
                 costs: $costs,
                 relicCount: self::leadingInt($row['Relics'] ?? null),
+                dealsFromBranch: self::dealsFromBranch($row['Relics'] ?? null),
                 isStarter: ($row['is_starter'] ?? null) === 'Show',
                 hasShard: ($row['has_shard'] ?? null) === 'Show',
                 hasTree: ($row['has_tree'] ?? null) === 'Show',
@@ -84,5 +85,29 @@ final class LocationCatalog
         $text = trim((string) $value);
 
         return preg_match('/^(\d+)/', $text, $m) === 1 ? (int) $m[1] : 0;
+    }
+
+    /**
+     * Which Relic deck's branch symbol a Location's pile actually comes
+     * from — NOT always the same as $producesEmoji. Most Locations'
+     * "Relics" column is "<count> <symbol>" where the symbol happens to
+     * match what they produce (e.g. "6 🎨" for an Art Location that also
+     * produces 🎨), but a couple (Beds of poison: "6 🌑" despite
+     * producing nothing adjacency-wise) deal from a branch unrelated to
+     * their own production. Dynamic, city-wide dealing text ("1 of each
+     * type already produced by the city" — Bazaar, Library) has no fixed
+     * symbol at all; those are handled by RelicDealer's own special-cased
+     * dealing instead, so this returns null for them.
+     */
+    private static function dealsFromBranch(mixed $value): ?string
+    {
+        $text = trim((string) $value);
+        $withoutCount = trim((string) preg_replace('/^\d+\s*/', '', $text));
+
+        if ($withoutCount === '' || str_contains($withoutCount, 'already produced')) {
+            return null;
+        }
+
+        return $withoutCount;
     }
 }
