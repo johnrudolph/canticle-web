@@ -86,6 +86,11 @@ export interface GameStateDto {
     pending_invigoration: RoleKey | null;
     pending_rift_in_time: RoleKey | null;
     pending_epiphany: RoleKey | null;
+    pending_golem_card_choice: {
+        type: 'trash_relic' | 'move_direction';
+        card_key: string;
+        awaiting: RoleKey[];
+    } | null;
     location_just_built_cell: [number, number] | null;
     parallel_used_this_round: boolean;
     outcome: 'elite_victory' | 'simple_victory' | 'defeat' | null;

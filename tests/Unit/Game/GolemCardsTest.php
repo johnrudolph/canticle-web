@@ -1,6 +1,8 @@
 <?php
 
 use App\Game\Board;
+use App\Game\GameEngine;
+use App\Game\InvalidMoveException;
 
 // startedGame() (GameEngineTest.php) and resolveGolemCardForTest()
 // (StatusTokensTest.php) are declared in sibling files, loaded in the
@@ -121,6 +123,130 @@ test('Sacrifice of Possessions trashes one equipped Relic from every Wanderer', 
 
     expect($state->wanderers['wanderer_a']['equipped']['body'])->toBeNull()
         ->and($state->wanderers['wanderer_b']['equipped']['mind'])->toBeNull();
+});
+
+test('Fire storm pauses for a Relic choice per hurt Wanderer who has one equipped, instead of auto-trashing', function () {
+    $state = startedGame();
+    $wanderers = $state->wanderersWith('wanderer_a', [
+        'equipped' => [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'burial-robes'],
+    ]);
+    $wanderers['wanderer_b']['equipped']['mind'] = 'golem-whistle';
+    $state = $state->with(['wanderers' => $wanderers]);
+
+    [$state, $events] = resolveGolemCardForTest($state, 'fire-storm', true);
+
+    expect($state->wanderers['wanderer_a']['equipped']['body'])->toBe('burial-robes')
+        ->and($state->wanderers['wanderer_b']['equipped']['mind'])->toBe('golem-whistle')
+        ->and(collect($events)->pluck('type'))->not->toContain('relic_trashed')
+        ->and($state->pendingGolemCardChoice)->not->toBeNull()
+        ->and($state->pendingGolemCardChoice['type'])->toBe('trash_relic')
+        ->and($state->pendingGolemCardChoice['card_key'])->toBe('fire-storm')
+        ->and($state->pendingGolemCardChoice['awaiting'])->toEqualCanonicalizing(['wanderer_a', 'wanderer_b']);
+});
+
+test('Fire storm does not pause for a hurt Wanderer with no equipped Relic to trash', function () {
+    $state = startedGame();
+
+    [$state] = resolveGolemCardForTest($state, 'fire-storm', true);
+
+    expect($state->pendingGolemCardChoice)->toBeNull();
+});
+
+test('resolve_golem_card_choice lets each awaiting Wanderer pick their own Relic to trash, resolving once everyone has answered', function () {
+    $state = startedGame();
+    $wanderers = $state->wanderersWith('wanderer_a', [
+        'equipped' => [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'burial-robes'],
+    ]);
+    $wanderers['wanderer_b']['equipped']['mind'] = 'golem-whistle';
+    $state = $state->with(['wanderers' => $wanderers]);
+
+    [$state] = resolveGolemCardForTest($state, 'fire-storm', true);
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', [
+        'type' => 'resolve_golem_card_choice', 'relic_key' => 'golem-whistle',
+    ]))->toThrow(InvalidMoveException::class);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', [
+        'type' => 'resolve_golem_card_choice', 'relic_key' => 'burial-robes',
+    ]);
+
+    expect($state->wanderers['wanderer_a']['equipped']['body'])->toBeNull()
+        ->and($state->pendingGolemCardChoice['awaiting'])->toBe(['wanderer_b'])
+        ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_b', [
+        'type' => 'resolve_golem_card_choice', 'relic_key' => 'golem-whistle',
+    ]);
+
+    expect($state->wanderers['wanderer_b']['equipped']['mind'])->toBeNull()
+        ->and($state->pendingGolemCardChoice)->toBeNull()
+        ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
+});
+
+test('while a Golem card choice is pending, every other move type is rejected', function () {
+    $state = startedGame();
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', [
+        'equipped' => [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'burial-robes'],
+    ])]);
+
+    [$state] = resolveGolemCardForTest($state, 'fire-storm', true);
+
+    expect($state->pendingGolemCardChoice)->not->toBeNull();
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'end_wanderer_turn']))
+        ->toThrow(InvalidMoveException::class);
+});
+
+test('Roar pauses for a direction choice for every affected Wanderer who has somewhere valid to flee', function () {
+    $state = startedGame();
+
+    [$state, $events] = resolveGolemCardForTest($state, 'roar', true);
+
+    expect($state->wanderers['wanderer_a']['cell'])->toBe([1, 0])
+        ->and($state->wanderers['wanderer_b']['cell'])->toBe([1, 0])
+        ->and(collect($events)->pluck('type'))->not->toContain('wanderer_moved')
+        ->and($state->pendingGolemCardChoice)->not->toBeNull()
+        ->and($state->pendingGolemCardChoice['type'])->toBe('move_direction')
+        ->and($state->pendingGolemCardChoice['card_key'])->toBe('roar')
+        ->and($state->pendingGolemCardChoice['awaiting'])->toEqualCanonicalizing(['wanderer_a', 'wanderer_b']);
+});
+
+test('resolve_golem_card_choice moves an awaiting Wanderer one space in the chosen direction for Roar', function () {
+    $state = startedGame();
+
+    [$state] = resolveGolemCardForTest($state, 'roar', true);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', [
+        'type' => 'resolve_golem_card_choice', 'direction' => 'SW',
+    ]);
+
+    expect($state->wanderers['wanderer_a']['cell'])->toBe(Board::neighbor([1, 0], 'SW'))
+        ->and($state->pendingGolemCardChoice['awaiting'])->toBe(['wanderer_b'])
+        ->and(collect($events)->pluck('type'))->toContain('wanderer_moved');
+
+    [$state] = GameEngine::apply($state, 'wanderer_b', [
+        'type' => 'resolve_golem_card_choice', 'direction' => 'NE',
+    ]);
+
+    expect($state->pendingGolemCardChoice)->toBeNull();
+});
+
+test('Sacrifice of Possessions pauses for a Relic choice per Wanderer who has one equipped', function () {
+    $state = startedGame();
+    $wanderers = $state->wanderersWith('wanderer_a', [
+        'equipped' => [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'burial-robes'],
+    ]);
+    $wanderers['wanderer_b']['equipped']['mind'] = 'golem-whistle';
+    $state = $state->with(['wanderers' => $wanderers]);
+
+    [$state] = resolveGolemCardForTest($state, 'sacrifice-of-possessions', true);
+
+    expect($state->wanderers['wanderer_a']['equipped']['body'])->toBe('burial-robes')
+        ->and($state->wanderers['wanderer_b']['equipped']['mind'])->toBe('golem-whistle')
+        ->and($state->pendingGolemCardChoice)->not->toBeNull()
+        ->and($state->pendingGolemCardChoice['type'])->toBe('trash_relic')
+        ->and($state->pendingGolemCardChoice['card_key'])->toBe('sacrifice-of-possessions')
+        ->and($state->pendingGolemCardChoice['awaiting'])->toEqualCanonicalizing(['wanderer_a', 'wanderer_b']);
 });
 
 test('Shard Devourer moves toward the nearest Monolith Shard, removes it, and damages around it', function () {

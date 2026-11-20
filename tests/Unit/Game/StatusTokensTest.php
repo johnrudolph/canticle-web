@@ -106,12 +106,12 @@ test('a status token only ever occupies an empty slot, never displacing a Relic'
         ->and($newState->wanderers['wanderer_a']['equipped'])->toBe($allFull);
 });
 
-function resolveGolemCardForTest(GameState $state, string $cardKey): array
+function resolveGolemCardForTest(GameState $state, string $cardKey, bool $allowPause = false): array
 {
     $reflection = new ReflectionMethod(GameEngine::class, 'resolveGolemCard');
     $reflection->setAccessible(true);
 
-    return $reflection->invoke(null, $state, $cardKey);
+    return $reflection->invoke(null, $state, $cardKey, $allowPause);
 }
 
 test('the Scar Golem card scars the nearest Wanderer', function () {

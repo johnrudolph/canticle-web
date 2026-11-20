@@ -95,6 +95,7 @@ final class GameStateRepository
             pendingRiftInTime: $data['pending_rift_in_time'] ?? null,
             pendingEpiphany: $data['pending_epiphany'] ?? null,
             pendingGolemLog: $data['pending_golem_log'] ?? null,
+            pendingGolemCardChoice: $data['pending_golem_card_choice_full'] ?? null,
         );
     }
 
@@ -132,6 +133,7 @@ final class GameStateRepository
                 'pending_rift_in_time' => $state->pendingRiftInTime,
                 'pending_epiphany' => $state->pendingEpiphany,
                 'pending_golem_log' => $state->pendingGolemLog,
+                'pending_golem_card_choice_full' => $state->pendingGolemCardChoice,
             ],
         ]);
     }

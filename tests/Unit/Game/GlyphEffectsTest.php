@@ -582,6 +582,12 @@ test('Paradoxical banks +1 action for every Wanderer after the Golem\'s first ca
     $reflection = new ReflectionMethod(GameEngine::class, 'resolveGolemPhase');
     $reflection->setAccessible(true);
     [$state] = $reflection->invoke(null, $state);
+    // A real shuffled deck can draw Fire storm/Roar/Sacrifice of
+    // Possessions among the cards after the pinned first one, pausing
+    // on a forced choice — resolve it before checking this test's own
+    // point (the banked bonus action), same as any other test that
+    // plays a real round.
+    $state = resolveAnyPendingGolemCardChoice($state);
 
     expect($state->wanderers['wanderer_a']['pending_bonus_actions'])->toBe(1)
         ->and($state->wanderers['wanderer_b']['pending_bonus_actions'])->toBe(1);

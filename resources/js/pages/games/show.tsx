@@ -37,7 +37,9 @@ import type {
 } from '@/lib/golem-turn-spotlight';
 import {
     cellKey,
+    DIRECTIONS,
     directionBetween,
+    neighbor,
     neighbors,
     placeableCells,
 } from '@/lib/hex';
@@ -1093,6 +1095,32 @@ export default function GameShow({ game }: { game: GameSummary }) {
                   cellData,
               }))
         : [];
+
+    const golemChoiceRole = state.pending_golem_card_choice?.awaiting.find(
+        (role) => myRoles.includes(role),
+    );
+    const golemChoiceCandidates: { key: string; label: string }[] =
+        golemChoiceRole &&
+        state.pending_golem_card_choice?.type === 'trash_relic'
+            ? Object.values(state.wanderers[golemChoiceRole].equipped)
+                  .filter((k): k is string => !!k && !k.endsWith('_token'))
+                  .map((k) => ({
+                      key: k,
+                      label: game.relic_catalog[k]?.name ?? k,
+                  }))
+            : golemChoiceRole &&
+                state.pending_golem_card_choice?.type === 'move_direction' &&
+                state.wanderers[golemChoiceRole].cell
+              ? DIRECTIONS.filter(
+                    (d) =>
+                        cellKey(
+                            neighbor(
+                                state.wanderers[golemChoiceRole].cell as Cell,
+                                d,
+                            ),
+                        ) in state.board,
+                ).map((d) => ({ key: d, label: d }))
+              : [];
 
     let highlightedCells = new Set<string>();
     let onCellClick: ((cell: Cell) => void) | undefined;
@@ -2552,6 +2580,46 @@ export default function GameShow({ game }: { game: GameSummary }) {
                         cell,
                     })
                 }
+            />
+
+            <RelicPickerDialog
+                open={!!golemChoiceRole}
+                title={
+                    game.golem_card_catalog[
+                        state.pending_golem_card_choice?.card_key ?? ''
+                    ]?.name ?? 'The Golem'
+                }
+                description={
+                    state.pending_golem_card_choice?.type === 'trash_relic'
+                        ? 'You must trash one of your equipped Relics.'
+                        : 'You must flee one space.'
+                }
+                candidates={golemChoiceCandidates}
+                relicCatalog={game.relic_catalog}
+                processing={processing}
+                confirmLabel={
+                    state.pending_golem_card_choice?.type === 'trash_relic'
+                        ? 'Trash'
+                        : 'Flee'
+                }
+                onConfirm={(keys) => {
+                    if (!golemChoiceRole || !state.pending_golem_card_choice)
+                        return;
+                    const key = keys[0];
+                    if (!key) return;
+                    submitMove(
+                        golemChoiceRole,
+                        state.pending_golem_card_choice.type === 'trash_relic'
+                            ? {
+                                  type: 'resolve_golem_card_choice',
+                                  relic_key: key,
+                              }
+                            : {
+                                  type: 'resolve_golem_card_choice',
+                                  direction: key,
+                              },
+                    );
+                }}
             />
 
             <GolemTurnSpotlightDialog

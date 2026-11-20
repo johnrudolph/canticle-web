@@ -99,6 +99,7 @@ final readonly class GameState
      * @param  list<string>  $trashedRelics
      * @param  list<array{cell: array{0: int, 1: int}, type: string}>  $infrastructurePlacedThisTurnLog
      * @param  array{0: int, 1: int}|null  $locationJustBuiltCell
+     * @param  array{type: string, card_key: string, awaiting: list<string>, remaining_cards: int}|null  $pendingGolemCardChoice
      */
     public function __construct(
         public int $wandererCount,
@@ -129,6 +130,7 @@ final readonly class GameState
         public ?string $pendingRiftInTime = null, // Rift in time's "choose a face-up Glyph to replace" choice — same can't-supply-it-in-the-same-move problem as Invigoration; resolved via resolve_rift_in_time
         public ?string $pendingEpiphany = null, // Epiphany's "choose another Location to search as if you were there" choice — same problem again; resolved via resolve_epiphany
         public ?string $pendingGolemLog = null, // Golem log's "look at the top 3 cards, then tuck one" choice — same problem again; resolved via resolve_golem_log
+        public ?array $pendingGolemCardChoice = null, // Fire storm/Roar/Sacrifice of Possessions force each affected Wanderer to choose something mid-Golem-phase; {type: 'trash_relic'|'move_direction', card_key: string, awaiting: list<string>, remaining_cards: int} — pauses the whole Golem phase (and the round) until everyone in `awaiting` has responded via resolve_golem_card_choice
     ) {}
 
     /**
@@ -300,6 +302,11 @@ final readonly class GameState
             'pending_rift_in_time' => $this->pendingRiftInTime,
             'pending_epiphany' => $this->pendingEpiphany,
             'pending_golem_log' => $this->pendingGolemLog,
+            'pending_golem_card_choice' => $this->pendingGolemCardChoice === null ? null : [
+                'type' => $this->pendingGolemCardChoice['type'],
+                'card_key' => $this->pendingGolemCardChoice['card_key'],
+                'awaiting' => $this->pendingGolemCardChoice['awaiting'],
+            ],
             'location_just_built_cell' => $this->locationJustBuiltCell,
             'parallel_used_this_round' => $this->parallelUsedThisRound,
             'outcome' => $this->phase === 'finished' ? $this->outcome() : null,

@@ -38,6 +38,15 @@ final class GameEngine
      */
     public static function apply(GameState $state, string $actorRole, array $move): array
     {
+        // Fire storm/Roar/Sacrifice of Possessions freeze the entire
+        // game (not just one Wanderer's turn, unlike every other
+        // pendingXxx field) the moment they force a choice — the round
+        // itself hasn't finished resolving, so nothing else is safe to
+        // do until every awaited Wanderer has responded.
+        if ($state->pendingGolemCardChoice !== null && ($move['type'] ?? null) !== 'resolve_golem_card_choice') {
+            throw new InvalidMoveException('The Golem\'s card is waiting on a choice before anything else can happen.');
+        }
+
         return match ($move['type'] ?? null) {
             'choose_starting_cell' => self::chooseStartingCell($state, $actorRole, $move),
             'choose_golem_cell' => self::chooseGolemCell($state, $actorRole, $move),
@@ -67,6 +76,7 @@ final class GameEngine
             'resolve_rift_in_time' => self::resolveRiftInTime($state, $actorRole, $move),
             'resolve_epiphany' => self::resolveEpiphany($state, $actorRole, $move),
             'resolve_golem_log' => self::resolveGolemLog($state, $actorRole, $move),
+            'resolve_golem_card_choice' => self::resolveGolemCardChoice($state, $actorRole, $move),
             'end_wanderer_turn' => self::endWandererTurn($state, $actorRole),
             default => throw new InvalidMoveException('Unknown move type.'),
         };
@@ -4370,6 +4380,28 @@ final class GameEngine
             ? [$state, []]
             : self::resolveGolemPhase($state);
 
+        // Fire storm/Roar/Sacrifice of Possessions forced a choice —
+        // the round genuinely isn't over yet. resolveGolemCardChoice()
+        // picks the rest of this up (remaining cards, then everything
+        // below) once every awaited Wanderer has responded.
+        if ($state->pendingGolemCardChoice !== null) {
+            return [$state, $events];
+        }
+
+        return self::finishRoundAfterGolemPhase($state, $events);
+    }
+
+    /**
+     * Everything endRound() does once the Golem phase (including any
+     * forced mid-phase choice) is fully resolved — factored out so
+     * resolveGolemCardChoice() can run the exact same tail once it
+     * finishes resuming, instead of duplicating it.
+     *
+     * @param  list<array{type: string, role_key: ?string, payload: array<string, mixed>}>  $events
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function finishRoundAfterGolemPhase(GameState $state, array $events): array
+    {
         if ($state->round >= self::ROUND_LIMIT) {
             [$state, $scoringEvents] = self::applyEndOfGameScoring($state);
             $state = $state->with(['phase' => 'finished', 'activeWandererIndex' => null]);
@@ -4433,6 +4465,80 @@ final class GameEngine
         $events[] = ['type' => 'round_started', 'role_key' => null, 'payload' => ['round' => $nextRound]];
 
         return [$state, $events];
+    }
+
+    /**
+     * Resolves one Wanderer's response to a pendingGolemCardChoice
+     * (Fire storm/Sacrifice of Possessions: which Relic to trash;
+     * Roar: which direction to flee). An invalid choice (a Relic not
+     * actually equipped, a direction leading nowhere/blocked) is a
+     * no-op for that Wanderer specifically — same "no-op rather than
+     * reject" handling as every other pendingXxx resolve move — but
+     * still counts as decided, so a bad choice can't deadlock the
+     * round for everyone else.
+     *
+     * Once every awaited Wanderer has responded, resumes the Golem
+     * phase (whatever cards were still owed) and then runs the exact
+     * same round-end tail endRound() would have — this move might
+     * finish the round, possibly even the game.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function resolveGolemCardChoice(GameState $state, string $actorRole, array $move): array
+    {
+        $pending = $state->pendingGolemCardChoice;
+
+        if ($pending === null || ! in_array($actorRole, $pending['awaiting'], true)) {
+            throw new InvalidMoveException('There is no Golem card choice pending for you.');
+        }
+
+        $events = [];
+
+        if ($pending['type'] === 'trash_relic') {
+            $relicKey = (string) ($move['relic_key'] ?? '');
+
+            if ($relicKey === '' || self::isStatusToken($relicKey) || ! in_array($relicKey, $state->wanderers[$actorRole]['equipped'], true)) {
+                throw new InvalidMoveException('That is not one of your equipped Relics.');
+            }
+
+            $state = self::trashEquippedRelic($state, $actorRole, $relicKey);
+            $events[] = ['type' => 'relic_trashed', 'role_key' => $actorRole, 'payload' => ['relic_key' => $relicKey]];
+        } elseif ($pending['type'] === 'move_direction') {
+            $direction = (string) ($move['direction'] ?? '');
+            $cell = $state->wanderers[$actorRole]['cell'];
+            $destination = $direction !== '' && $cell !== null ? Board::neighbor($cell, $direction) : null;
+
+            if ($destination === null
+                || ! array_key_exists(Board::key($destination), $state->board)
+                || self::catacombsBlocks($state, $actorRole, $destination)
+            ) {
+                throw new InvalidMoveException('You cannot flee in that direction.');
+            }
+
+            $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['cell' => $destination])]);
+            $events[] = ['type' => 'wanderer_moved', 'role_key' => $actorRole, 'payload' => ['to' => $destination, 'forced' => true]];
+        }
+
+        $awaiting = array_values(array_diff($pending['awaiting'], [$actorRole]));
+
+        if ($awaiting !== []) {
+            $state = $state->with(['pendingGolemCardChoice' => [...$pending, 'awaiting' => $awaiting]]);
+
+            return [$state, $events];
+        }
+
+        $remainingCards = $pending['remaining_cards'];
+        $state = $state->with(['pendingGolemCardChoice' => null]);
+
+        [$state, $moreEvents] = self::golemPlayCards($state, $remainingCards, true);
+        $events = [...$events, ...$moreEvents];
+
+        if ($state->pendingGolemCardChoice !== null) {
+            return [$state, $events]; // hit another forced choice further on
+        }
+
+        return self::finishRoundAfterGolemPhase($state, $events);
     }
 
     /**
@@ -4556,10 +4662,10 @@ final class GameEngine
         // calls elsewhere (Cabalist brand, Reactive, etc.) that
         // aren't the Golem Phase itself.
         if (! in_array('paradoxical', $state->golem['glyphs'], true) || $count <= 0) {
-            return self::golemPlayCards($state, $count);
+            return self::golemPlayCards($state, $count, true);
         }
 
-        [$state, $events] = self::golemPlayCards($state, 1);
+        [$state, $events] = self::golemPlayCards($state, 1, true);
 
         foreach (self::activeWanderers($state) as $role => $cell) {
             $state = $state->with(['wanderers' => $state->wanderersWith($role, [
@@ -4567,7 +4673,20 @@ final class GameEngine
             ])]);
         }
 
-        [$state, $restEvents] = self::golemPlayCards($state, $count - 1);
+        // The first card already forced a choice (pendingGolemCardChoice
+        // is set) — stash the remaining count - 1 cards there instead of
+        // playing them now; resolveGolemCardChoice() plays them once
+        // everyone's decided.
+        if ($state->pendingGolemCardChoice !== null) {
+            $state = $state->with(['pendingGolemCardChoice' => [
+                ...$state->pendingGolemCardChoice,
+                'remaining_cards' => $count - 1,
+            ]]);
+
+            return [$state, $events];
+        }
+
+        [$state, $restEvents] = self::golemPlayCards($state, $count - 1, true);
 
         return [$state, [...$events, ...$restEvents]];
     }
@@ -4581,7 +4700,7 @@ final class GameEngine
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
-    private static function golemPlayCards(GameState $state, int $count): array
+    private static function golemPlayCards(GameState $state, int $count, bool $allowPause = false): array
     {
         $events = [];
 
@@ -4606,7 +4725,7 @@ final class GameEngine
             $adaptiveInPlay = in_array('adaptive', $state->golem['glyphs'], true);
             $hpBeforeAdaptive = $adaptiveInPlay ? array_map(fn (array $w) => $w['hp'], $state->wanderers) : [];
 
-            [$state, $cardEvents, $effects] = self::resolveOrSkipTappedCard($state, $cardEntry);
+            [$state, $cardEvents, $effects] = self::resolveOrSkipTappedCard($state, $cardEntry, $allowPause);
             $events = [...$events, ...$cardEvents];
 
             [$state, $forgivingEvents] = self::applyForgivingHeal($state);
@@ -4656,6 +4775,27 @@ final class GameEngine
             }
 
             $state = self::refillGolemRevealed($state);
+
+            // Fire storm/Roar/Sacrifice of Possessions each force every
+            // affected Wanderer to choose something (which Relic to
+            // trash, which direction to flee) — parked on
+            // pendingGolemCardChoice instead of auto-picking, same
+            // can't-decide-it-for-them problem as every other pendingXxx
+            // field, but this one pauses the Golem's own card-resolution
+            // loop rather than a single Relic's. Only honored when
+            // $allowPause is true (the Golem's own phase) — Relic/Glyph-
+            // triggered extra plays elsewhere (Cabalist brand, Reactive,
+            // Time Paradox's bottom draws, Double Down's doubled card)
+            // keep the old auto-pick simplification rather than also
+            // having to pause and resume THEIR OWN surrounding
+            // post-processing, which this doesn't attempt to support.
+            if ($allowPause && $state->pendingGolemCardChoice !== null) {
+                $state = $state->with(['pendingGolemCardChoice' => [
+                    ...$state->pendingGolemCardChoice,
+                    'remaining_cards' => $count - $i - 1,
+                ]]);
+                break;
+            }
         }
 
         return [$state, $events];
@@ -4732,7 +4872,7 @@ final class GameEngine
      * @param  array{key: string, tapped: bool}  $cardEntry
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: array{double_next: bool, extra_from_bottom: int}}
      */
-    private static function resolveOrSkipTappedCard(GameState $state, array $cardEntry): array
+    private static function resolveOrSkipTappedCard(GameState $state, array $cardEntry, bool $allowPause = false): array
     {
         $card = GolemCardCatalog::find($cardEntry['key']);
         $isAttackCard = $card !== null && str_contains($card->action, '👊');
@@ -4760,7 +4900,7 @@ final class GameEngine
                 $events = [...$events, ...$fearfulEvents];
             }
         } else {
-            [$state, $events, $effects] = self::resolveGolemCard($state, $cardEntry['key']);
+            [$state, $events, $effects] = self::resolveGolemCard($state, $cardEntry['key'], $allowPause);
         }
 
         if ($isAttackCard) {
@@ -4877,7 +5017,7 @@ final class GameEngine
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: array{double_next: bool, extra_from_bottom: int}}
      */
-    private static function resolveGolemCard(GameState $state, string $cardKey): array
+    private static function resolveGolemCard(GameState $state, string $cardKey, bool $allowPause = false): array
     {
         $card = GolemCardCatalog::find($cardKey);
         $baseKey = (string) preg_replace('/-\d+$/', '', $cardKey);
@@ -5005,7 +5145,7 @@ final class GameEngine
                 break;
 
             case 'fire-storm':
-                [$state, $e] = self::golemFireStorm($state);
+                [$state, $e] = self::golemFireStorm($state, $allowPause);
                 $events = [...$events, ...$e];
                 break;
 
@@ -5025,12 +5165,12 @@ final class GameEngine
                 break;
 
             case 'roar':
-                [$state, $e] = self::golemRoar($state);
+                [$state, $e] = self::golemRoar($state, $allowPause);
                 $events = [...$events, ...$e];
                 break;
 
             case 'sacrifice-of-possessions':
-                [$state, $e] = self::golemSacrificeOfPossessions($state);
+                [$state, $e] = self::golemSacrificeOfPossessions($state, $allowPause);
                 $events = [...$events, ...$e];
                 break;
 
@@ -5353,14 +5493,19 @@ final class GameEngine
 
     /**
      * Fire storm: 👊3 to Wanderers on/adjacent to the Golem's space; each
-     * who lost Health as a result trashes one equipped Relic.
+     * who lost Health as a result trashes one equipped Relic. When
+     * $allowPause is true (the Golem's own phase), that choice is a
+     * real pendingGolemCardChoice instead of auto-picking the first
+     * slot — see golemPlayCards()'s own doc comment for the scope of
+     * where $allowPause is actually honored.
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
-    private static function golemFireStorm(GameState $state): array
+    private static function golemFireStorm(GameState $state, bool $allowPause = false): array
     {
         $cellKeys = array_map(Board::key(...), self::golemCellsOnAndAdjacent($state));
         $events = [];
+        $mustTrash = [];
 
         foreach (self::activeWanderers($state) as $role => $cell) {
             if (! in_array(Board::key($cell), $cellKeys, true)) {
@@ -5375,9 +5520,51 @@ final class GameEngine
             // against actual HP lost, not just hpBefore > 0, since Dark
             // Relics/Poison Charm can reduce this hit's real damage to 0.
             if ($state->wanderers[$role]['hp'] < $hpBefore) {
+                $mustTrash[] = $role;
+            }
+        }
+
+        return self::forceRelicTrashChoice($state, $events, $mustTrash, $allowPause, 'fire-storm');
+    }
+
+    /**
+     * Shared tail for Fire storm/Sacrifice of Possessions: every role
+     * in $mustTrash has at least one real Relic to lose. With
+     * $allowPause, parks it on pendingGolemCardChoice (only for
+     * whichever of those roles actually has a non-token Relic equipped
+     * — nothing to choose between otherwise); without it, falls back
+     * to the pre-existing auto-pick.
+     *
+     * @param  list<string>  $mustTrash
+     * @param  list<array{type: string, role_key: ?string, payload: array<string, mixed>}>  $events
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function forceRelicTrashChoice(GameState $state, array $events, array $mustTrash, bool $allowPause, string $cardKey): array
+    {
+        if (! $allowPause) {
+            foreach ($mustTrash as $role) {
                 [$state, $e] = self::trashFirstEquippedRelic($state, $role);
                 $events = [...$events, ...$e];
             }
+
+            return [$state, $events];
+        }
+
+        $awaiting = array_values(array_filter(
+            $mustTrash,
+            fn (string $role) => count(array_filter(
+                $state->wanderers[$role]['equipped'],
+                fn (mixed $v) => $v !== null && ! self::isStatusToken($v)
+            )) > 0
+        ));
+
+        if ($awaiting !== []) {
+            $state = $state->with(['pendingGolemCardChoice' => [
+                'type' => 'trash_relic',
+                'card_key' => $cardKey,
+                'awaiting' => $awaiting,
+                'remaining_cards' => 0,
+            ]]);
         }
 
         return [$state, $events];
@@ -5497,13 +5684,15 @@ final class GameEngine
 
     /**
      * Roar: 👊3 to Wanderers on/adjacent to the Golem's space; each must
-     * then move 1 space away. "A direction they choose" is simplified to
-     * the neighboring space farthest from the Golem (ties broken by
-     * iteration order).
+     * then move 1 space away. With $allowPause (the Golem's own phase),
+     * "a direction they choose" is a real pendingGolemCardChoice;
+     * without it, simplified to the neighboring space farthest from the
+     * Golem (ties broken by iteration order) — same scope as
+     * golemFireStorm()'s $allowPause.
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
-    private static function golemRoar(GameState $state): array
+    private static function golemRoar(GameState $state, bool $allowPause = false): array
     {
         $golemCell = $state->golem['cell'];
         $cellKeys = array_map(Board::key(...), self::golemCellsOnAndAdjacent($state));
@@ -5520,7 +5709,36 @@ final class GameEngine
             $affectedRoles[] = $role;
         }
 
-        foreach ($affectedRoles as $role) {
+        // Only roles with at least one valid space to flee to have a
+        // real choice to make — everyone else (fully boxed in by
+        // Catacombs/no neighbors) just doesn't move, same as before.
+        $awaiting = array_values(array_filter(
+            $affectedRoles,
+            function (string $role) use ($state) {
+                foreach (Board::occupiedNeighbors($state->wanderers[$role]['cell'], $state->board) as $option) {
+                    if (! self::catacombsBlocks($state, $role, $option)) {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+        ));
+
+        if ($allowPause) {
+            if ($awaiting !== []) {
+                $state = $state->with(['pendingGolemCardChoice' => [
+                    'type' => 'move_direction',
+                    'card_key' => 'roar',
+                    'awaiting' => $awaiting,
+                    'remaining_cards' => 0,
+                ]]);
+            }
+
+            return [$state, $events];
+        }
+
+        foreach ($awaiting as $role) {
             $cell = $state->wanderers[$role]['cell'];
             $best = null;
             $bestDistance = -1;
@@ -5551,20 +5769,16 @@ final class GameEngine
 
     /**
      * Sacrifice of Possessions: every Wanderer trashes one equipped
-     * Relic.
+     * Relic. See golemFireStorm()/forceRelicTrashChoice() for the
+     * $allowPause behavior.
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
-    private static function golemSacrificeOfPossessions(GameState $state): array
+    private static function golemSacrificeOfPossessions(GameState $state, bool $allowPause = false): array
     {
-        $events = [];
+        $mustTrash = array_keys(self::activeWanderers($state));
 
-        foreach (self::activeWanderers($state) as $role => $cell) {
-            [$state, $e] = self::trashFirstEquippedRelic($state, $role);
-            $events = [...$events, ...$e];
-        }
-
-        return [$state, $events];
+        return self::forceRelicTrashChoice($state, [], $mustTrash, $allowPause, 'sacrifice-of-possessions');
     }
 
     /**
