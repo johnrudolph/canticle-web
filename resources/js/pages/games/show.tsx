@@ -167,6 +167,12 @@ export default function GameShow({ game }: { game: GameSummary }) {
         role: RoleKey;
         cardKeys: string[];
     } | null>(null);
+    // Revelatory Glyph: "When moving, Wanderers may choose to lose any
+    // amount of Health. +1 action for each Health lost." Not a move
+    // type of its own — just an extra field on the next move_wanderer
+    // click — so it's staged here rather than prompted through a
+    // dialog, reset back to 0 once spent.
+    const [revelatorySacrificeHp, setRevelatorySacrificeHp] = useState(0);
     const [eventRelicQueue, setEventRelicQueue] = useState<
         { role: RoleKey; relicKey: string }[]
     >([]);
@@ -1203,10 +1209,15 @@ export default function GameShow({ game }: { game: GameSummary }) {
             onCellClick = (cell) => {
                 const direction = directionBetween(mine.cell as Cell, cell);
                 if (direction) {
+                    const sacrifice = state.golem.glyphs.includes('revelatory')
+                        ? revelatorySacrificeHp
+                        : 0;
                     submitMove(state.active_wanderer_role as RoleKey, {
                         type: 'move_wanderer',
                         direction,
+                        ...(sacrifice > 0 ? { sacrifice_hp: sacrifice } : {}),
                     });
+                    setRevelatorySacrificeHp(0);
                 }
             };
         }
@@ -1238,6 +1249,45 @@ export default function GameShow({ game }: { game: GameSummary }) {
                             </Button>
                         </div>
                     )}
+                    {!boardPick &&
+                        state &&
+                        state.phase === 'wanderer' &&
+                        state.golem.glyphs.includes('revelatory') &&
+                        state.active_wanderer_role &&
+                        myRoles.includes(state.active_wanderer_role) && (
+                            <div className="absolute top-2 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-xs shadow-md">
+                                <span>
+                                    Revelatory: sacrifice Health for your next
+                                    move?
+                                </span>
+                                <input
+                                    type="number"
+                                    min={0}
+                                    max={Math.max(
+                                        0,
+                                        state.wanderers[
+                                            state.active_wanderer_role
+                                        ].hp - 1,
+                                    )}
+                                    value={revelatorySacrificeHp}
+                                    onChange={(e) =>
+                                        setRevelatorySacrificeHp(
+                                            Math.max(
+                                                0,
+                                                parseInt(
+                                                    e.target.value || '0',
+                                                    10,
+                                                ),
+                                            ),
+                                        )
+                                    }
+                                    className="h-6 w-14 rounded border bg-background px-1 text-xs"
+                                />
+                                <span className="text-muted-foreground">
+                                    (+{revelatorySacrificeHp} actions)
+                                </span>
+                            </div>
+                        )}
                     <HexBoard
                         board={state.board}
                         locationCatalog={locationCatalog}

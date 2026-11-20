@@ -56,6 +56,27 @@ test('Hands of forgiveness removes every Shame and Scar token from the chosen Wa
         ->and($state->wanderers['wanderer_b']['equipped']['mind'])->toBeNull();
 });
 
+test('Hands of forgiveness defaults to the caster themselves when no target_role is given', function () {
+    // Without an explicit target, this used to no-op entirely — there
+    // was no way to target yourself, only an Ally, even though "Choose
+    // a Wanderer in your space" explicitly includes the caster.
+    $state = startedGame();
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    $equipped = [
+        ...$state->wanderers['wanderer_a']['equipped'],
+        'hand_left' => 'hands-of-forgiveness', 'body' => 'shame_token', 'mind' => 'scar_token',
+    ];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', [
+        'type' => 'use_relic', 'relic_key' => 'hands-of-forgiveness',
+    ]);
+
+    expect($state->wanderers['wanderer_a']['equipped']['body'])->toBeNull()
+        ->and($state->wanderers['wanderer_a']['equipped']['mind'])->toBeNull();
+});
+
 test('Shame is capped at 3 tokens; further gains are a no-op', function () {
     $state = startedGame();
     $equipped = $state->wanderers['wanderer_a']['equipped'];

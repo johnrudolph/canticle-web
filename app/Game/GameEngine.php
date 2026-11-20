@@ -1946,11 +1946,13 @@ final class GameEngine
      */
     private static function relicRemoveAllStatus(GameState $state, string $actorRole, array $move): array
     {
-        $targetRole = self::resolveSameSpaceTarget($state, $actorRole, $move);
-
-        if ($targetRole === null) {
-            return [$state, []];
-        }
+        // Defaults to the caster themselves when no target_role is
+        // supplied, same as every other self-or-ally Relic (and its
+        // sibling relicRemoveStatus/Holy water) — without this, the
+        // plain "Use" button (no target) silently did nothing, and
+        // self-targeting was only reachable via a "Use on {ally}"
+        // button that, by definition, never offers yourself.
+        $targetRole = self::resolveSameSpaceTarget($state, $actorRole, $move) ?? $actorRole;
 
         $events = [];
         [$state, $e] = self::removeStatusToken($state, $targetRole, 'shame_token');
