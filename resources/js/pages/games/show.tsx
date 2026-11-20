@@ -600,7 +600,18 @@ export default function GameShow({ game }: { game: GameSummary }) {
         myRoles.includes(state.active_wanderer_role)
     ) {
         const mine = state.wanderers[state.active_wanderer_role];
-        if (mine.cell && mine.actions_remaining > 0 && mine.hp > 0) {
+        // Road: "Wanderers move from a space with a Road for free" —
+        // moving off a Road space never costs an action, so it must
+        // stay available even at 0 actions remaining, not just gated
+        // on actions_remaining > 0 like every other move.
+        const onRoad =
+            mine.cell !== null &&
+            state.board[cellKey(mine.cell)]?.infrastructure.includes('road');
+        if (
+            mine.cell &&
+            mine.hp > 0 &&
+            (mine.actions_remaining > 0 || onRoad)
+        ) {
             highlightedCells = new Set(
                 occupiedNeighbors(mine.cell, state.board).map(cellKey),
             );

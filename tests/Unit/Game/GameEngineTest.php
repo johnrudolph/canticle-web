@@ -560,6 +560,20 @@ test('starting a turn already on a Road makes that Wanderer\'s first move free t
         ->and($events[0]['payload']['free'])->toBeTrue();
 });
 
+test('moving from a Road space works even with 0 actions remaining, since it never costs one', function () {
+    $state = startedGame();
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'place_infrastructure', 'infrastructure_type' => 'road', 'cell' => [1, 0]]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['actions_remaining' => 0])]);
+
+    $direction = Board::directionBetween([1, 0], [0, 0]);
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $direction]);
+
+    expect($state->wanderers['wanderer_a']['cell'])->toBe([0, 0])
+        ->and($state->wanderers['wanderer_a']['actions_remaining'])->toBe(0)
+        ->and($events[0]['payload']['free'])->toBeTrue();
+});
+
 test('starting a turn on a Fruit tree space grants a bonus action; moving onto one mid-turn does not', function () {
     $state = startedGame();
     // Isolate this from the Golem phase's own randomness between
