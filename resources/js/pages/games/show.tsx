@@ -2,6 +2,7 @@ import { Head, Link, router } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ActivityLog } from '@/components/game/activity-log';
+import { CabalistBrandDialog } from '@/components/game/cabalist-brand-dialog';
 import { EpiphanyDialog } from '@/components/game/epiphany-dialog';
 import { EventRelicDialog } from '@/components/game/event-relic-dialog';
 import { GolemPanel } from '@/components/game/golem-panel';
@@ -136,6 +137,10 @@ export default function GameShow({ game }: { game: GameSummary }) {
         role: RoleKey;
         relicKey: string;
         deck: string[];
+    } | null>(null);
+    const [cabalistBrandPrompt, setCabalistBrandPrompt] = useState<{
+        role: RoleKey;
+        relicKey: string;
     } | null>(null);
     const [eventRelicQueue, setEventRelicQueue] = useState<
         { role: RoleKey; relicKey: string }[]
@@ -1392,6 +1397,12 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                     onUseInsightFromTheFuture={(relicKey) =>
                                         peekInsightFromTheFuture(role, relicKey)
                                     }
+                                    onUseCabalistBrand={(relicKey) =>
+                                        setCabalistBrandPrompt({
+                                            role,
+                                            relicKey,
+                                        })
+                                    }
                                 />
                             );
                         })}
@@ -1517,6 +1528,23 @@ export default function GameShow({ game }: { game: GameSummary }) {
                         take,
                     })
                 }
+            />
+
+            <CabalistBrandDialog
+                open={cabalistBrandPrompt !== null}
+                activeGlyphs={state.golem.glyphs}
+                glyphCatalog={game.glyph_catalog}
+                processing={processing}
+                onConfirm={(glyphKeys) => {
+                    if (!cabalistBrandPrompt) return;
+                    submitMove(cabalistBrandPrompt.role, {
+                        type: 'use_relic',
+                        relic_key: cabalistBrandPrompt.relicKey,
+                        glyph_keys: glyphKeys,
+                    });
+                    setCabalistBrandPrompt(null);
+                }}
+                onCancel={() => setCabalistBrandPrompt(null)}
             />
 
             <RiftInTimeDialog

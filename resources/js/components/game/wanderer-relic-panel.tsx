@@ -10,11 +10,13 @@ import { HealthBar } from './health-bar';
 import { RoleAvatar } from './role-avatar';
 import { WandererDetailDialog } from './wanderer-detail-dialog';
 
-// "Use" always submits with no extra input. Relics whose engine behavior
-// needs more (e.g. Artist's insight's `directions` payload for its 🦶2)
-// aren't reachable from this UI yet — the server still executes them
-// correctly, there's just no board-click flow wired up to supply the
-// extra input.
+// "Use" always submits with no extra input, except where a relic's
+// engine behavior needs more and has its own dedicated dialog routed
+// through here (an-insight-from-the-future, cabalist-brand). Relics
+// needing extra input with no such dialog yet (e.g. Artist's insight's
+// `directions` payload for its 🦶2) aren't reachable from this UI —
+// the server still executes them correctly, there's just no board-click
+// flow wired up to supply the extra input.
 
 const SLOT_LABELS: Record<EquipSlot, string> = {
     body: '🥋 Body',
@@ -132,6 +134,7 @@ export function WandererRelicPanel({
     parallelAvailable = false,
     relicUnusableReasons = {},
     onUseInsightFromTheFuture,
+    onUseCabalistBrand,
 }: {
     role: 'wanderer_a' | 'wanderer_b' | 'wanderer_c';
     wanderer: WandererState;
@@ -173,6 +176,12 @@ export function WandererRelicPanel({
      * rather than firing use_relic directly.
      */
     onUseInsightFromTheFuture?: (relicKey: string) => void;
+    /**
+     * Cabalist brand needs to choose which (if any) of the Golem's
+     * active Glyphs to discard before use_relic fires — same "Use"
+     * can't supply it directly, routes here instead.
+     */
+    onUseCabalistBrand?: (relicKey: string) => void;
 }) {
     const [detailOpen, setDetailOpen] = useState(false);
     const label = `Wanderer ${role.replace('wanderer_', '').toUpperCase()}`;
@@ -304,21 +313,35 @@ export function WandererRelicPanel({
                                                                 processing ||
                                                                 !!reason
                                                             }
-                                                            onClick={() =>
-                                                                baseRelicKey(
-                                                                    relicKey,
-                                                                ) ===
-                                                                    'an-insight-from-the-future' &&
-                                                                onUseInsightFromTheFuture
-                                                                    ? onUseInsightFromTheFuture(
-                                                                          relicKey,
-                                                                      )
-                                                                    : onSubmit({
-                                                                          type: 'use_relic',
-                                                                          relic_key:
-                                                                              relicKey,
-                                                                      })
-                                                            }
+                                                            onClick={() => {
+                                                                const base =
+                                                                    baseRelicKey(
+                                                                        relicKey,
+                                                                    );
+                                                                if (
+                                                                    base ===
+                                                                        'an-insight-from-the-future' &&
+                                                                    onUseInsightFromTheFuture
+                                                                ) {
+                                                                    onUseInsightFromTheFuture(
+                                                                        relicKey,
+                                                                    );
+                                                                } else if (
+                                                                    base ===
+                                                                        'cabalist-brand' &&
+                                                                    onUseCabalistBrand
+                                                                ) {
+                                                                    onUseCabalistBrand(
+                                                                        relicKey,
+                                                                    );
+                                                                } else {
+                                                                    onSubmit({
+                                                                        type: 'use_relic',
+                                                                        relic_key:
+                                                                            relicKey,
+                                                                    });
+                                                                }
+                                                            }}
                                                         >
                                                             Use
                                                         </Button>
