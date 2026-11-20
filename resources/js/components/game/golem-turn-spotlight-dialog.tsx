@@ -59,9 +59,12 @@ export function GolemTurnSpotlightDialog({
         (segment.marker.payload.action as string | undefined) ??
         (cardKey ? golemCardCatalog[cardKey]?.action : undefined);
 
+    const noEffect =
+        segment.marker.type === 'golem_card_tapped' ||
+        segment.marker.type === 'golem_card_skipped';
     const statusLine =
         segment.marker.type === 'golem_card_tapped'
-            ? 'Face-down (tapped) — does nothing when resolved.'
+            ? 'Face-down (tapped) — this card does NOT resolve.'
             : segment.marker.type === 'golem_card_skipped'
               ? 'Skipped (Parallel) — discarded unresolved, next card drawn in its place.'
               : null;
@@ -82,15 +85,21 @@ export function GolemTurnSpotlightDialog({
                     </DialogTitle>
                 </DialogHeader>
 
-                {action && (
-                    <p className="min-w-0 rounded-md border bg-muted/40 p-3 text-sm break-words">
-                        {action}
+                {statusLine && (
+                    <p className="min-w-0 rounded-md border-2 border-destructive/50 bg-destructive/10 p-2 text-center text-sm font-semibold break-words text-destructive">
+                        {statusLine}
                     </p>
                 )}
 
-                {statusLine && (
-                    <p className="min-w-0 text-sm break-words text-muted-foreground italic">
-                        {statusLine}
+                {action && (
+                    <p
+                        className={`min-w-0 rounded-md border p-3 text-sm break-words ${
+                            noEffect
+                                ? 'text-muted-foreground line-through opacity-60'
+                                : 'bg-muted/40'
+                        }`}
+                    >
+                        {action}
                     </p>
                 )}
 
