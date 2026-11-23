@@ -3951,7 +3951,7 @@ final class GameEngine
         $actionsPerTurn = self::turnStartActions($state, $firstRole);
 
         $wanderers = $state->wanderers;
-        $wanderers[$firstRole] = [...$wanderers[$firstRole], 'actions_remaining' => $actionsPerTurn, 'move_blocked_this_turn' => false, 'pending_bonus_actions' => 0];
+        $wanderers[$firstRole] = [...$wanderers[$firstRole], 'actions_remaining' => $actionsPerTurn, 'move_blocked_this_turn' => false, 'has_moved_this_turn' => false, 'pending_bonus_actions' => 0];
 
         $state = $state->with([
             'locationHand' => $hand,
@@ -4037,13 +4037,19 @@ final class GameEngine
     }
 
     /**
-     * Road: "When Wanderers move into a space that contains a Road, they
-     * can continue into an adjacent space for free." Modeled as free
-     * (no action cost) any time the ORIGIN space of a move has a Road —
-     * not gated on having arrived there via a previous move, so a
-     * Wanderer who simply starts their turn on a Road gets their first
-     * move free too. Chains naturally through consecutive Road spaces
-     * since each move re-checks its own new origin.
+     * Road: "It always costs 1 action to move. But when a Wanderer
+     * moves into a space containing a Road, they may continue to an
+     * adjacent space for free. If multiple contiguous spaces contain
+     * Roads, the Wanderer may be able to traverse many spaces for just
+     * 1 action." Changed from the original wording (any move off a
+     * Road space was free, including a Wanderer's very first move of
+     * the turn if they simply started it standing on one) — "allowing
+     * totally free traversal with roads just trivialized movement,
+     * especially late game" (designer's own justification, rulebook
+     * revision #2). Modeled via has_moved_this_turn: the ORIGIN having
+     * a Road only makes a move free once this Wanderer has already
+     * paid for at least one move this turn; chains naturally through
+     * consecutive Road spaces after that, same as before.
      *
      * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
@@ -4054,7 +4060,17 @@ final class GameEngine
 
         $wanderer = $state->wanderers[$actorRole];
         $originInfrastructure = $state->board[Board::key($wanderer['cell'])]['infrastructure'];
-        $freeMove = in_array('road', $originInfrastructure, true);
+
+        // Road: "It always costs 1 action to move. But when a Wanderer
+        // moves into a space containing a Road, they may continue to an
+        // adjacent space for free. If multiple contiguous spaces
+        // contain Roads, the Wanderer may be able to traverse many
+        // spaces for just 1 action." The FIRST move of a turn always
+        // costs its action, even if the Wanderer is already standing on
+        // a Road when their turn starts — has_moved_this_turn gates
+        // that. Only moves after that first paid one can be free for
+        // stepping off a Road space.
+        $freeMove = $wanderer['has_moved_this_turn'] && in_array('road', $originInfrastructure, true);
 
         if (! $freeMove && $wanderer['actions_remaining'] <= 0) {
             throw new InvalidMoveException('No actions remaining this turn.');
@@ -4137,6 +4153,7 @@ final class GameEngine
             'cell' => $to,
             'actions_remaining' => $actionsRemaining,
             'hp' => $newHp,
+            'has_moved_this_turn' => true,
         ]);
 
         $state = $state->with(['wanderers' => $wanderers]);
@@ -4274,7 +4291,7 @@ final class GameEngine
             $actionsPerTurn = self::turnStartActions($state, $nextRole);
 
             $wanderers = $state->wanderers;
-            $wanderers[$nextRole] = [...$wanderers[$nextRole], 'actions_remaining' => $actionsPerTurn, 'move_blocked_this_turn' => false, 'pending_bonus_actions' => 0];
+            $wanderers[$nextRole] = [...$wanderers[$nextRole], 'actions_remaining' => $actionsPerTurn, 'move_blocked_this_turn' => false, 'has_moved_this_turn' => false, 'pending_bonus_actions' => 0];
 
             $state = $state->with(['wanderers' => $wanderers, 'activeWandererIndex' => $nextIndex]);
 
@@ -7313,7 +7330,10 @@ final class GameEngine
 
         $wanderer = $state->wanderers[$actorRole];
         $originInfrastructure = $state->board[Board::key($wanderer['cell'])]['infrastructure'];
-        $freeMove = in_array('road', $originInfrastructure, true);
+
+        // Road: see moveWanderer()'s identical comment — the first move
+        // of a turn always costs its action, regardless of mechanism.
+        $freeMove = $wanderer['has_moved_this_turn'] && in_array('road', $originInfrastructure, true);
 
         if (! $freeMove && $wanderer['actions_remaining'] <= 0) {
             throw new InvalidMoveException('No actions remaining this turn.');
@@ -7359,6 +7379,7 @@ final class GameEngine
         $wanderers = $state->wanderersWith($actorRole, [
             'cell' => $toCell,
             'actions_remaining' => $wanderer['actions_remaining'] - ($freeMove ? 0 : 1),
+            'has_moved_this_turn' => true,
         ]);
         $state = $state->with(['wanderers' => $wanderers]);
 

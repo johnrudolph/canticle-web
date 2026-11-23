@@ -35,6 +35,7 @@ export interface WandererState {
     equipped: Record<EquipSlot, string | null>;
     holding: string[];
     move_blocked_this_turn: boolean;
+    has_moved_this_turn: boolean;
     tucked_cards: Record<string, string[]>;
     was_ever_exhausted: boolean;
     golem_insight_used_this_round: boolean;

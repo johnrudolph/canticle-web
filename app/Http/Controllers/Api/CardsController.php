@@ -20,11 +20,17 @@ class CardsController extends Controller
 {
     public function index(): JsonResponse
     {
+        // Ordered by id (original sheet/insertion order), same as every
+        // *Catalog class — not just arbitrary consistency: canticle:pull-
+        // changes writes this response straight into resources/data/
+        // canticle/*.json, and an alphabetical re-sort on every pull
+        // would reorder (and so diff) the entire file even when nothing
+        // actually changed.
         return response()->json([
-            'locations' => Location::query()->orderBy('name')->get(),
-            'relics' => Relic::query()->orderBy('name')->get(),
-            'glyphs' => Glyph::query()->orderBy('name')->get(),
-            'golem_cards' => GolemCard::query()->orderBy('name')->get(),
+            'locations' => Location::query()->orderBy('id')->get(),
+            'relics' => Relic::query()->orderBy('id')->get(),
+            'glyphs' => Glyph::query()->orderBy('id')->get(),
+            'golem_cards' => GolemCard::query()->orderBy('id')->get(),
         ]);
     }
 }

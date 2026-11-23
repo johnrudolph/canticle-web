@@ -44,6 +44,7 @@ namespace App\Game;
  *     ],
  *     'holding' => list<string>,       // searched but not yet equipped or dropped
  *     'move_blocked_this_turn' => bool, // Incarceration — cleared when this Wanderer's next turn starts
+ *     'has_moved_this_turn' => bool, // Road — "it always costs 1 action to move" for a Wanderer's FIRST move of their own turn, even if they're already standing on a Road; only moves after that first one can be free for stepping off a Road space. Cleared when this Wanderer's next turn starts.
  *     'tucked_cards' => array<string, list<string>>, // keyed by the equipped Relic (Defanging tool/Golem log) tracking its own progress; dropping that Relic loses the progress (rules.md)
  *     'was_ever_exhausted' => bool, // set once hp hits 0 for real (not saved by Cabalist wraps) — the Catacombs Location requires this to enter
  *     'golem_insight_used_this_round' => bool, // Golem insight — "once per round" — cleared at the start of each new round

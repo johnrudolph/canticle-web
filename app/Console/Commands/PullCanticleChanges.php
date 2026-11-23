@@ -136,6 +136,17 @@ class PullCanticleChanges extends Command
         $this->info('Refreshed rules/rules.md from prod — check `git diff` for the actual rule-text change.');
     }
 
+    /**
+     * GET /api/cards returns each card's raw DB columns (snake_case,
+     * real booleans). canticle:seed-cards — which DatabaseSeeder runs
+     * on every fresh migrate/test-boot — still expects the original
+     * legacy Sheets-export shape ("Show"/"Hide" strings, PascalCase
+     * glyph columns, a capitalized "Relics" column, etc.), since these
+     * same files are its seed input, not just a display snapshot. The
+     * two shapes must stay compatible, so this translates DB shape back
+     * into legacy shape on the way down rather than writing the raw
+     * API response verbatim.
+     */
     private function refreshCardSnapshot(string $prodUrl): void
     {
         $response = Http::get("{$prodUrl}/api/cards");
@@ -150,6 +161,56 @@ class PullCanticleChanges extends Command
         $outputPath = config('canticle.output_path');
         File::ensureDirectoryExists($outputPath);
 
+        $transformFor = [
+            'locations' => fn (array $row) => [
+                'print' => $row['print'],
+                'name' => $row['name'],
+                'Relics' => $row['relics'] ?? '',
+                'lore' => $row['lore'] ?? '',
+                'rule' => $row['rule'] ?? '',
+                'cost_1' => $row['cost_1'] ?? '',
+                'cost_2' => $row['cost_2'] ?? '',
+                'cost_3' => $row['cost_3'] ?? '',
+                'cost_4' => $row['cost_4'] ?? '',
+                'produces' => $row['produces'] ?? '',
+                'has_shard' => $row['has_shard'] ? 'Show' : 'Hide',
+                'has_tree' => $row['has_tree'] ? 'Show' : 'Hide',
+                'has_back_text' => $row['has_back_text'] ? 'Show' : 'Hide',
+                'Relic_names' => $row['relic_names'] ?? '',
+                'has_relics' => $row['has_relics'] ? 'Show' : 'Hide',
+                'has_specific_relics' => $row['has_specific_relics'] ? 'Show' : 'Hide',
+                'produces_anything' => $row['produces_anything'] ? 'Show' : 'Hide',
+                'produces_emoji' => $row['produces_emoji'] ?? '',
+                'has_cost' => $row['has_cost'] ? 'Show' : 'Hide',
+                'cost_emoji' => $row['cost_emoji'] ?? '',
+                'is_starter' => $row['is_starter'] ? 'Show' : 'Hide',
+            ],
+            'relics' => fn (array $row) => [
+                'print' => $row['print'],
+                'name' => $row['name'],
+                'location' => $row['location'] ?? '',
+                'slot' => $row['slot'] ?? '',
+                'type' => $row['type'] ?? '',
+                'symbol' => $row['symbol'] ?? '',
+                'effect' => $row['effect'] ?? '',
+                'slot_emoji' => $row['slot_emoji'] ?? '',
+                'is_action' => $row['is_action'] ? 'Show' : 'Hide',
+                'is_passive' => $row['is_passive'] ? 'Show' : 'Hide',
+                'is_event' => $row['is_event'] ? 'Show' : 'Hide',
+            ],
+            'glyphs' => fn (array $row) => [
+                'Print' => $row['print'],
+                'Name' => $row['name'],
+                'Type' => $row['type'] ?? '',
+                'Description' => $row['description'] ?? '',
+            ],
+            'golem_cards' => fn (array $row) => [
+                'print' => $row['print'],
+                'name' => $row['name'],
+                'action' => $row['action'] ?? '',
+            ],
+        ];
+
         $fileFor = [
             'locations' => 'locations.json',
             'relics' => 'relics.json',
@@ -158,9 +219,11 @@ class PullCanticleChanges extends Command
         ];
 
         foreach ($fileFor as $key => $filename) {
+            $rows = array_map($transformFor[$key], $cards[$key] ?? []);
+
             File::put(
                 "{$outputPath}/{$filename}",
-                json_encode($cards[$key] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)."\n"
+                json_encode($rows, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)."\n"
             );
         }
 

@@ -1219,17 +1219,20 @@ export default function GameShow({ game }: { game: GameSummary }) {
         myRoles.includes(state.active_wanderer_role)
     ) {
         const mine = state.wanderers[state.active_wanderer_role];
-        // Road: "Wanderers move from a space with a Road for free" —
-        // moving off a Road space never costs an action, so it must
-        // stay available even at 0 actions remaining, not just gated
-        // on actions_remaining > 0 like every other move.
-        const onRoad =
+        // Road: "It always costs 1 action to move. But when a Wanderer
+        // moves into a space containing a Road, they may continue to an
+        // adjacent space for free." The free continuation only applies
+        // after this Wanderer's first move of the turn (has_moved_this_turn)
+        // — so it must stay available at 0 actions remaining, but only
+        // once they've already paid for at least one move this turn.
+        const onFreeRoadContinuation =
+            mine.has_moved_this_turn &&
             mine.cell !== null &&
             state.board[cellKey(mine.cell)]?.infrastructure.includes('road');
         if (
             mine.cell &&
             mine.hp > 0 &&
-            (mine.actions_remaining > 0 || onRoad)
+            (mine.actions_remaining > 0 || onFreeRoadContinuation)
         ) {
             highlightedCells = new Set(
                 occupiedNeighbors(mine.cell, state.board).map(cellKey),

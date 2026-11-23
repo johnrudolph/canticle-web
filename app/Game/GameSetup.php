@@ -103,6 +103,7 @@ final class GameSetup
                 'equipped' => array_fill_keys(self::EQUIP_SLOTS, null),
                 'holding' => [],
                 'move_blocked_this_turn' => false,
+                'has_moved_this_turn' => false,
                 'tucked_cards' => [],
                 'was_ever_exhausted' => false,
                 'golem_insight_used_this_round' => false,
