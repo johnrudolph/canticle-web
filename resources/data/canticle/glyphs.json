@@ -37,7 +37,7 @@
     },
     {
         "Print": false,
-        "Name": "Penitent ",
+        "Name": "Penitent",
         "Type": "⚖️",
         "Description": "The Golem plays 1 fewer card per turn for each Shame it has."
     },
@@ -169,7 +169,7 @@
     },
     {
         "Print": false,
-        "Name": "Barricading ",
+        "Name": "Barricading",
         "Type": "👺",
         "Description": "Wanderers cannot move into the Golem's space (but the Golem can still move into theirs)."
     },
@@ -207,7 +207,7 @@
         "Print": false,
         "Name": "Merciful",
         "Type": "📖",
-        "Description": "-1👊 "
+        "Description": "-1👊"
     },
     {
         "Print": false,

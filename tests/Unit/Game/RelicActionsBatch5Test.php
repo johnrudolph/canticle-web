@@ -117,9 +117,9 @@ test('Divine Cabalist pyre still trashes itself even if nothing is burned', func
         ->and($state->prophecy)->toBe(0);
 });
 
-test('Show solidarity always trashes itself, counting toward every 5 Relics trashed for a Golem discard removal', function () {
+test('Armistice always trashes itself, counting toward every 4 Relics trashed for a Golem discard removal', function () {
     $state = startedGame();
-    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'show-solidarity'];
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'armistice'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
     $bEquipped = [
         'body' => 'golem-whistle', 'mind' => 'golem-prod', 'hand_left' => 'golem-intuition', 'hand_right' => 'golem-disguise', 'bag' => null,
@@ -131,7 +131,7 @@ test('Show solidarity always trashes itself, counting toward every 5 Relics tras
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
     [$state, $events] = GameEngine::apply($state, 'wanderer_a', [
-        'type' => 'use_relic', 'relic_key' => 'show-solidarity',
+        'type' => 'use_relic', 'relic_key' => 'armistice',
         'trashed' => [
             ['role' => 'wanderer_b', 'relic_key' => 'golem-whistle'],
             ['role' => 'wanderer_b', 'relic_key' => 'golem-prod'],
@@ -142,41 +142,41 @@ test('Show solidarity always trashes itself, counting toward every 5 Relics tras
 
     // 1 (itself) + 4 voluntary = 5 => exactly 1 Golem discard card removed.
     // 5 relic_trashed events total: 4 from the voluntary trashes plus 1
-    // for Show solidarity itself (appended by useRelic's normal
+    // for Armistice itself (appended by useRelic's normal
     // post-dispatch trash flow, since relicShowSolidarity returns
     // trash=true rather than handling its own trash like Immolation rags).
     expect($state->golem['discard_pile'])->toHaveCount(1)
         ->and($state->wanderers['wanderer_b']['equipped'])->toBe(['body' => null, 'mind' => null, 'hand_left' => null, 'hand_right' => null, 'bag' => null])
         ->and(collect($events)->where('type', 'relic_trashed'))->toHaveCount(5)
-        // "For every 5 Relics trashed... gain 📜" — exactly 1 group of 5 here.
+        // "For every 4 Relics trashed... gain 📜" — exactly 1 group of 4 here.
         ->and($state->prophecy)->toBe(1);
 });
 
-test('Show solidarity ignores a requested trash for a Wanderer not sharing the Golem\'s space', function () {
+test('Armistice ignores a requested trash for a Wanderer not sharing the Golem\'s space', function () {
     $state = startedGame();
-    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'show-solidarity'];
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'armistice'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
     $bEquipped = [...$state->wanderers['wanderer_b']['equipped'], 'body' => 'golem-whistle'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['equipped' => $bEquipped, 'cell' => [0, 0]])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
     [$state] = GameEngine::apply($state, 'wanderer_a', [
-        'type' => 'use_relic', 'relic_key' => 'show-solidarity',
+        'type' => 'use_relic', 'relic_key' => 'armistice',
         'trashed' => [['role' => 'wanderer_b', 'relic_key' => 'golem-whistle']],
     ]);
 
     expect($state->wanderers['wanderer_b']['equipped']['body'])->toBe('golem-whistle');
 });
 
-test('Show solidarity is rejected outright off the Golem\'s space', function () {
+test('Armistice is rejected outright off the Golem\'s space', function () {
     $state = startedGame();
-    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'show-solidarity'];
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'armistice'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['cell' => [0, 0]])]);
 
-    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'show-solidarity']))
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'armistice']))
         ->toThrow(InvalidMoveException::class);
 
-    expect($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBe('show-solidarity');
+    expect($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBe('armistice');
 });

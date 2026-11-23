@@ -787,7 +787,7 @@ export default function GameShow({ game }: { game: GameSummary }) {
                 return;
             }
 
-            case 'show-solidarity': {
+            case 'armistice': {
                 const golemCellKey = state.golem.cell
                     ? cellKey(state.golem.cell)
                     : null;
@@ -807,9 +807,9 @@ export default function GameShow({ game }: { game: GameSummary }) {
                     }
                 }
                 setRelicPrompt({
-                    title: 'Show solidarity',
+                    title: 'Armistice',
                     description:
-                        'Which Relics (across everyone sharing the Golem’s space) get trashed? Every 5, 1 Golem discard card is trashed and you gain 📜.',
+                        'Which Relics (across everyone sharing the Golem’s space) get trashed? Every 4, 1 Golem discard card is trashed and you gain 📜.',
                     multiple: true,
                     confirmLabel: 'Trash',
                     candidates,

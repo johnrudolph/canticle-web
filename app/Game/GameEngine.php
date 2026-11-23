@@ -837,10 +837,11 @@ final class GameEngine
         $events = [...$events, ...$glyphHealEvents];
 
         // Golem sanctuary: "When playing a 🌿 Relic in the Golem's
-        // space, tuck the Relic here." Reuses the same HP-diff used for
-        // Divine Icon to detect a 🌿 effect without special-casing
-        // every heal Relic. Overrides the Relic's own trash clause —
-        // it gets tucked here either way.
+        // space, tuck the Relic here and you may trash one of its
+        // Glyphs." Reuses the same HP-diff used for Divine Icon to
+        // detect a 🌿 effect without special-casing every heal Relic.
+        // Overrides the Relic's own trash clause — it gets tucked
+        // here either way.
         $healedAnyone = (bool) array_filter(
             $state->wanderers,
             fn (array $w, string $r) => $w['hp'] > ($hpBeforeDivineIcon[$r] ?? $w['hp']),
@@ -869,6 +870,22 @@ final class GameEngine
             $state = $state->with(['board' => $board]);
 
             $events[] = ['type' => 'relic_tucked', 'role_key' => $actorRole, 'payload' => ['relic_key' => $relicKey, 'cell' => $state->wanderers[$actorRole]['cell']]];
+
+            // "...and you may trash one of its Glyphs." Optional — only
+            // acted on if the caller actually names one of the Golem's
+            // current active Glyphs via $move['trash_golem_glyph_key'].
+            $requestedGlyphKey = $move['trash_golem_glyph_key'] ?? null;
+
+            if (is_string($requestedGlyphKey)) {
+                $glyphs = $state->golem['glyphs'];
+                $glyphIndex = array_search($requestedGlyphKey, $glyphs, true);
+
+                if ($glyphIndex !== false) {
+                    unset($glyphs[$glyphIndex]);
+                    $state = $state->with(['golem' => $state->golemWith(['glyphs' => array_values($glyphs)])]);
+                    $events[] = ['type' => 'glyph_discarded', 'role_key' => $actorRole, 'payload' => ['glyph_key' => $requestedGlyphKey]];
+                }
+            }
         } elseif ($trash) {
             $state = self::trashEquippedRelic($state, $actorRole, $relicKey);
             $events[] = ['type' => 'relic_trashed', 'role_key' => $actorRole, 'payload' => ['relic_key' => $relicKey]];
@@ -1036,7 +1053,7 @@ final class GameEngine
                 ? null
                 : 'Pray requires being exactly 3 spaces from the Golem.',
 
-            'peacemakers-spirit', 'whip-of-justice', 'show-solidarity', 'cabalist-brand', 'golem-intuition', 'golem-prod', 'defanging-tool' => self::golemSharesCellWith($state, $actorRole)
+            'peacemakers-spirit', 'whip-of-justice', 'armistice', 'cabalist-brand', 'golem-intuition', 'golem-prod', 'defanging-tool' => self::golemSharesCellWith($state, $actorRole)
                 ? null
                 : 'This requires sharing the Golem\'s space.',
 
@@ -1084,7 +1101,7 @@ final class GameEngine
                 : 'Poof requires all 12 Monolith Shards within 2 spaces of you.',
 
             'scapegoats-catharsis' => count(array_intersect(
-                ['dark-chains', 'dark-limitations', 'dark-sacrifice', 'dark-sigil'],
+                ['dark-shackles', 'dark-limitations', 'dark-sacrifice', 'dark-sigil'],
                 array_values($state->wanderers[$actorRole]['equipped']),
             )) === 4
                 ? null
@@ -1269,7 +1286,7 @@ final class GameEngine
             'magistrates-robes' => [...self::relicMagistratesRobes($state, $actorRole, $move), false],
             'immolation-rags' => self::relicImmolationRags($state, $actorRole),
             'divine-cabalist-pyre' => self::relicDivineCabalistPyre($state, $actorRole, $move),
-            'show-solidarity' => self::relicShowSolidarity($state, $actorRole, $move),
+            'armistice' => self::relicArmistice($state, $actorRole, $move),
             'cabalist-brand' => self::relicCabalistBrand($state, $actorRole, $move),
             'poof' => self::relicPoof($state, $actorRole),
             'scapegoats-catharsis' => self::relicScapegoatsCatharsis($state, $actorRole),
@@ -1342,8 +1359,12 @@ final class GameEngine
                 break;
             }
 
+            $fromCell = $wanderer['cell'];
             $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['cell' => $to])]);
             $events[] = ['type' => 'wanderer_moved', 'role_key' => $actorRole, 'payload' => ['to' => $to, 'free' => true]];
+
+            [$state, $e] = self::moveDarkShacklesGolem($state, $actorRole, $fromCell, $to);
+            $events = [...$events, ...$e];
         }
 
         return [$state, $events];
@@ -2199,7 +2220,7 @@ final class GameEngine
         $state = $state->with(['golem' => $state->golemWith(['cell' => $destination])]);
         $events = [['type' => 'golem_moved', 'role_key' => $actorRole, 'payload' => ['to' => $destination]]];
 
-        [$state, $e] = self::moveDarkChainsWanderers($state, $golemCell, $destination);
+        [$state, $e] = self::moveDarkShacklesWanderers($state, $golemCell, $destination);
         $events = [...$events, ...$e];
 
         return [$state, $events];
@@ -2430,9 +2451,14 @@ final class GameEngine
             return [$state, []];
         }
 
+        $fromCell = $state->wanderers[$targetRole]['cell'];
         $state = $state->with(['wanderers' => $state->wanderersWith($targetRole, ['cell' => $destination])]);
+        $events = [['type' => 'wanderer_moved', 'role_key' => $targetRole, 'payload' => ['to' => $destination]]];
 
-        return [$state, [['type' => 'wanderer_moved', 'role_key' => $targetRole, 'payload' => ['to' => $destination]]]];
+        [$state, $e] = self::moveDarkShacklesGolem($state, $targetRole, $fromCell, $destination);
+        $events = [...$events, ...$e];
+
+        return [$state, $events];
     }
 
     /**
@@ -2971,19 +2997,19 @@ final class GameEngine
     }
 
     /**
-     * Show solidarity: "Wanderers on the Golem's space may trash Relics
-     * from their mats (you must trash this card as part of that). For
-     * every 5 Relics trashed, trash 1 card from the Golem discard pile,
-     * and gain 📜. Shuffle the Golem draw pile and discard pile."
+     * Armistice: "Wanderers on the Golem's space may trash Relics
+     * from their mats (you must trash this card too). For every 4
+     * Relics trashed, trash 1 card from the Golem discard pile, and
+     * gain 📜. Shuffle the Golem draw pile and discard pile."
      * $move['trashed'] is a list of {role, relic_key} for every
-     * voluntary trash beyond Show solidarity's own mandatory one; each
+     * voluntary trash beyond Armistice's own mandatory one; each
      * entry must name an active Wanderer sharing the Golem's space with
      * that Relic actually equipped.
      *
      * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
      */
-    private static function relicShowSolidarity(GameState $state, string $actorRole, array $move): array
+    private static function relicArmistice(GameState $state, string $actorRole, array $move): array
     {
         if (! self::golemSharesCellWith($state, $actorRole)) {
             return [$state, [], false];
@@ -2993,7 +3019,7 @@ final class GameEngine
         $golemCellKey = $golemCell === null ? null : Board::key($golemCell);
         $requested = $move['trashed'] ?? [];
         $events = [];
-        $trashedCount = 1; // Show solidarity itself, trashed by the normal post-dispatch flow.
+        $trashedCount = 1; // Armistice itself, trashed by the normal post-dispatch flow.
 
         if (is_array($requested)) {
             foreach ($requested as $entry) {
@@ -3024,23 +3050,23 @@ final class GameEngine
             }
         }
 
-        $groupsOf5 = intdiv($trashedCount, 5);
+        $groupsOf4 = intdiv($trashedCount, 4);
 
-        if ($groupsOf5 > 0) {
+        if ($groupsOf4 > 0) {
             $discardPile = $state->golem['discard_pile'];
-            $removed = array_splice($discardPile, 0, min($groupsOf5, count($discardPile)));
+            $removed = array_splice($discardPile, 0, min($groupsOf4, count($discardPile)));
             $state = $state->with(['golem' => $state->golemWith(['discard_pile' => $discardPile])]);
 
             foreach ($removed as $cardKey) {
                 $events[] = ['type' => 'golem_card_removed_from_discard', 'role_key' => null, 'payload' => ['card_key' => $cardKey]];
             }
 
-            // "For every 5 Relics trashed, trash 1 card from the Golem
-            // discard pile, and gain 📜." — 1 Prophecy per group of 5,
+            // "For every 4 Relics trashed, trash 1 card from the Golem
+            // discard pile, and gain 📜." — 1 Prophecy per group of 4,
             // not per card actually removed (the discard pile can run
             // out of cards to remove before the groups do).
-            $state = $state->with(['prophecy' => $state->prophecy + $groupsOf5]);
-            $events[] = ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => $groupsOf5]];
+            $state = $state->with(['prophecy' => $state->prophecy + $groupsOf4]);
+            $events[] = ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => $groupsOf4]];
         }
 
         $drawPile = $state->golem['draw_pile'];
@@ -3140,13 +3166,13 @@ final class GameEngine
      * Scapegoat's catharsis: "If you have all 4 Relics with 'Dark ...'
      * names equipped: Allies lose 10 Health. Then, trash this, and all
      * Dark Relics. Gain 📜📜." There are exactly 4 Dark Relics in the
-     * data (Dark chains, Dark limitations, Dark sacrifice, Dark sigil).
+     * data (Dark shackles, Dark limitations, Dark sacrifice, Dark sigil).
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
      */
     private static function relicScapegoatsCatharsis(GameState $state, string $actorRole): array
     {
-        $darkKeys = ['dark-chains', 'dark-limitations', 'dark-sacrifice', 'dark-sigil'];
+        $darkKeys = ['dark-shackles', 'dark-limitations', 'dark-sacrifice', 'dark-sigil'];
         $equipped = array_values($state->wanderers[$actorRole]['equipped']);
 
         if (count(array_intersect($darkKeys, $equipped)) !== count($darkKeys)) {
@@ -3768,7 +3794,7 @@ final class GameEngine
         $events = [['type' => 'golem_moved', 'role_key' => null, 'payload' => ['to' => $casterCell]]];
 
         if ($golemCellBefore !== null) {
-            [$state, $e] = self::moveDarkChainsWanderers($state, $golemCellBefore, $casterCell);
+            [$state, $e] = self::moveDarkShacklesWanderers($state, $golemCellBefore, $casterCell);
             $events = [...$events, ...$e];
         }
 
@@ -3802,7 +3828,15 @@ final class GameEngine
         $state = $state->with(['wanderers' => $wanderers]);
         $state = $state->with(['wanderers' => $state->wanderersWith($targetRole, ['cell' => $actorCell])]);
 
-        return [$state, [['type' => 'wanderers_swapped', 'role_key' => $actorRole, 'payload' => ['with' => $targetRole]]]];
+        $events = [['type' => 'wanderers_swapped', 'role_key' => $actorRole, 'payload' => ['with' => $targetRole]]];
+
+        [$state, $e] = self::moveDarkShacklesGolem($state, $actorRole, $actorCell, $targetCell);
+        $events = [...$events, ...$e];
+
+        [$state, $e] = self::moveDarkShacklesGolem($state, $targetRole, $targetCell, $actorCell);
+        $events = [...$events, ...$e];
+
+        return [$state, $events];
     }
 
     /**
@@ -4123,6 +4157,9 @@ final class GameEngine
             $events[] = ['type' => 'wanderer_healed', 'role_key' => $actorRole, 'payload' => ['hp' => $hp]];
         }
 
+        [$state, $e] = self::moveDarkShacklesGolem($state, $actorRole, $wanderer['cell'], $to);
+        $events = [...$events, ...$e];
+
         // Beds of poison: "If a Wanderer enters this space for any
         // reason (even if they are just passing through while moving),
         // they lose 5 Health." Every step of movement is its own
@@ -4151,6 +4188,9 @@ final class GameEngine
 
                 $state = $state->with(['wanderers' => $state->wanderersWith($otherRole, ['cell' => $to])]);
                 $events[] = ['type' => 'wanderer_moved', 'role_key' => $otherRole, 'payload' => ['to' => $to, 'free' => true]];
+
+                [$state, $e] = self::moveDarkShacklesGolem($state, $otherRole, $otherCell, $to);
+                $events = [...$events, ...$e];
 
                 if (self::hasMonolithShardFor($state, $otherRole, $to) && in_array('rejuvenation-gown', $state->wanderers[$otherRole]['equipped'], true)) {
                     $hp = min(self::maxHpFor($state, $otherRole), $state->wanderers[$otherRole]['hp'] + 2);
@@ -4518,6 +4558,9 @@ final class GameEngine
 
             $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['cell' => $destination])]);
             $events[] = ['type' => 'wanderer_moved', 'role_key' => $actorRole, 'payload' => ['to' => $destination, 'forced' => true]];
+
+            [$state, $e] = self::moveDarkShacklesGolem($state, $actorRole, $cell, $destination);
+            $events = [...$events, ...$e];
         }
 
         $awaiting = array_values(array_diff($pending['awaiting'], [$actorRole]));
@@ -5287,7 +5330,7 @@ final class GameEngine
             }
         }
 
-        [$state, $e] = self::moveDarkChainsWanderers($state, $golemCell, $destination);
+        [$state, $e] = self::moveDarkShacklesWanderers($state, $golemCell, $destination);
         $events = [...$events, ...$e];
 
         return [$state, $events];
@@ -5356,21 +5399,23 @@ final class GameEngine
     }
 
     /**
-     * Dark chains: "If you are on the Golem's space when it moves, you
-     * must move with it." Checked after every real Golem movement
-     * (not removal/teleport-to-nowhere, like Poof).
+     * Dark shackles: "Bound (🪡) If you are on the Golem's: you move
+     * with it when it moves, and it moves with you when you move."
+     * This is the Golem-moves-the-wanderer half. Checked after every
+     * real Golem movement (not removal/teleport-to-nowhere, like
+     * Poof).
      *
      * @param  array{0: int, 1: int}  $fromCell
      * @param  array{0: int, 1: int}  $toCell
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
-    private static function moveDarkChainsWanderers(GameState $state, array $fromCell, array $toCell): array
+    private static function moveDarkShacklesWanderers(GameState $state, array $fromCell, array $toCell): array
     {
         $fromKey = Board::key($fromCell);
         $events = [];
 
         foreach (self::activeWanderers($state) as $role => $cell) {
-            if (Board::key($cell) !== $fromKey || ! in_array('dark-chains', $state->wanderers[$role]['equipped'], true)) {
+            if (Board::key($cell) !== $fromKey || ! in_array('dark-shackles', $state->wanderers[$role]['equipped'], true)) {
                 continue;
             }
 
@@ -5383,6 +5428,40 @@ final class GameEngine
         }
 
         return [$state, $events];
+    }
+
+    /**
+     * Dark shackles: "Bound (🪡) If you are on the Golem's: you move
+     * with it when it moves, and it moves with you when you move."
+     * This is the wanderer-moves-the-Golem half, called after ANY
+     * wanderer cell change (voluntary or forced) for the wanderer who
+     * actually moved. Triggers only if that wanderer has Dark
+     * shackles equipped AND was standing on the Golem's cell
+     * immediately before this move. If two different Dark-shackled
+     * wanderers are both forced to move apart from the Golem's space
+     * in the same resolution, the Golem follows whichever one's move
+     * is processed last — there is no rule for that case, so this
+     * picks last-write-wins rather than guessing a priority order.
+     *
+     * @param  array{0: int, 1: int}  $fromCell
+     * @param  array{0: int, 1: int}  $toCell
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function moveDarkShacklesGolem(GameState $state, string $role, array $fromCell, array $toCell): array
+    {
+        if (! isset($state->wanderers[$role]) || ! in_array('dark-shackles', $state->wanderers[$role]['equipped'], true)) {
+            return [$state, []];
+        }
+
+        $golemCell = $state->golem['cell'];
+
+        if ($golemCell === null || Board::key($golemCell) !== Board::key($fromCell) || Board::key($fromCell) === Board::key($toCell)) {
+            return [$state, []];
+        }
+
+        $state = $state->with(['golem' => $state->golemWith(['cell' => $toCell])]);
+
+        return [$state, [['type' => 'golem_moved', 'role_key' => null, 'payload' => ['to' => $toCell, 'forced' => true]]]];
     }
 
     /**
@@ -5762,6 +5841,9 @@ final class GameEngine
 
             $state = $state->with(['wanderers' => $state->wanderersWith($role, ['cell' => $best])]);
             $events[] = ['type' => 'wanderer_moved', 'role_key' => $role, 'payload' => ['to' => $best, 'forced' => true]];
+
+            [$state, $e] = self::moveDarkShacklesGolem($state, $role, $cell, $best);
+            $events = [...$events, ...$e];
         }
 
         return [$state, $events];
@@ -5903,6 +5985,9 @@ final class GameEngine
 
             $state = $state->with(['wanderers' => $state->wanderersWith($role, ['cell' => $destination])]);
             $events[] = ['type' => 'wanderer_moved', 'role_key' => $role, 'payload' => ['to' => $destination, 'forced' => true]];
+
+            [$state, $e] = self::moveDarkShacklesGolem($state, $role, $cell, $destination);
+            $events = [...$events, ...$e];
         }
 
         [$state, $damageEvents] = self::damageWanderersAt($state, [$golemCell], 3, true);
@@ -6213,7 +6298,7 @@ final class GameEngine
         // Dark sacrifice: "For each Relic you have equipped with 'Dark
         // ...' in its name, reduce incoming damage by 1." The ability
         // belongs to Dark sacrifice itself — merely having OTHER Dark
-        // Relics equipped (Dark chains/limitations/sigil) without Dark
+        // Relics equipped (Dark shackles/limitations/sigil) without Dark
         // sacrifice grants no reduction, same bug shape as Emperor's
         // Knowledge applying its bonus without Emperor's Knowledge
         // itself equipped.
@@ -6910,6 +6995,9 @@ final class GameEngine
         $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['cell' => $ally['cell']])]);
         $events = [['type' => 'wanderer_moved', 'role_key' => $actorRole, 'payload' => ['to' => $ally['cell'], 'free' => true]]];
 
+        [$state, $e] = self::moveDarkShacklesGolem($state, $actorRole, $actorCell, $ally['cell']);
+        $events = [...$events, ...$e];
+
         // Default the Relic's own target to the Ally being helped, not
         // the helper — the whole point of coming to their rescue.
         // Relics that heal everyone sharing the caster's space (e.g.
@@ -6959,9 +7047,14 @@ final class GameEngine
             throw new InvalidMoveException('Catacombs: only a Wanderer who has been exhausted before may enter.');
         }
 
+        $fromCell = $state->wanderers[$actorRole]['cell'];
         $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['cell' => $target])]);
+        $events = [['type' => 'wanderer_moved', 'role_key' => $actorRole, 'payload' => ['to' => $target, 'free' => true]]];
 
-        return [$state, [['type' => 'wanderer_moved', 'role_key' => $actorRole, 'payload' => ['to' => $target, 'free' => true]]]];
+        [$state, $e] = self::moveDarkShacklesGolem($state, $actorRole, $fromCell, $target);
+        $events = [...$events, ...$e];
+
+        return [$state, $events];
     }
 
     /**
@@ -7197,8 +7290,12 @@ final class GameEngine
         }
 
         $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['cell' => $ally['cell']])]);
+        $events = [['type' => 'wanderer_moved', 'role_key' => $actorRole, 'payload' => ['to' => $ally['cell'], 'free' => true]]];
 
-        return [$state, [['type' => 'wanderer_moved', 'role_key' => $actorRole, 'payload' => ['to' => $ally['cell'], 'free' => true]]]];
+        [$state, $e] = self::moveDarkShacklesGolem($state, $actorRole, $wanderer['cell'], $ally['cell']);
+        $events = [...$events, ...$e];
+
+        return [$state, $events];
     }
 
     /**
@@ -7278,6 +7375,9 @@ final class GameEngine
             $events[] = ['type' => 'wanderer_healed', 'role_key' => $actorRole, 'payload' => ['hp' => $hp]];
         }
 
+        [$state, $e] = self::moveDarkShacklesGolem($state, $actorRole, $wanderer['cell'], $toCell);
+        $events = [...$events, ...$e];
+
         return [$state, $events];
     }
 
@@ -7343,6 +7443,9 @@ final class GameEngine
 
             $state = $state->with(['wanderers' => $state->wanderersWith($role, ['cell' => $toCell])]);
             $events[] = ['type' => 'wanderer_moved', 'role_key' => $role, 'payload' => ['to' => $toCell, 'free' => true]];
+
+            [$state, $e] = self::moveDarkShacklesGolem($state, $role, $allyCell, $toCell);
+            $events = [...$events, ...$e];
 
             if (self::hasMonolithShardFor($state, $role, $toCell) && in_array('rejuvenation-gown', $state->wanderers[$role]['equipped'], true)) {
                 $hp = min(self::maxHpFor($state, $role), $state->wanderers[$role]['hp'] + 2);

@@ -16,12 +16,13 @@ use Illuminate\Support\Carbon;
  * @property string $name
  * @property string $email
  * @property bool $is_guest
+ * @property bool $is_admin
  * @property string $password
  * @property string|null $remember_token
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
-#[Fillable(['name', 'email', 'password', 'is_guest'])]
+#[Fillable(['name', 'email', 'password', 'is_guest', 'is_admin'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -38,6 +39,7 @@ class User extends Authenticatable
         return [
             'password' => 'hashed',
             'is_guest' => 'boolean',
+            'is_admin' => 'boolean',
         ];
     }
 

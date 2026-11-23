@@ -2,13 +2,12 @@
 
 namespace App\Game\Catalog;
 
-use Illuminate\Support\Str;
+use App\Models\Cards\Location as LocationModel;
 
 /**
- * Loads resources/data/canticle/locations.json into Location DTOs. The
- * sheet's `print` flag is a designer-side Figma-plugin artifact, not a
- * gameplay signal — every record is live content (confirmed with the
- * designer).
+ * Loads the `locations` table into Location DTOs. The `print` flag is a
+ * designer-side Figma-plugin artifact, not a gameplay signal — every
+ * record is live content (confirmed with the designer).
  */
 final class LocationCatalog
 {
@@ -24,39 +23,29 @@ final class LocationCatalog
             return self::$cache;
         }
 
-        $path = config('canticle.output_path').'/locations.json';
-        $rows = CatalogFile::readJson($path);
-
         $locations = [];
 
-        foreach ($rows as $row) {
-            $name = trim((string) $row['name']);
-
-            if ($name === '') {
-                continue;
-            }
-
-            $key = Str::slug($name);
+        foreach (LocationModel::query()->orderBy('id')->get() as $row) {
             $costs = array_values(array_filter([
-                trim((string) ($row['cost_1'] ?? '')),
-                trim((string) ($row['cost_2'] ?? '')),
-                trim((string) ($row['cost_3'] ?? '')),
-                trim((string) ($row['cost_4'] ?? '')),
+                trim((string) $row->cost_1),
+                trim((string) $row->cost_2),
+                trim((string) $row->cost_3),
+                trim((string) $row->cost_4),
             ], fn (string $c) => $c !== ''));
 
-            $locations[$key] = new Location(
-                key: $key,
-                name: $name,
-                lore: trim((string) ($row['lore'] ?? '')),
-                backText: self::nullableText($row['rule'] ?? null),
-                produces: self::nullableText($row['produces'] ?? null),
-                producesEmoji: self::nullableText($row['produces_emoji'] ?? null),
+            $locations[$row->key] = new Location(
+                key: $row->key,
+                name: $row->name,
+                lore: trim((string) $row->lore),
+                backText: self::nullableText($row->rule),
+                produces: self::nullableText($row->produces),
+                producesEmoji: self::nullableText($row->produces_emoji),
                 costs: $costs,
-                relicCount: self::leadingInt($row['Relics'] ?? null),
-                dealsFromBranch: self::dealsFromBranch($row['Relics'] ?? null),
-                isStarter: ($row['is_starter'] ?? null) === 'Show',
-                hasShard: ($row['has_shard'] ?? null) === 'Show',
-                hasTree: ($row['has_tree'] ?? null) === 'Show',
+                relicCount: self::leadingInt($row->relics),
+                dealsFromBranch: self::dealsFromBranch($row->relics),
+                isStarter: $row->is_starter,
+                hasShard: $row->has_shard,
+                hasTree: $row->has_tree,
             );
         }
 

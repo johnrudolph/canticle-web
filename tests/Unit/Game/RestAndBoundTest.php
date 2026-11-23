@@ -72,9 +72,9 @@ test('a Bound Relic cannot be dropped while merely held either, not yet equipped
 test('equipping over an already-equipped Bound Relic is rejected', function () {
     $state = startedGame();
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'burial-robes'];
-    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'holding' => ['dark-chains']])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'holding' => ['dark-shackles']])]);
 
-    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'equip_relic', 'relic_key' => 'dark-chains', 'slot' => 'body']))
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'equip_relic', 'relic_key' => 'dark-shackles', 'slot' => 'body']))
         ->toThrow(InvalidMoveException::class, 'That slot holds a Bound Relic, which cannot be displaced.');
 
     expect($state->wanderers['wanderer_a']['equipped']['body'])->toBe('burial-robes');

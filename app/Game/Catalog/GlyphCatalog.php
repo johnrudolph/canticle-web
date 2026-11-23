@@ -2,7 +2,7 @@
 
 namespace App\Game\Catalog;
 
-use Illuminate\Support\Str;
+use App\Models\Cards\Glyph as GlyphModel;
 
 final class GlyphCatalog
 {
@@ -18,28 +18,14 @@ final class GlyphCatalog
             return self::$cache;
         }
 
-        $path = config('canticle.output_path').'/glyphs.json';
-        $rows = CatalogFile::readJson($path);
-
         $glyphs = [];
-        $seenSlugs = [];
 
-        foreach ($rows as $row) {
-            $name = trim((string) $row['Name']);
-
-            if ($name === '') {
-                continue;
-            }
-
-            $baseSlug = Str::slug($name);
-            $seenSlugs[$baseSlug] = ($seenSlugs[$baseSlug] ?? 0) + 1;
-            $key = $seenSlugs[$baseSlug] === 1 ? $baseSlug : "{$baseSlug}-{$seenSlugs[$baseSlug]}";
-
-            $glyphs[$key] = new Glyph(
-                key: $key,
-                name: $name,
-                type: trim((string) ($row['Type'] ?? '')),
-                description: trim((string) ($row['Description'] ?? '')),
+        foreach (GlyphModel::query()->orderBy('id')->get() as $row) {
+            $glyphs[$row->key] = new Glyph(
+                key: $row->key,
+                name: $row->name,
+                type: trim((string) $row->type),
+                description: trim((string) $row->description),
             );
         }
 

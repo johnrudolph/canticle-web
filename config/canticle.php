@@ -4,14 +4,17 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Card Data Spreadsheet
+    | Card Data Spreadsheet (legacy)
     |--------------------------------------------------------------------------
     |
-    | Canticle's card data (locations, relics, glyphs, golem cards) lives in
-    | a Google Sheet that the game designer edits directly. The
-    | canticle:sync-cards command pulls each tab and writes it into
-    | resources/data/canticle as JSON so the app can consume it without a
-    | network call at runtime.
+    | Canticle's card data (locations, relics, glyphs, golem cards) USED TO
+    | live in a Google Sheet, pulled via canticle:sync-cards into
+    | resources/data/canticle as JSON. The database is the source of truth
+    | now (see the admin card editor + App\Game\Catalog\*Catalog, which
+    | read from the DB). canticle:sync-cards is left in place but unused —
+    | canticle:pull-changes now keeps these same JSON files up to date
+    | instead, refreshed from prod's public /api/cards on every pull, purely
+    | so card data has a readable git history independent of DB access.
     |
     */
 
@@ -26,5 +29,18 @@ return [
     ],
 
     'output_path' => resource_path('data/canticle'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Prod sync
+    |--------------------------------------------------------------------------
+    |
+    | Where canticle:pull-changes and canticle:resolve-comment reach to —
+    | the production site's dev-sync API (routes/dev_sync.php), gated by
+    | the same DEBUG_API_KEY as /api/debug/*.
+    |
+    */
+
+    'prod_url' => env('PROD_URL'),
 
 ];

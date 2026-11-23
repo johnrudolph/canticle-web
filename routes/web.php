@@ -11,3 +11,4 @@ Route::middleware([EnsureGuestIdentity::class])->group(function () {
 });
 
 require __DIR__.'/games.php';
+require __DIR__.'/admin.php';

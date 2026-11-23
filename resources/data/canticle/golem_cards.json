@@ -142,6 +142,6 @@
     {
         "print": false,
         "name": "Time Paradox",
-        "action": "Draw and resolve 2 additional Golem cards from the bottom of the Golem deck after this. "
+        "action": "Draw and resolve 2 additional Golem cards from the bottom of the Golem deck after this."
     }
 ]

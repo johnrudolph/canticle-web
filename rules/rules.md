@@ -30,6 +30,8 @@ The Golem's mat that contains spaces for golem cards and glyphs.
 Glyphs are passive abilities that modify the Golem. The Golem adds glyphs that make it more dangerous, and wanderers and can add glyphs that make it less dangerous.
 #### Relics
 Wanderers discover Relics by searching Locations. Most Relics have actions and passive effects that help Wanderers fulfill prophesies in a wide variety of ways. Wanderers equip Relics by placing them on their Wanderer mat, use them during their turn, and can freely pick up and drop them on their location.
+
+Most Relics have Actions, which you can perform on your turn. Other Relics have Passive effects. These effects are enabled as long as you have the Relic equipped.
 #### Wanderer Mat
 Each Wanderer has a dedicated mat. The mat has spaces for their Relics, and a HP bar that represents their health.
 #### Emperor Mat
@@ -67,7 +69,7 @@ In a 5 player game, one player plays as the Golem. On the Golem phase, they pick
 2. If the Location has Relics, draw Relics from the matching Relic deck. If you come across Relics with backs that specify a Location, skip them unless you have drawn that Location. If the Location has the ⭐ symbol, there are specific relics from that deck you must include. Search the Relic deck as necessary to find the Relics with this Locations name on it.
 3. Play 2 Infrastructure tokens if you have any in your pool (see infrastructure rules below).
 4. Discard as many cards from your hand as you want.
-5. Draw back up to 5. If your draw pile is empty, shuffle your discard pile.
+5. Draw back up to 5. If your draw pile is empty, shuffle your discard pile. If you ever have a hand of 5 cards that you are not able to play, you may discard additional cards and draw replacemenets for them. Continue doing this until you have at least 1 card you are allowed to play.
 
 designer notes on being the emperor
 - it's most fun if you keep table talk to a minimum. Remember that you can see glimpses of what's happening in the future, but you don't get to talk strategy with them directly
@@ -76,8 +78,8 @@ designer notes on being the emperor
 Each turn you play 2 tokens on the mat. The rules of each are as follows: 
 
 - Monolith Shard (12): There can only be 1 Shard per space. These have no intrinsic effect, but many magical Relics interact with Shards.
-- Fruit tree (2): When Wanderers enter this space, they gain 1 action that they must use on this turn.
-- Road (10): When Wanderers move into a space that contains a Road, they can continue into an adjacent space for free. A space that contains roads produces the symbols of all other spaces with roads that connect to that spaces. Example: Spaces A, B, and C are contiguous and all contain roads. Space C proudces 🐾, and so thus all 3 spaces produce 🐾.
+- Fruit tree (3): When Wanderers start their turn on this space, they gain 1 action that they must use on this turn.
+- Road (10): When Wanderers move from a space containing a road, it does not cost them an action. A space that contains roads also produces the symbols of all other spaces with roads that connect to that spaces. Example: Spaces A, B, and C are contiguous and all contain roads. Space C proudces 🐾, and so thus all 3 spaces produce 🐾.
 - Walls (2): The Golem cannot enter spaces with Walls.  When placing Walls:  
 	1. You cannot place it on the Golem’s space
 	2. You cannot trap the Golem. The Golem must be able to reach all Locations that do not have Walls.
@@ -119,7 +121,7 @@ Shame has no intrinsic value, but interacts with many Relics and Locations.
 
 ### Golem phase
   
-Resolve from right to left. The number you play is dictated by the current Round number, on the Emperor’s mat. Resolve each card immediately as it is drawn. If the card is tapped (face-down) do not resolve it, and discard face-up as with any other card. If the Draw Pile is empty, shuffle the Discard pile. If the card is a Glyph, it is added to the Glyph section below. If full, you must remove one.
+Resolve from right to left. The number you play is dictated by the current Round number, on the Emperor’s mat. Resolve each card immediately as it is drawn. If the card is tapped (face-down) do not resolve it, and discard face-up as with any other card. If the Draw Pile is empty, shuffle the Discard pile. If the card is a Glyph, it is added to the Glyph section below. If the Golem already has 3 face-up Glyphs, you must remove one.
 
 Various cards will "tap" a queued Golem card. This means it is face-down. When you resolve a face-down Golem card, it has no effect.
 

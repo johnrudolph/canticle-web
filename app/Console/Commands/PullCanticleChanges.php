@@ -1,0 +1,185 @@
+<?php
+
+namespace App\Console\Commands;
+
+use Illuminate\Console\Command;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Http;
+
+/**
+ * The local half of the card-comment and rulebook-justification
+ * workflows. Three things happen:
+ *
+ * 1. Fetches unresolved comments from prod's dev-sync API (anything
+ *    someone flagged as "this card needs a code change" or "this card
+ *    was deleted, go clean up references") and prints a readable
+ *    report, grouped by card type.
+ * 2. Fetches unresolved rulebook revisions — each one is a rule change
+ *    with the designer's own justification for it, meant to be quoted
+ *    in the PR that updates GameEngine.php to match. The most recent
+ *    one's full text also gets written to
+ *    resources/data/canticle/rulebook.md, same git-history reasoning
+ *    as the card JSON below.
+ * 3. Re-fetches the full current card set from prod's public
+ *    /api/cards and overwrites resources/data/canticle/*.json with it
+ *    — these files aren't read by the app anymore (see
+ *    App\Game\Catalog\*Catalog, which hit the database), they exist
+ *    purely so `git diff` shows exactly what changed in prod between
+ *    pulls, without needing DB access to see card history.
+ *
+ * Resolve a flagged comment/revision with canticle:resolve-comment /
+ * canticle:resolve-rulebook-change once its fix has actually landed.
+ */
+class PullCanticleChanges extends Command
+{
+    protected $signature = 'canticle:pull-changes';
+
+    protected $description = 'Pull unresolved card comments, rulebook revisions, and the current card set from prod';
+
+    public function handle(): int
+    {
+        $prodUrl = $this->prodUrl();
+        $apiKey = $this->apiKey();
+
+        if ($prodUrl === null || $apiKey === null) {
+            return self::FAILURE;
+        }
+
+        $this->reportComments($prodUrl, $apiKey);
+        $this->reportRulebookRevisions($prodUrl, $apiKey);
+        $this->refreshCardSnapshot($prodUrl);
+
+        return self::SUCCESS;
+    }
+
+    private function reportComments(string $prodUrl, string $apiKey): void
+    {
+        $response = Http::withToken($apiKey)->get("{$prodUrl}/api/dev-sync/comments");
+
+        if ($response->failed()) {
+            $this->error("Failed to fetch comments: HTTP {$response->status()}");
+
+            return;
+        }
+
+        $comments = $response->json('comments') ?? [];
+
+        if ($comments === []) {
+            $this->info('No unresolved comments.');
+
+            return;
+        }
+
+        $byType = [];
+        foreach ($comments as $comment) {
+            $byType[$comment['card']['type'] ?? 'unknown'][] = $comment;
+        }
+
+        foreach ($byType as $type => $group) {
+            $this->line('');
+            $this->line("<fg=yellow;options=bold>{$type}</>");
+
+            foreach ($group as $comment) {
+                $label = $comment['kind'] === 'deletion' ? '<fg=red>[deletion]</>' : '[comment]';
+                $cardName = $comment['card']['name'] ?? '(unknown card)';
+                $cardKey = $comment['card']['key'] ?? '?';
+
+                $this->line("  #{$comment['id']} {$label} {$cardName} ({$cardKey})");
+                $this->line("      {$comment['body']}");
+            }
+        }
+
+        $this->line('');
+        $this->info(count($comments).' unresolved comment(s). Resolve with: php artisan canticle:resolve-comment {id}');
+    }
+
+    private function reportRulebookRevisions(string $prodUrl, string $apiKey): void
+    {
+        $response = Http::withToken($apiKey)->get("{$prodUrl}/api/dev-sync/rulebook-revisions");
+
+        if ($response->failed()) {
+            $this->error("Failed to fetch rulebook revisions: HTTP {$response->status()}");
+
+            return;
+        }
+
+        $revisions = $response->json('revisions') ?? [];
+
+        if ($revisions === []) {
+            return;
+        }
+
+        $this->line('');
+        $this->line('<fg=yellow;options=bold>rulebook</>');
+
+        foreach ($revisions as $revision) {
+            $this->line("  #{$revision['id']} {$revision['created_at']}");
+            $this->line("      {$revision['justification']}");
+        }
+
+        $this->line('');
+        $this->info(count($revisions).' unresolved rulebook revision(s). Resolve with: php artisan canticle:resolve-rulebook-change {id}');
+
+        $outputPath = config('canticle.output_path');
+        File::ensureDirectoryExists($outputPath);
+        File::put("{$outputPath}/rulebook.md", $revisions[0]['content']);
+        $this->info('Wrote the latest rulebook text to resources/data/canticle/rulebook.md — check `git diff` for the actual rule change.');
+    }
+
+    private function refreshCardSnapshot(string $prodUrl): void
+    {
+        $response = Http::get("{$prodUrl}/api/cards");
+
+        if ($response->failed()) {
+            $this->error("Failed to fetch card snapshot: HTTP {$response->status()}");
+
+            return;
+        }
+
+        $cards = $response->json();
+        $outputPath = config('canticle.output_path');
+        File::ensureDirectoryExists($outputPath);
+
+        $fileFor = [
+            'locations' => 'locations.json',
+            'relics' => 'relics.json',
+            'glyphs' => 'glyphs.json',
+            'golem_cards' => 'golem_cards.json',
+        ];
+
+        foreach ($fileFor as $key => $filename) {
+            File::put(
+                "{$outputPath}/{$filename}",
+                json_encode($cards[$key] ?? [], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)."\n"
+            );
+        }
+
+        $this->info('Refreshed resources/data/canticle/*.json from prod — check `git diff` for what changed.');
+    }
+
+    private function prodUrl(): ?string
+    {
+        $url = config('canticle.prod_url');
+
+        if (! is_string($url) || $url === '') {
+            $this->error('PROD_URL is not configured.');
+
+            return null;
+        }
+
+        return str_starts_with($url, 'http') ? rtrim($url, '/') : 'https://'.rtrim($url, '/');
+    }
+
+    private function apiKey(): ?string
+    {
+        $key = config('debug_api.key');
+
+        if (! is_string($key) || $key === '') {
+            $this->error('DEBUG_API_KEY is not configured.');
+
+            return null;
+        }
+
+        return $key;
+    }
+}

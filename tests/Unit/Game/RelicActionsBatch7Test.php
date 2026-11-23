@@ -51,7 +51,7 @@ test('Poof is rejected outright short of all 12 Monolith Shards nearby', functio
 test('Scapegoat\'s catharsis damages Allies and trashes itself plus all 4 Dark Relics', function () {
     $state = startedGame();
     $equipped = [
-        'body' => 'dark-chains', 'mind' => 'dark-limitations',
+        'body' => 'dark-shackles', 'mind' => 'dark-limitations',
         'hand_left' => 'dark-sacrifice', 'hand_right' => 'dark-sigil', 'bag' => 'scapegoats-catharsis',
     ];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
@@ -70,7 +70,7 @@ test('Scapegoat\'s catharsis is rejected outright without all 4 Dark Relics equi
     $state = startedGame();
     $equipped = [
         ...$state->wanderers['wanderer_a']['equipped'],
-        'body' => 'dark-chains', 'bag' => 'scapegoats-catharsis',
+        'body' => 'dark-shackles', 'bag' => 'scapegoats-catharsis',
     ];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);

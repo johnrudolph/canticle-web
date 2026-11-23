@@ -2,12 +2,13 @@
 
 namespace App\Game\Catalog;
 
-use Illuminate\Support\Str;
+use App\Models\Cards\GolemCard as GolemCardModel;
 
 /**
- * Loads resources/data/canticle/golem_cards.json. 3 names repeat
- * ("Self inscription" ×3, genuinely identical reprints) — same stable
- * disambiguating-suffix scheme as RelicCatalog.
+ * Loads the `golem_cards` table. 3 names repeat ("Self inscription" ×3,
+ * genuinely identical reprints) — their keys were disambiguated once at
+ * seed/creation time (self-inscription, self-inscription-2, -3) and are
+ * frozen from then on, same as every other card type.
  */
 final class GolemCardCatalog
 {
@@ -23,27 +24,13 @@ final class GolemCardCatalog
             return self::$cache;
         }
 
-        $path = config('canticle.output_path').'/golem_cards.json';
-        $rows = CatalogFile::readJson($path);
-
         $cards = [];
-        $seenSlugs = [];
 
-        foreach ($rows as $row) {
-            $name = trim((string) $row['name']);
-
-            if ($name === '') {
-                continue;
-            }
-
-            $baseSlug = Str::slug($name);
-            $seenSlugs[$baseSlug] = ($seenSlugs[$baseSlug] ?? 0) + 1;
-            $key = $seenSlugs[$baseSlug] === 1 ? $baseSlug : "{$baseSlug}-{$seenSlugs[$baseSlug]}";
-
-            $cards[$key] = new GolemCard(
-                key: $key,
-                name: $name,
-                action: trim((string) ($row['action'] ?? '')),
+        foreach (GolemCardModel::query()->orderBy('id')->get() as $row) {
+            $cards[$row->key] = new GolemCard(
+                key: $row->key,
+                name: $row->name,
+                action: trim((string) $row->action),
             );
         }
 

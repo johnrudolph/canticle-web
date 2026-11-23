@@ -2,13 +2,14 @@
 
 namespace App\Game\Catalog;
 
-use Illuminate\Support\Str;
+use App\Models\Cards\Relic as RelicModel;
 
 /**
- * Loads resources/data/canticle/relics.json into Relic DTOs. A handful of
- * names repeat (e.g. "Inscribe" appears 12 times across different slots —
- * genuinely distinct cards), so keys are slugified name + a stable
- * disambiguating suffix on repeats, in file order.
+ * Loads the `relics` table into Relic DTOs. Keys are frozen at creation
+ * time (see SeedCanticleCards / the admin editor) rather than
+ * recomputed here — GameEngine.php hardcodes hundreds of them (e.g.
+ * 'dark-shackles', 'inscribe-3'), so a card's key must never change
+ * after it's created, even if its name is later edited.
  */
 final class RelicCatalog
 {
@@ -24,40 +25,25 @@ final class RelicCatalog
             return self::$cache;
         }
 
-        $path = config('canticle.output_path').'/relics.json';
-        $rows = CatalogFile::readJson($path);
-
         $relics = [];
-        $seenSlugs = [];
 
-        foreach ($rows as $row) {
-            $name = trim((string) $row['name']);
+        foreach (RelicModel::query()->orderBy('id')->get() as $row) {
+            $effect = trim((string) $row->effect);
 
-            if ($name === '') {
-                continue;
-            }
-
-            $baseSlug = Str::slug($name);
-            $seenSlugs[$baseSlug] = ($seenSlugs[$baseSlug] ?? 0) + 1;
-            $key = $seenSlugs[$baseSlug] === 1 ? $baseSlug : "{$baseSlug}-{$seenSlugs[$baseSlug]}";
-
-            $locationName = trim((string) ($row['location'] ?? ''));
-            $effect = trim((string) ($row['effect'] ?? ''));
-
-            $relics[$key] = new Relic(
-                key: $key,
-                name: $name,
+            $relics[$row->key] = new Relic(
+                key: $row->key,
+                name: $row->name,
                 effect: $effect,
-                slot: trim((string) ($row['slot'] ?? '')),
-                slotEmoji: trim((string) ($row['slot_emoji'] ?? '')),
-                symbol: trim((string) ($row['symbol'] ?? '')),
-                locationName: $locationName === '' ? null : $locationName,
-                isEvent: trim((string) ($row['type'] ?? '')) === 'Event',
+                slot: trim((string) $row->slot),
+                slotEmoji: trim((string) $row->slot_emoji),
+                symbol: trim((string) $row->symbol),
+                locationName: $row->location === null || trim((string) $row->location) === '' ? null : trim((string) $row->location),
+                isEvent: $row->type === 'Event',
                 // "Bound (🪡)" is printed as the first line of the effect
                 // text itself (no dedicated column in the sheet) — see
                 // e.g. Peacemaker's spirit, Hands of deliverance.
                 isBound: str_starts_with($effect, 'Bound'),
-                isAction: trim((string) ($row['type'] ?? '')) === 'Action',
+                isAction: $row->type === 'Action',
             );
         }
 

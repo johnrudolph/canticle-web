@@ -15,7 +15,7 @@ import type { RelicCatalogEntry } from '@/types/game';
  * Generic "pick Relic(s) from a list" prompt — reused by every Relic
  * whose choice is which Relic(s) to act on rather than a target role
  * or a cell: Smoldering (own equipped, any number), Divine Cabalist
- * pyre (a board space's face-up pile, any number), Show solidarity
+ * pyre (a board space's face-up pile, any number), Armistice
  * (any Wanderer's equipped sharing the Golem's space, any number),
  * Warlock's robes/Cabalist brew (exactly one, someone else's).
  * Callers pass in exactly the candidate {key, label} list that

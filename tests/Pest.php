@@ -18,9 +18,14 @@ pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
     ->in('Feature');
 
-// Unit tests don't touch the database, but still need the app booted —
-// the game engine's Catalog loaders read their file paths via config().
+// Unit tests don't persist anything of their own, but the game engine's
+// Catalog loaders (Location/Relic/Glyph/GolemCard) now read from the
+// database rather than JSON, so they need the schema + seeded card data
+// too. RefreshDatabase's seed-once-per-run optimization for the sqlite
+// ":memory:" connection (migrate+seed happens a single time; each test
+// still gets its own rolled-back transaction) keeps this fast.
 pest()->extend(TestCase::class)
+    ->use(RefreshDatabase::class)
     ->in('Unit');
 
 /*

@@ -54,7 +54,7 @@ const PROMPTED_RELICS = new Set([
     'warlocks-robes',
     'magistrates-robes',
     'divine-cabalist-pyre',
-    'show-solidarity',
+    'armistice',
     'cabalist-brew',
     'golem-log',
     'merchants-gloves',

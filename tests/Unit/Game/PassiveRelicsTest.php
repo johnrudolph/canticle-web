@@ -11,7 +11,7 @@ use App\Game\InvalidMoveException;
 test('Dark sacrifice reduces incoming damage by 1 per equipped Dark Relic', function () {
     $state = startedGame();
     $equipped = [
-        'body' => 'dark-chains', 'mind' => null,
+        'body' => 'dark-shackles', 'mind' => null,
         'hand_left' => 'dark-sacrifice', 'hand_right' => null, 'bag' => null,
     ];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
@@ -20,7 +20,7 @@ test('Dark sacrifice reduces incoming damage by 1 per equipped Dark Relic', func
     $reflection->setAccessible(true);
     [$state, $events] = $reflection->invoke(null, $state, 'wanderer_a', 5);
 
-    // 2 Dark Relics equipped (dark-chains + dark-sacrifice itself counts
+    // 2 Dark Relics equipped (dark-shackles + dark-sacrifice itself counts
     // too, it's an equipped "Dark ..." Relic the same as any other) => -2.
     expect($state->wanderers['wanderer_a']['hp'])->toBe(12);
 
@@ -32,13 +32,13 @@ test('Dark sacrifice reduces incoming damage by 1 per equipped Dark Relic', func
 
 test('Dark sacrifice\'s reduction requires Dark sacrifice itself equipped, not just any other Dark Relic', function () {
     // The ability belongs to the Dark sacrifice card specifically —
-    // merely having a DIFFERENT Dark Relic equipped (here, Dark chains
+    // merely having a DIFFERENT Dark Relic equipped (here, Dark shackles
     // alone, no Dark sacrifice) grants no reduction. Same bug shape as
     // Emperor's Knowledge applying its bonus without the card itself
     // equipped.
     $state = startedGame();
     $equipped = [
-        'body' => 'dark-chains', 'mind' => null,
+        'body' => 'dark-shackles', 'mind' => null,
         'hand_left' => null, 'hand_right' => null, 'bag' => null,
     ];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
@@ -145,9 +145,9 @@ test('Builder\'s gloves raises the Infrastructure cap to 3 while a holder is on 
     expect($state->infrastructurePlacedThisTurn)->toBe(3);
 });
 
-test('Dark chains pulls its holder along when the Golem moves', function () {
+test('Dark shackles pulls its holder along when the Golem moves', function () {
     $state = startedGame();
-    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'dark-chains'];
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'dark-shackles'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
