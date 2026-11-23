@@ -1936,7 +1936,7 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                                         )
                                                     }
                                                 >
-                                                    🌿 Rest (+2 Health)
+                                                    🌿 Rest (+1 Health)
                                                 </Button>
                                             );
                                             const searchButton = (

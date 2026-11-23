@@ -6,14 +6,14 @@ use App\Game\InvalidMoveException;
 // startedGame() (GameEngineTest.php) is declared in a sibling file,
 // loaded in the same run.
 
-test('rest heals 2 Health and costs 1 action', function () {
+test('rest heals 1 Health and costs 1 action', function () {
     $state = startedGame();
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 10])]);
 
     [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'rest']);
 
-    expect($state->wanderers['wanderer_a']['hp'])->toBe(12)
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(11)
         ->and($state->wanderers['wanderer_a']['actions_remaining'])->toBe(2);
 });
 
@@ -42,7 +42,7 @@ test('a Wanderer at 0 Health can only rest, not move/search/use a Relic', functi
         ->toThrow(InvalidMoveException::class);
 
     [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'rest']);
-    expect($state->wanderers['wanderer_a']['hp'])->toBe(2);
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(1);
 });
 
 test('a Bound Relic cannot be dropped once equipped', function () {

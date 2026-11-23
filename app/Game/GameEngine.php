@@ -6878,8 +6878,11 @@ final class GameEngine
     }
 
     /**
-     * rules.md: "🌿: increase Health by 2" — the baseline Wanderer
-     * action available even at 0 HP (where it's the only one available).
+     * rules.md: "🌿: increase Health by 1" — the baseline Wanderer
+     * action available even at 0 HP (where it's the only one
+     * available). Reduced from 2 (designer's own justification, pulled
+     * via canticle:pull-changes, rulebook revision #3): "reduce self
+     * healing to 1, which makes exhaustion even more punishing."
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
@@ -6893,7 +6896,7 @@ final class GameEngine
             throw new InvalidMoveException('No actions remaining this turn.');
         }
 
-        $hp = min(self::maxHpFor($state, $actorRole), $wanderer['hp'] + 2);
+        $hp = min(self::maxHpFor($state, $actorRole), $wanderer['hp'] + 1);
         $wanderers = $state->wanderersWith($actorRole, [
             'hp' => $hp,
             'actions_remaining' => $wanderer['actions_remaining'] - 1,
