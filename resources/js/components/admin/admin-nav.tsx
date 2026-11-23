@@ -1,5 +1,6 @@
 import { Link, router } from '@inertiajs/react';
 import { destroy as logout } from '@/actions/Laravel/Fortify/Http/Controllers/AuthenticatedSessionController';
+import { CommandPalette } from '@/components/admin/command-palette';
 import { Button } from '@/components/ui/button';
 import glyphs from '@/routes/admin/glyphs';
 import golemCards from '@/routes/admin/golem-cards';
@@ -18,7 +19,7 @@ const LINKS = [
 export function AdminNav() {
     return (
         <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 pt-4">
-            <div className="flex gap-3 text-sm">
+            <div className="flex items-center gap-3 text-sm">
                 {LINKS.map((link) => (
                     <Link
                         key={link.href}
@@ -28,6 +29,9 @@ export function AdminNav() {
                         {link.label}
                     </Link>
                 ))}
+                <span className="text-xs text-muted-foreground">
+                    ⌘K to search
+                </span>
             </div>
             <Button
                 size="sm"
@@ -36,6 +40,7 @@ export function AdminNav() {
             >
                 Log out
             </Button>
+            <CommandPalette />
         </nav>
     );
 }

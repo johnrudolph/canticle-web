@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import {
     Select,
     SelectContent,
@@ -9,6 +10,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { useKeyboardShortcut } from '@/hooks/use-keyboard-shortcut';
 import type { CardRecord, ColumnDef } from '@/types/admin';
 
 interface CardTableProps {
@@ -34,6 +36,10 @@ export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
     const [sortDesc, setSortDesc] = useState(false);
     const [showDeleted, setShowDeleted] = useState(false);
     const [filters, setFilters] = useState<Record<string, string>>({});
+    const [quickFilter, setQuickFilter] = useState('');
+    const quickFilterRef = useRef<HTMLInputElement>(null);
+
+    useKeyboardShortcut('f', () => quickFilterRef.current?.focus());
 
     const filterableColumns = columns.filter((c) => c.filterable);
 
@@ -57,6 +63,15 @@ export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
             rows = rows.filter((c) => c.deleted_at === null);
         }
 
+        const needle = quickFilter.trim().toLowerCase();
+        if (needle !== '') {
+            rows = rows.filter(
+                (c) =>
+                    c.name.toLowerCase().includes(needle) ||
+                    c.key.toLowerCase().includes(needle),
+            );
+        }
+
         for (const [key, value] of Object.entries(filters)) {
             if (value && value !== '__all__') {
                 rows = rows.filter((c) => cellValue(c, key) === value);
@@ -71,7 +86,7 @@ export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
         });
 
         return rows;
-    }, [cards, filters, showDeleted, sortKey, sortDesc]);
+    }, [cards, filters, quickFilter, showDeleted, sortKey, sortDesc]);
 
     function toggleSort(key: string) {
         if (sortKey === key) {
@@ -84,7 +99,6 @@ export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
 
     const headerColumns: ColumnDef[] = [
         { key: 'name', label: 'Name', type: 'text' },
-        { key: 'key', label: 'Key', type: 'text' },
         { key: 'print', label: 'Print', type: 'boolean' },
         ...columns.filter((c) => c.filterable),
     ];
@@ -93,6 +107,18 @@ export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
         <div className="flex flex-col gap-4">
             <div className="flex flex-wrap items-end gap-3">
                 <Button onClick={onNew}>New</Button>
+                <div className="flex flex-col gap-1">
+                    <span className="text-xs text-muted-foreground">
+                        Filter (⌘F)
+                    </span>
+                    <Input
+                        ref={quickFilterRef}
+                        className="h-8 w-48"
+                        placeholder="Name or key..."
+                        value={quickFilter}
+                        onChange={(e) => setQuickFilter(e.target.value)}
+                    />
+                </div>
                 {filterableColumns.map((col) => (
                     <div key={col.key} className="flex flex-col gap-1">
                         <span className="text-xs text-muted-foreground">

@@ -3,14 +3,12 @@ import { useState } from 'react';
 import { AdminNav } from '@/components/admin/admin-nav';
 import { CardEditModal } from '@/components/admin/card-edit-modal';
 import { CardTable } from '@/components/admin/card-table';
+import { GLYPH_COLUMNS } from '@/lib/admin-columns';
 import comments from '@/routes/admin/comments';
 import glyphs from '@/routes/admin/glyphs';
-import type { CardRecord, ColumnDef } from '@/types/admin';
+import type { CardRecord } from '@/types/admin';
 
-const COLUMNS: ColumnDef[] = [
-    { key: 'type', label: 'Type', type: 'text', filterable: true },
-    { key: 'description', label: 'Description', type: 'textarea' },
-];
+const COLUMNS = GLYPH_COLUMNS;
 
 export default function AdminGlyphs({ cards }: { cards: CardRecord[] }) {
     const [editing, setEditing] = useState<CardRecord | null | 'new'>(null);

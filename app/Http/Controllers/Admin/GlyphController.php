@@ -21,6 +21,11 @@ class GlyphController extends CardController
         return 'admin/glyphs';
     }
 
+    protected function detailPageComponent(): string
+    {
+        return 'admin/glyph-detail';
+    }
+
     protected function rules(): array
     {
         return [

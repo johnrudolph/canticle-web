@@ -23,7 +23,11 @@ export interface CardRecord {
 export interface ColumnDef {
     key: string;
     label: string;
-    type: 'text' | 'textarea' | 'boolean';
-    /** Show a filter dropdown over this column's distinct values. */
+    type: 'text' | 'textarea' | 'boolean' | 'select' | 'multiselect';
+    /** Show a filter dropdown over this column's distinct values (list/table view only). */
     filterable?: boolean;
+    /** Required for 'select'/'multiselect' — the fixed set of valid values. */
+    options?: string[];
 }
+
+export type CardType = 'location' | 'relic' | 'glyph' | 'golem_card';

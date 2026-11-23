@@ -3,11 +3,12 @@ import { useState } from 'react';
 import { AdminNav } from '@/components/admin/admin-nav';
 import { CardEditModal } from '@/components/admin/card-edit-modal';
 import { CardTable } from '@/components/admin/card-table';
+import { GOLEM_CARD_COLUMNS } from '@/lib/admin-columns';
 import comments from '@/routes/admin/comments';
 import golemCards from '@/routes/admin/golem-cards';
-import type { CardRecord, ColumnDef } from '@/types/admin';
+import type { CardRecord } from '@/types/admin';
 
-const COLUMNS: ColumnDef[] = [{ key: 'action', label: 'Action', type: 'textarea' }];
+const COLUMNS = GOLEM_CARD_COLUMNS;
 
 export default function AdminGolemCards({ cards }: { cards: CardRecord[] }) {
     const [editing, setEditing] = useState<CardRecord | null | 'new'>(null);

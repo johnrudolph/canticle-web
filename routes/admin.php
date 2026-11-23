@@ -27,6 +27,7 @@ Route::middleware(['auth', EnsureIsAdmin::class])->prefix('admin')->name('admin.
     ] as [$prefix, $controller]) {
         Route::get($prefix, [$controller, 'index'])->name("{$prefix}.index");
         Route::post($prefix, [$controller, 'store'])->name("{$prefix}.store");
+        Route::get("{$prefix}/{id}", [$controller, 'show'])->name("{$prefix}.show");
         Route::put("{$prefix}/{id}", [$controller, 'update'])->name("{$prefix}.update");
         Route::delete("{$prefix}/{id}", [$controller, 'destroy'])->name("{$prefix}.destroy");
     }

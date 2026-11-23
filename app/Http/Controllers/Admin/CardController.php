@@ -35,6 +35,29 @@ abstract class CardController extends Controller
     /** @return array<string, mixed> */
     abstract protected function rules(): array;
 
+    /**
+     * Computes server-side/derived columns (e.g. slot_emoji from slot)
+     * that are never accepted directly from the request — they're just
+     * absent from rules(), so validate() won't return them, and this
+     * fills them back in right before persisting. Default: no-op.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    protected function beforeSave(array $data): array
+    {
+        return $data;
+    }
+
+    /** Extra Inertia props beyond `cards` — e.g. a Select's option list. */
+    protected function extraProps(): array
+    {
+        return [];
+    }
+
+    /** The page component under resources/js/pages/admin/ to render for the single-card detail view. */
+    abstract protected function detailPageComponent(): string;
+
     public function index(): Response
     {
         $cards = $this->modelClass()::query()
@@ -45,12 +68,26 @@ abstract class CardController extends Controller
 
         return Inertia::render($this->pageComponent(), [
             'cards' => $cards,
+            ...$this->extraProps(),
+        ]);
+    }
+
+    public function show(int $id): Response
+    {
+        $card = $this->modelClass()::query()
+            ->withTrashed()
+            ->with('comments')
+            ->findOrFail($id);
+
+        return Inertia::render($this->detailPageComponent(), [
+            'card' => $card,
+            ...$this->extraProps(),
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
-        $data = $request->validate($this->rules());
+        $data = $this->beforeSave($request->validate($this->rules()));
         $data['key'] = $this->uniqueKey($data['name']);
 
         $this->modelClass()::create($data);
@@ -61,7 +98,7 @@ abstract class CardController extends Controller
     public function update(Request $request, int $id): RedirectResponse
     {
         $card = $this->modelClass()::withTrashed()->findOrFail($id);
-        $data = $request->validate($this->rules());
+        $data = $this->beforeSave($request->validate($this->rules()));
 
         $card->update($data);
 

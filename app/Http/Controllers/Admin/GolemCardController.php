@@ -21,6 +21,11 @@ class GolemCardController extends CardController
         return 'admin/golem-cards';
     }
 
+    protected function detailPageComponent(): string
+    {
+        return 'admin/golem-card-detail';
+    }
+
     protected function rules(): array
     {
         return [

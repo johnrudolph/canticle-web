@@ -2,10 +2,20 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Models\Cards\Location;
 use App\Models\Cards\Relic;
 
 class RelicController extends CardController
 {
+    /** Hand/Mind/Body/Bag -> slot_emoji. Empty slot (Event relics) -> empty. */
+    private const SLOT_EMOJI = [
+        'Body' => '🥋',
+        'Mind' => '🧠',
+        'Hand' => '🖐️',
+        'Bag' => '👝',
+        '' => '',
+    ];
+
     protected function modelClass(): string
     {
         return Relic::class;
@@ -21,20 +31,38 @@ class RelicController extends CardController
         return 'admin/relics';
     }
 
+    protected function detailPageComponent(): string
+    {
+        return 'admin/relic-detail';
+    }
+
+    protected function extraProps(): array
+    {
+        return [
+            'locationNames' => Location::query()->orderBy('name')->pluck('name'),
+        ];
+    }
+
     protected function rules(): array
     {
         return [
             'print' => ['boolean'],
             'name' => ['required', 'string', 'max:255'],
             'location' => ['nullable', 'string', 'max:255'],
-            'slot' => ['nullable', 'string', 'max:255'],
-            'type' => ['nullable', 'string', 'max:255'],
-            'symbol' => ['nullable', 'string', 'max:255'],
+            'slot' => ['required', 'string', 'in:Body,Mind,Hand,Bag,'],
+            'type' => ['required', 'string', 'in:Action,Passive,Event'],
+            'symbol' => ['nullable', 'string', 'in:⏳,⚖️,✨,🌑,🎨,🐾,📖,🤝,'],
             'effect' => ['nullable', 'string'],
-            'slot_emoji' => ['nullable', 'string', 'max:255'],
-            'is_action' => ['boolean'],
-            'is_passive' => ['boolean'],
-            'is_event' => ['boolean'],
         ];
+    }
+
+    protected function beforeSave(array $data): array
+    {
+        $data['slot_emoji'] = self::SLOT_EMOJI[$data['slot']] ?? '';
+        $data['is_action'] = $data['type'] === 'Action';
+        $data['is_passive'] = $data['type'] === 'Passive';
+        $data['is_event'] = $data['type'] === 'Event';
+
+        return $data;
     }
 }

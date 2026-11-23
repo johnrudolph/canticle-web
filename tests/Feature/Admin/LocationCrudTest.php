@@ -80,3 +80,51 @@ test('a non-admin cannot perform any admin card mutation', function () {
     $this->actingAs($user)->put("/admin/locations/{$location->id}", ['name' => 'Nope'])->assertForbidden();
     $this->actingAs($user)->delete("/admin/locations/{$location->id}", ['reason' => 'nope'])->assertForbidden();
 });
+
+test('creating a location with costs and produces computes the emoji/boolean fields', function () {
+    $admin = adminUser();
+
+    $this->actingAs($admin)->post('/admin/locations', [
+        'name' => 'Computed Fields Place',
+        'print' => false,
+        'rule' => 'Does something.',
+        'relics' => '6 🎨',
+        'relic_names' => 'Specific Relic',
+        'produces' => 'Art',
+        'costs' => ['Magic', 'Solidarity'],
+    ])->assertRedirect();
+
+    $location = Location::where('name', 'Computed Fields Place')->first();
+
+    expect($location->produces_emoji)->toBe('🎨')
+        ->and($location->cost_1)->toBe('Magic')
+        ->and($location->cost_2)->toBe('Solidarity')
+        ->and($location->cost_3)->toBe('')
+        ->and($location->cost_emoji)->toBe('✨🤝')
+        ->and($location->has_cost)->toBeTrue()
+        ->and($location->produces_anything)->toBeTrue()
+        ->and($location->has_back_text)->toBeTrue()
+        ->and($location->has_relics)->toBeTrue()
+        ->and($location->has_specific_relics)->toBeTrue();
+});
+
+test('an invalid location produces/cost branch is rejected', function () {
+    $admin = adminUser();
+
+    $this->actingAs($admin)->post('/admin/locations', [
+        'name' => 'Bad Branch Place',
+        'produces' => 'NotARealBranch',
+    ])->assertSessionHasErrors('produces');
+
+    $this->actingAs($admin)->post('/admin/locations', [
+        'name' => 'Bad Cost Place',
+        'costs' => ['NotARealBranch'],
+    ])->assertSessionHasErrors('costs.0');
+});
+
+test('GET /admin/locations/{id} renders the dedicated detail page', function () {
+    $admin = adminUser();
+    $location = Location::create(['key' => 'detail-page-place', 'name' => 'Detail Page Place']);
+
+    $this->actingAs($admin)->get("/admin/locations/{$location->id}")->assertOk();
+});
