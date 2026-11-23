@@ -52,6 +52,17 @@ class RelicController extends CardController
      * matrix — excludes soft-deleted Relics (the default query scope),
      * same "currently live" population the list itself shows unless
      * "Show deleted" is checked.
+     *
+     * Deliberately NOT `->groupBy('slot', 'symbol')` in SQL: MySQL's
+     * utf8mb4_unicode_ci/utf8mb4_general_ci collations have incomplete
+     * weight tables for supplementary-plane (4-byte) characters, which
+     * is exactly what every Relic symbol except ⏳/⚖️/✨ is — GROUP BY
+     * silently treated 🌑/🎨/🐾/📖/🤝 as equal to each other on prod
+     * (confirmed: the stored bytes are correct, a plain SELECT reads
+     * them back fine; only the grouped aggregate merged them, all into
+     * whichever one happened to be the "first" of the group). Tallying
+     * in PHP after a plain SELECT sidesteps the collation entirely —
+     * fine at this scale (~100 rows).
      */
     private function buildRelicSummary(): array
     {
@@ -63,14 +74,9 @@ class RelicController extends CardController
             $matrix[$slot] = array_fill_keys($symbols, 0);
         }
 
-        $counted = Relic::query()
-            ->selectRaw('slot, symbol, count(*) as count')
-            ->groupBy('slot', 'symbol')
-            ->get();
-
-        foreach ($counted as $row) {
-            if (isset($matrix[$row->slot][$row->symbol])) {
-                $matrix[$row->slot][$row->symbol] = (int) $row->count;
+        foreach (Relic::query()->get(['slot', 'symbol']) as $relic) {
+            if (isset($matrix[$relic->slot][$relic->symbol])) {
+                $matrix[$relic->slot][$relic->symbol]++;
             }
         }
 
