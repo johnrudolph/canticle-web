@@ -16,13 +16,20 @@ use Laravel\Fortify\Fortify;
  * a silently-created guest account, see EnsureGuestIdentity. The base
  * login/logout routes are real now, though: they're how the one seeded
  * admin (hello@catacombian.com, see DatabaseSeeder) reaches /admin, the
- * card editor. Nothing else in the app ever links to /login.
+ * card editor.
+ *
+ * Fortify auto-registers /login behind a `guest` middleware — but every
+ * visitor here is ALREADY a real authenticated User (the silently-created
+ * guest), so that middleware would reject every single visitor before
+ * they ever see the login form, bouncing them back to `/`. ignoreRoutes()
+ * + our own routes (routes/web.php) without that gate is the fix — same
+ * controllers, just reachable while "logged in" as a guest.
  */
 class FortifyServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        //
+        Fortify::ignoreRoutes();
     }
 
     public function boot(): void
