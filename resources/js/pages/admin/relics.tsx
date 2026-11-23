@@ -3,17 +3,20 @@ import { useState } from 'react';
 import { AdminNav } from '@/components/admin/admin-nav';
 import { CardEditModal } from '@/components/admin/card-edit-modal';
 import { CardTable } from '@/components/admin/card-table';
+import { RelicSlotTypeMatrix } from '@/components/admin/relic-slot-type-matrix';
 import { relicColumns } from '@/lib/admin-columns';
 import comments from '@/routes/admin/comments';
 import relics from '@/routes/admin/relics';
-import type { CardRecord } from '@/types/admin';
+import type { CardRecord, RelicSummary } from '@/types/admin';
 
 export default function AdminRelics({
     cards,
     locationNames,
+    relicSummary,
 }: {
     cards: CardRecord[];
     locationNames: string[];
+    relicSummary: RelicSummary;
 }) {
     const [editing, setEditing] = useState<CardRecord | null | 'new'>(null);
     const columns = relicColumns(locationNames);
@@ -24,6 +27,7 @@ export default function AdminRelics({
             <AdminNav />
             <div className="mx-auto flex max-w-6xl flex-col gap-6 p-4 py-12">
                 <h1 className="text-2xl font-semibold">Relics</h1>
+                <RelicSlotTypeMatrix summary={relicSummary} />
                 <CardTable
                     cards={cards}
                     columns={columns}

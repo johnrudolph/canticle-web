@@ -43,6 +43,17 @@ test('an invalid relic type or slot is rejected', function () {
     ])->assertSessionHasErrors('slot');
 });
 
+test('a relic cannot be created without a type — it is required, never null', function () {
+    $admin = adminUser();
+
+    $this->actingAs($admin)->post('/admin/relics', [
+        'name' => 'Typeless Relic',
+        'slot' => 'Hand',
+    ])->assertSessionHasErrors('type');
+
+    expect(Relic::where('name', 'Typeless Relic')->exists())->toBeFalse();
+});
+
 test('updating a relic recomputes slot_emoji and the type flags', function () {
     $admin = adminUser();
     $relic = Relic::create([
@@ -67,4 +78,21 @@ test('updating a relic recomputes slot_emoji and the type flags', function () {
     expect($relic->slot_emoji)->toBe('🥋')
         ->and($relic->is_action)->toBeFalse()
         ->and($relic->is_event)->toBeTrue();
+});
+
+test('the relics index page includes a slot x type count matrix', function () {
+    $admin = adminUser();
+
+    // The test DB is seeded with the real card set, so assert against
+    // the baseline + what this test adds, not an absolute count.
+    $before = Relic::where('slot', 'Hand')->where('type', 'Action')->count();
+
+    Relic::create(['key' => 'matrix-a', 'name' => 'Matrix A', 'slot' => 'Hand', 'type' => 'Action']);
+    Relic::create(['key' => 'matrix-b', 'name' => 'Matrix B', 'slot' => 'Hand', 'type' => 'Action']);
+
+    $response = $this->actingAs($admin)->get('/admin/relics');
+
+    $response->assertInertia(fn ($page) => $page
+        ->where('relicSummary.matrix.Hand.Action', $before + 2)
+    );
 });

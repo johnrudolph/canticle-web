@@ -37,7 +37,18 @@ export function relicColumns(locationNames: string[]): ColumnDef[] {
             options: locationNames,
         },
         { key: 'slot', label: 'Slot', type: 'select', filterable: true, options: RELIC_SLOTS },
-        { key: 'type', label: 'Type', type: 'select', filterable: true, options: RELIC_TYPES },
+        {
+            key: 'type',
+            label: 'Type',
+            type: 'select',
+            filterable: true,
+            options: RELIC_TYPES,
+            // Every Relic must have a type — Action/Passive/Event, never
+            // blank. New Relics start on Action; the "—" none choice is
+            // hidden for this field specifically (see allowNone below).
+            defaultValue: 'Action',
+            allowNone: false,
+        },
         {
             key: 'symbol',
             label: 'Symbol',
@@ -45,7 +56,7 @@ export function relicColumns(locationNames: string[]): ColumnDef[] {
             filterable: true,
             options: RELIC_SYMBOLS,
         },
-        { key: 'effect', label: 'Effect', type: 'textarea' },
+        { key: 'effect', label: 'Effect', type: 'textarea', showInTable: true },
     ];
 }
 
@@ -58,7 +69,7 @@ export function relicColumns(locationNames: string[]): ColumnDef[] {
  */
 export const LOCATION_COLUMNS: ColumnDef[] = [
     { key: 'lore', label: 'Lore', type: 'textarea' },
-    { key: 'rule', label: 'Rule', type: 'textarea' },
+    { key: 'rule', label: 'Rule', type: 'textarea', showInTable: true },
     { key: 'costs', label: 'Costs', type: 'multiselect', options: BRANCHES },
     { key: 'produces', label: 'Produces', type: 'select', filterable: true, options: BRANCHES },
     { key: 'relics', label: 'Relics', type: 'text' },
@@ -70,9 +81,9 @@ export const LOCATION_COLUMNS: ColumnDef[] = [
 
 export const GLYPH_COLUMNS: ColumnDef[] = [
     { key: 'type', label: 'Type', type: 'text', filterable: true },
-    { key: 'description', label: 'Description', type: 'textarea' },
+    { key: 'description', label: 'Description', type: 'textarea', showInTable: true },
 ];
 
 export const GOLEM_CARD_COLUMNS: ColumnDef[] = [
-    { key: 'action', label: 'Action', type: 'textarea' },
+    { key: 'action', label: 'Action', type: 'textarea', showInTable: true },
 ];

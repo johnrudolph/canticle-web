@@ -49,7 +49,10 @@ function initialValueFor(col: ColumnDef, card: CardRecord | null): FormDataConve
 
     if (card) return card[col.key] as FormDataConvertible;
 
-    return col.type === 'boolean' ? false : '';
+    if (col.type === 'boolean') return false;
+    if (col.type === 'select' && col.defaultValue) return col.defaultValue;
+
+    return '';
 }
 
 export function CardFields({
@@ -178,7 +181,9 @@ export function CardFields({
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="__none__">—</SelectItem>
+                                    {col.allowNone !== false && (
+                                        <SelectItem value="__none__">—</SelectItem>
+                                    )}
                                     {(col.options ?? []).map((option) => (
                                         <SelectItem key={option} value={option}>
                                             {option}

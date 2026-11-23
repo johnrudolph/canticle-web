@@ -40,6 +40,41 @@ class RelicController extends CardController
     {
         return [
             'locationNames' => Location::query()->orderBy('name')->pluck('name'),
+            'relicSummary' => $this->buildRelicSummary(),
+        ];
+    }
+
+    /**
+     * Counts per slot, per type, and the slot x type matrix — excludes
+     * soft-deleted Relics (the default query scope), same "currently
+     * live" population the list itself shows unless "Show deleted" is
+     * checked.
+     */
+    private function buildRelicSummary(): array
+    {
+        $slots = array_keys(self::SLOT_EMOJI);
+        $types = ['Action', 'Passive', 'Event'];
+
+        $matrix = [];
+        foreach ($slots as $slot) {
+            $matrix[$slot] = array_fill_keys($types, 0);
+        }
+
+        $counted = Relic::query()
+            ->selectRaw('slot, type, count(*) as count')
+            ->groupBy('slot', 'type')
+            ->get();
+
+        foreach ($counted as $row) {
+            if (isset($matrix[$row->slot][$row->type])) {
+                $matrix[$row->slot][$row->type] = (int) $row->count;
+            }
+        }
+
+        return [
+            'slots' => $slots,
+            'types' => $types,
+            'matrix' => $matrix,
         ];
     }
 

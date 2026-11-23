@@ -97,10 +97,12 @@ export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
         }
     }
 
+    const textColumn = columns.find((c) => c.showInTable);
     const headerColumns: ColumnDef[] = [
         { key: 'name', label: 'Name', type: 'text' },
         { key: 'print', label: 'Print', type: 'boolean' },
         ...columns.filter((c) => c.filterable),
+        ...(textColumn ? [textColumn] : []),
     ];
 
     return (
@@ -168,7 +170,9 @@ export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
                             {headerColumns.map((col) => (
                                 <th
                                     key={col.key}
-                                    className="cursor-pointer px-3 py-2 text-left font-medium select-none"
+                                    className={`cursor-pointer px-3 py-2 text-left font-medium select-none ${
+                                        col.showInTable ? 'w-full min-w-xs' : 'whitespace-nowrap'
+                                    }`}
                                     onClick={() => toggleSort(col.key)}
                                 >
                                     {col.label}
@@ -192,7 +196,14 @@ export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
                                 onClick={() => onEdit(card)}
                             >
                                 {headerColumns.map((col) => (
-                                    <td key={col.key} className="px-3 py-2">
+                                    <td
+                                        key={col.key}
+                                        className={`px-3 py-2 ${
+                                            col.showInTable
+                                                ? 'whitespace-normal'
+                                                : 'whitespace-nowrap'
+                                        }`}
+                                    >
                                         {col.type === 'boolean' ? (
                                             cellValue(card, col.key) ===
                                             'Yes' ? (
