@@ -96,7 +96,7 @@ Actions available:
 
 1. 🦶: Move 1 space in any direction
 2. 🔎: Search current location for a Relic
-3. 🌿: increase Health by 2 (if you are at 0 HP this is the only action you can perform)
+3. 🌿: increase Health by 1 (if you are at 0 HP this is the only action you can perform)
 4. Perform the “Action” from one of your Relics equipped to the left.
 
 Relic rules:  

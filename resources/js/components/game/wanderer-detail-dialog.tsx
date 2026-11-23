@@ -97,7 +97,7 @@ export function WandererDetailDialog({
                             }
                             onClick={() => onSubmit({ type: 'rest' })}
                         >
-                            🌿 Rest (+2 Health)
+                            🌿 Rest (+1 Health)
                         </Button>
                     )}
 
