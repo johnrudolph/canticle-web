@@ -1,6 +1,16 @@
 <?php
 
+use App\Models\Cards\RuleBook;
 use App\Models\Cards\RuleBookRevision;
+
+test('dev-sync rulebook endpoint returns the current content regardless of revision resolution', function () {
+    config(['debug_api.key' => 'test-key']);
+    RuleBook::current()->update(['content' => 'Current rules text.']);
+
+    $this->withToken('test-key')->getJson('/api/dev-sync/rulebook')
+        ->assertOk()
+        ->assertJson(['content' => 'Current rules text.']);
+});
 
 test('dev-sync rulebook-revisions endpoint returns unresolved revisions and the resolve endpoint clears them', function () {
     config(['debug_api.key' => 'test-key']);

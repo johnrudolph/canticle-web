@@ -14,6 +14,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { useSaveShortcut } from '@/hooks/use-save-shortcut';
 import type { CardRecord, ColumnDef } from '@/types/admin';
 
 interface CardEditModalProps {
@@ -75,6 +76,8 @@ export function CardEditModal({
             router.post(storeUrl, data, { onSuccess: onClose });
         }
     }
+
+    useSaveShortcut(save, open);
 
     function addComment() {
         if (!card || newComment.trim() === '') return;

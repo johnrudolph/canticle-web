@@ -8,6 +8,7 @@ use App\Models\Cards\Glyph;
 use App\Models\Cards\GolemCard;
 use App\Models\Cards\Location;
 use App\Models\Cards\Relic;
+use App\Models\Cards\RuleBook;
 use App\Models\Cards\RuleBookRevision;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -69,6 +70,19 @@ class DevSyncController extends Controller
         ]);
 
         return response()->json(['comment' => $comment]);
+    }
+
+    /**
+     * The current rulebook text, regardless of whether any revision on
+     * it has been resolved — unlike rulebookRevisions() below, this is
+     * "what does the rulebook say right now," not "what's outstanding."
+     * canticle:pull-changes always writes this straight into
+     * rules/rules.md so that file mirrors prod the same way the card
+     * JSON snapshots do.
+     */
+    public function rulebook(): JsonResponse
+    {
+        return response()->json(['content' => RuleBook::current()->content]);
     }
 
     public function rulebookRevisions(Request $request): JsonResponse

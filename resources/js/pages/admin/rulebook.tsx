@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { useSaveShortcut } from '@/hooks/use-save-shortcut';
 import rulebook from '@/routes/admin/rulebook';
 
 export default function AdminRuleBook({ content }: { content: string }) {
@@ -45,6 +46,9 @@ export default function AdminRuleBook({ content }: { content: string }) {
             },
         );
     }
+
+    useSaveShortcut(save, !justifying);
+    useSaveShortcut(confirmSaveWithJustification, justifying);
 
     return (
         <>

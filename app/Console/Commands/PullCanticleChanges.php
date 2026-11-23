@@ -14,12 +14,12 @@ use Illuminate\Support\Facades\Http;
  *    someone flagged as "this card needs a code change" or "this card
  *    was deleted, go clean up references") and prints a readable
  *    report, grouped by card type.
- * 2. Fetches unresolved rulebook revisions — each one is a rule change
- *    with the designer's own justification for it, meant to be quoted
- *    in the PR that updates GameEngine.php to match. The most recent
- *    one's full text also gets written to
- *    resources/data/canticle/rulebook.md, same git-history reasoning
- *    as the card JSON below.
+ * 2. Fetches unresolved rulebook revisions and prints each one's
+ *    justification — meant to be quoted in the PR that updates
+ *    GameEngine.php to match — then unconditionally overwrites
+ *    rules/rules.md with prod's CURRENT rulebook text (regardless of
+ *    whether any revision on it is resolved), same as the card JSON
+ *    below: `git diff rules/rules.md` is the actual rule-text change.
  * 3. Re-fetches the full current card set from prod's public
  *    /api/cards and overwrites resources/data/canticle/*.json with it
  *    — these files aren't read by the app anymore (see
@@ -47,6 +47,7 @@ class PullCanticleChanges extends Command
 
         $this->reportComments($prodUrl, $apiKey);
         $this->reportRulebookRevisions($prodUrl, $apiKey);
+        $this->refreshRulebookSnapshot($prodUrl, $apiKey);
         $this->refreshCardSnapshot($prodUrl);
 
         return self::SUCCESS;
@@ -119,11 +120,20 @@ class PullCanticleChanges extends Command
 
         $this->line('');
         $this->info(count($revisions).' unresolved rulebook revision(s). Resolve with: php artisan canticle:resolve-rulebook-change {id}');
+    }
 
-        $outputPath = config('canticle.output_path');
-        File::ensureDirectoryExists($outputPath);
-        File::put("{$outputPath}/rulebook.md", $revisions[0]['content']);
-        $this->info('Wrote the latest rulebook text to resources/data/canticle/rulebook.md — check `git diff` for the actual rule change.');
+    private function refreshRulebookSnapshot(string $prodUrl, string $apiKey): void
+    {
+        $response = Http::withToken($apiKey)->get("{$prodUrl}/api/dev-sync/rulebook");
+
+        if ($response->failed()) {
+            $this->error("Failed to fetch the current rulebook: HTTP {$response->status()}");
+
+            return;
+        }
+
+        File::put(base_path('rules/rules.md'), $response->json('content') ?? '');
+        $this->info('Refreshed rules/rules.md from prod — check `git diff` for the actual rule-text change.');
     }
 
     private function refreshCardSnapshot(string $prodUrl): void

@@ -15,6 +15,7 @@ Route::middleware([EnsureDebugApiKey::class, 'throttle:60,1'])->prefix('dev-sync
     Route::get('comments', [DevSyncController::class, 'index']);
     Route::post('comments/{comment}/resolve', [DevSyncController::class, 'resolve']);
 
+    Route::get('rulebook', [DevSyncController::class, 'rulebook']);
     Route::get('rulebook-revisions', [DevSyncController::class, 'rulebookRevisions']);
     Route::post('rulebook-revisions/{revision}/resolve', [DevSyncController::class, 'resolveRulebookRevision']);
 });
