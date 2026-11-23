@@ -148,13 +148,6 @@ export function CardFields({
 
     return (
         <div className="flex flex-col gap-4">
-            {card && (
-                <div className="text-sm text-muted-foreground">
-                    Key: <code>{card.key}</code> (fixed — the game engine
-                    references this by exact value)
-                </div>
-            )}
-
             {allColumns.map((col) => (
                 <div key={col.key} className="flex flex-col gap-1">
                     {col.type === 'boolean' ? (
