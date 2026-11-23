@@ -39,6 +39,7 @@ final class GameStateRepository
             $wanderers[$role] = [
                 ...$wanderer,
                 'move_blocked_this_turn' => $wanderer['move_blocked_this_turn'] ?? false,
+                'has_moved_this_turn' => $wanderer['has_moved_this_turn'] ?? false,
                 'tucked_cards' => $wanderer['tucked_cards'] ?? [],
                 'was_ever_exhausted' => $wanderer['was_ever_exhausted'] ?? false,
                 'golem_insight_used_this_round' => $wanderer['golem_insight_used_this_round'] ?? false,

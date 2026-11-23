@@ -635,34 +635,60 @@ test('moving FROM a Road space is free, and it chains through consecutive Roads'
         ->and($events[0]['payload']['free'])->toBeTrue();
 });
 
-test('starting a turn already on a Road makes that Wanderer\'s first move free too', function () {
+test('starting a turn already on a Road still costs the first move its action', function () {
     $state = startedGame();
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'place_infrastructure', 'infrastructure_type' => 'road', 'cell' => [1, 0]]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
     // wanderer_a starts their turn already on [1,0], which now has a
-    // Road — under the OLD rule (free move only after arriving via a
-    // previous move) this would have cost an action; under the new
-    // rule it's free just for starting there.
+    // Road. Designer's own justification for this rule change (pulled
+    // via canticle:pull-changes): "allowing totally free traversal with
+    // roads just trivializes movement, especially late game" — so the
+    // very first move of a turn always costs its action now, even from
+    // a Road space.
     $direction = Board::directionBetween([1, 0], [0, 0]);
     [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $direction]);
 
-    expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe(3) // unchanged — free move
+    expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe(2)
+        ->and($events[0]['payload']['free'])->toBeFalse();
+});
+
+test('a second move off a Road space is free even at 0 actions remaining, but only after the first move was paid for', function () {
+    $state = startedGame();
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'place_infrastructure', 'infrastructure_type' => 'road', 'cell' => [1, 0]]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'place_infrastructure', 'infrastructure_type' => 'road', 'cell' => [0, 1]]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    // First move: [1,0] (Road) -> [0,1] (Road). Costs 1 action — it's
+    // this Wanderer's first move of the turn, full stop, regardless of
+    // either space having a Road.
+    $toRoad = Board::directionBetween([1, 0], [0, 1]);
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $toRoad]);
+    expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe(2)
+        ->and($events[0]['payload']['free'])->toBeFalse();
+
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['actions_remaining' => 0])]);
+
+    // Second move: back from [0,1] (a Road, and has_moved_this_turn is
+    // now true) — free even at 0 actions remaining.
+    $backToHub = Board::directionBetween([0, 1], [1, 0]);
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $backToHub]);
+
+    expect($state->wanderers['wanderer_a']['cell'])->toBe([1, 0])
+        ->and($state->wanderers['wanderer_a']['actions_remaining'])->toBe(0)
         ->and($events[0]['payload']['free'])->toBeTrue();
 });
 
-test('moving from a Road space works even with 0 actions remaining, since it never costs one', function () {
+test('without ever having moved this turn, standing on a Road does not let a 0-action Wanderer move', function () {
     $state = startedGame();
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'place_infrastructure', 'infrastructure_type' => 'road', 'cell' => [1, 0]]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['actions_remaining' => 0])]);
 
     $direction = Board::directionBetween([1, 0], [0, 0]);
-    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $direction]);
 
-    expect($state->wanderers['wanderer_a']['cell'])->toBe([0, 0])
-        ->and($state->wanderers['wanderer_a']['actions_remaining'])->toBe(0)
-        ->and($events[0]['payload']['free'])->toBeTrue();
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $direction]))
+        ->toThrow(InvalidMoveException::class, 'No actions remaining this turn.');
 });
 
 test('starting a turn on a Fruit tree space grants a bonus action; moving onto one mid-turn does not', function () {
