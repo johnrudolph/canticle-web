@@ -1,13 +1,13 @@
 import type { RelicSummary } from '@/types/admin';
 
-/** Counts per slot, per type, and the slot x type matrix with row/column totals. */
+/** Counts per slot, per symbol (branch), and the slot x symbol matrix with row/column totals. */
 export function RelicSlotTypeMatrix({ summary }: { summary: RelicSummary }) {
-    const { slots, types, matrix } = summary;
+    const { slots, columns, matrix } = summary;
 
     const slotTotal = (slot: string) =>
-        types.reduce((sum, type) => sum + (matrix[slot]?.[type] ?? 0), 0);
-    const typeTotal = (type: string) =>
-        slots.reduce((sum, slot) => sum + (matrix[slot]?.[type] ?? 0), 0);
+        columns.reduce((sum, column) => sum + (matrix[slot]?.[column] ?? 0), 0);
+    const columnTotal = (column: string) =>
+        slots.reduce((sum, slot) => sum + (matrix[slot]?.[column] ?? 0), 0);
     const grandTotal = slots.reduce((sum, slot) => sum + slotTotal(slot), 0);
 
     return (
@@ -16,14 +16,14 @@ export function RelicSlotTypeMatrix({ summary }: { summary: RelicSummary }) {
                 <thead>
                     <tr className="border-b bg-muted/50">
                         <th className="px-3 py-2 text-left font-medium">
-                            Slot \ Type
+                            Slot \ Symbol
                         </th>
-                        {types.map((type) => (
+                        {columns.map((column) => (
                             <th
-                                key={type}
+                                key={column}
                                 className="px-3 py-2 text-left font-medium"
                             >
-                                {type}
+                                {column}
                             </th>
                         ))}
                         <th className="px-3 py-2 text-left font-medium">
@@ -37,9 +37,9 @@ export function RelicSlotTypeMatrix({ summary }: { summary: RelicSummary }) {
                             <td className="px-3 py-2 font-medium">
                                 {slot === '' ? '(none)' : slot}
                             </td>
-                            {types.map((type) => (
-                                <td key={type} className="px-3 py-2">
-                                    {matrix[slot]?.[type] ?? 0}
+                            {columns.map((column) => (
+                                <td key={column} className="px-3 py-2">
+                                    {matrix[slot]?.[column] ?? 0}
                                 </td>
                             ))}
                             <td className="px-3 py-2 font-medium">
@@ -49,9 +49,9 @@ export function RelicSlotTypeMatrix({ summary }: { summary: RelicSummary }) {
                     ))}
                     <tr className="bg-muted/50">
                         <td className="px-3 py-2 font-medium">Total</td>
-                        {types.map((type) => (
-                            <td key={type} className="px-3 py-2 font-medium">
-                                {typeTotal(type)}
+                        {columns.map((column) => (
+                            <td key={column} className="px-3 py-2 font-medium">
+                                {columnTotal(column)}
                             </td>
                         ))}
                         <td className="px-3 py-2 font-medium">

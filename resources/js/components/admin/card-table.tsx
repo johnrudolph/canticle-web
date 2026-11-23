@@ -100,9 +100,9 @@ export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
     const textColumn = columns.find((c) => c.showInTable);
     const headerColumns: ColumnDef[] = [
         { key: 'name', label: 'Name', type: 'text' },
+        ...(textColumn ? [textColumn] : []),
         { key: 'print', label: 'Print', type: 'boolean' },
         ...columns.filter((c) => c.filterable),
-        ...(textColumn ? [textColumn] : []),
     ];
 
     return (

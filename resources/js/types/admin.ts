@@ -38,9 +38,9 @@ export interface ColumnDef {
 
 export type CardType = 'location' | 'relic' | 'glyph' | 'golem_card';
 
-/** Relic counts per slot, per type, and the slot x type matrix (see RelicController::buildRelicSummary). */
+/** Relic counts per slot, per symbol (branch), and the slot x symbol matrix (see RelicController::buildRelicSummary). */
 export interface RelicSummary {
     slots: string[];
-    types: string[];
+    columns: string[];
     matrix: Record<string, Record<string, number>>;
 }

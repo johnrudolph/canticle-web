@@ -80,19 +80,19 @@ test('updating a relic recomputes slot_emoji and the type flags', function () {
         ->and($relic->is_event)->toBeTrue();
 });
 
-test('the relics index page includes a slot x type count matrix', function () {
+test('the relics index page includes a slot x symbol count matrix', function () {
     $admin = adminUser();
 
     // The test DB is seeded with the real card set, so assert against
     // the baseline + what this test adds, not an absolute count.
-    $before = Relic::where('slot', 'Hand')->where('type', 'Action')->count();
+    $before = Relic::where('slot', 'Hand')->where('symbol', '🎨')->count();
 
-    Relic::create(['key' => 'matrix-a', 'name' => 'Matrix A', 'slot' => 'Hand', 'type' => 'Action']);
-    Relic::create(['key' => 'matrix-b', 'name' => 'Matrix B', 'slot' => 'Hand', 'type' => 'Action']);
+    Relic::create(['key' => 'matrix-a', 'name' => 'Matrix A', 'slot' => 'Hand', 'type' => 'Action', 'symbol' => '🎨']);
+    Relic::create(['key' => 'matrix-b', 'name' => 'Matrix B', 'slot' => 'Hand', 'type' => 'Passive', 'symbol' => '🎨']);
 
     $response = $this->actingAs($admin)->get('/admin/relics');
 
     $response->assertInertia(fn ($page) => $page
-        ->where('relicSummary.matrix.Hand.Action', $before + 2)
+        ->where('relicSummary.matrix.Hand.🎨', $before + 2)
     );
 });

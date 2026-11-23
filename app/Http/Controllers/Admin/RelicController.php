@@ -16,6 +16,9 @@ class RelicController extends CardController
         '' => '',
     ];
 
+    /** The 8 branch emojis a Relic's `symbol` ever takes (no Relics in Agriculture/Commerce/Engineering). */
+    private const RELIC_SYMBOLS = ['⏳', '⚖️', '✨', '🌑', '🎨', '🐾', '📖', '🤝'];
+
     protected function modelClass(): string
     {
         return Relic::class;
@@ -45,35 +48,35 @@ class RelicController extends CardController
     }
 
     /**
-     * Counts per slot, per type, and the slot x type matrix — excludes
-     * soft-deleted Relics (the default query scope), same "currently
-     * live" population the list itself shows unless "Show deleted" is
-     * checked.
+     * Counts per slot, per symbol (branch), and the slot x symbol
+     * matrix — excludes soft-deleted Relics (the default query scope),
+     * same "currently live" population the list itself shows unless
+     * "Show deleted" is checked.
      */
     private function buildRelicSummary(): array
     {
         $slots = array_keys(self::SLOT_EMOJI);
-        $types = ['Action', 'Passive', 'Event'];
+        $symbols = self::RELIC_SYMBOLS;
 
         $matrix = [];
         foreach ($slots as $slot) {
-            $matrix[$slot] = array_fill_keys($types, 0);
+            $matrix[$slot] = array_fill_keys($symbols, 0);
         }
 
         $counted = Relic::query()
-            ->selectRaw('slot, type, count(*) as count')
-            ->groupBy('slot', 'type')
+            ->selectRaw('slot, symbol, count(*) as count')
+            ->groupBy('slot', 'symbol')
             ->get();
 
         foreach ($counted as $row) {
-            if (isset($matrix[$row->slot][$row->type])) {
-                $matrix[$row->slot][$row->type] = (int) $row->count;
+            if (isset($matrix[$row->slot][$row->symbol])) {
+                $matrix[$row->slot][$row->symbol] = (int) $row->count;
             }
         }
 
         return [
             'slots' => $slots,
-            'types' => $types,
+            'columns' => $symbols,
             'matrix' => $matrix,
         ];
     }
