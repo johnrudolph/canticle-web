@@ -43,7 +43,7 @@ import {
     neighbors,
     placeableCells,
 } from '@/lib/hex';
-import type { Cell } from '@/lib/hex';
+import type { Cell, Direction } from '@/lib/hex';
 import { postJson } from '@/lib/http';
 import {
     INFRASTRUCTURE_DESCRIPTIONS,
@@ -53,6 +53,7 @@ import { home } from '@/routes';
 import games from '@/routes/games';
 import roles from '@/routes/games/roles';
 import type {
+    BoardCell,
     GamePollResponse,
     GameSummary,
     InfrastructureType,
@@ -71,6 +72,57 @@ const ROLE_LABELS: Record<RoleKey, string> = {
 
 function occupiedNeighbors(cell: Cell, board: Record<string, unknown>): Cell[] {
     return neighbors(cell).filter((n) => cellKey(n) in board);
+}
+
+/**
+ * Every cell a Wanderer could reach for their next 1 action, following
+ * Road's "it always costs 1 action to move, but moving into a Road
+ * space lets you continue to an adjacent space for free — chainable
+ * through contiguous Road spaces" rule. The step off `start` is always
+ * allowed (that's the 1 action being spent); every step after that is
+ * only allowed if the cell being left has a Road, which is exactly what
+ * the server itself checks once has_moved_this_turn is true. Returns a
+ * map of reachable cellKey -> the sequence of directions to replay as
+ * individual move_wanderer calls to actually get there.
+ */
+function reachableByRoad(
+    start: Cell,
+    board: Record<string, BoardCell>,
+): Map<string, Direction[]> {
+    const startKey = cellKey(start);
+    const paths = new Map<string, Direction[]>();
+    const visited = new Set<string>([startKey]);
+    const queue: { cell: Cell; path: Direction[] }[] = [
+        { cell: start, path: [] },
+    ];
+
+    while (queue.length > 0) {
+        const { cell, path } = queue.shift() as {
+            cell: Cell;
+            path: Direction[];
+        };
+        const key = cellKey(cell);
+        const canContinue =
+            key === startKey ||
+            (board[key]?.infrastructure.includes('road') ?? false);
+
+        if (!canContinue) continue;
+
+        for (const next of occupiedNeighbors(cell, board)) {
+            const nextKey = cellKey(next);
+            if (visited.has(nextKey)) continue;
+
+            const direction = directionBetween(cell, next);
+            if (!direction) continue;
+
+            visited.add(nextKey);
+            const nextPath = [...path, direction];
+            paths.set(nextKey, nextPath);
+            queue.push({ cell: next, path: nextPath });
+        }
+    }
+
+    return paths;
 }
 
 /** Branch name (e.g. "Art") -> the emoji whichever Location produces it uses. */
@@ -1234,21 +1286,37 @@ export default function GameShow({ game }: { game: GameSummary }) {
             mine.hp > 0 &&
             (mine.actions_remaining > 0 || onFreeRoadContinuation)
         ) {
-            highlightedCells = new Set(
-                occupiedNeighbors(mine.cell, state.board).map(cellKey),
-            );
-            onCellClick = (cell) => {
-                const direction = directionBetween(mine.cell as Cell, cell);
-                if (direction) {
-                    const sacrifice = state.golem.glyphs.includes('revelatory')
-                        ? revelatorySacrificeHp
-                        : 0;
-                    submitMove(state.active_wanderer_role as RoleKey, {
-                        type: 'move_wanderer',
-                        direction,
-                        ...(sacrifice > 0 ? { sacrifice_hp: sacrifice } : {}),
-                    });
-                    setRevelatorySacrificeHp(0);
+            // Beyond the immediate neighbors, everything else here is
+            // only reachable by chaining through Road spaces — see
+            // reachableByRoad's own comment for the exact rule.
+            const paths = reachableByRoad(mine.cell, state.board);
+            highlightedCells = new Set(paths.keys());
+            onCellClick = async (cell) => {
+                const path = paths.get(cellKey(cell));
+                if (!path || path.length === 0) return;
+
+                const sacrifice = state.golem.glyphs.includes('revelatory')
+                    ? revelatorySacrificeHp
+                    : 0;
+                setRevelatorySacrificeHp(0);
+
+                for (const [i, direction] of path.entries()) {
+                    // The Revelatory sacrifice is a single deliberate
+                    // choice attached to the one step the player
+                    // actually clicked toward, not every hop of a
+                    // multi-space Road chain — only apply it on the
+                    // first step.
+                    const response = await submitMove(
+                        state.active_wanderer_role as RoleKey,
+                        {
+                            type: 'move_wanderer',
+                            direction,
+                            ...(i === 0 && sacrifice > 0
+                                ? { sacrifice_hp: sacrifice }
+                                : {}),
+                        },
+                    );
+                    if (!response) break;
                 }
             };
         }
