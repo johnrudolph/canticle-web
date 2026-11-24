@@ -49,7 +49,7 @@ function initialValueFor(col: ColumnDef, card: CardRecord | null): FormDataConve
 
     if (card) return card[col.key] as FormDataConvertible;
 
-    if (col.type === 'boolean') return false;
+    if (col.type === 'boolean') return col.defaultValue === true;
     if (col.type === 'select' && col.defaultValue) return col.defaultValue;
 
     return '';
@@ -69,7 +69,7 @@ export function CardFields({
     shortcutsEnabled = true,
 }: CardFieldsProps) {
     const allColumns: ColumnDef[] = [
-        { key: 'print', label: 'Print', type: 'boolean' },
+        { key: 'print', label: 'Print', type: 'boolean', defaultValue: true },
         { key: 'name', label: 'Name', type: 'text' },
         ...columns,
     ];

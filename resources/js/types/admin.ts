@@ -30,8 +30,8 @@ export interface ColumnDef {
     showInTable?: boolean;
     /** Required for 'select'/'multiselect' — the fixed set of valid values. */
     options?: string[];
-    /** 'select' only — value a brand-new card starts with, instead of blank. */
-    defaultValue?: string;
+    /** Value a brand-new card starts with, instead of blank/false — a string for 'select', a boolean for 'boolean'. */
+    defaultValue?: string | boolean;
     /** 'select' only — set false for fields where blank/null is never a valid choice (e.g. Relic type). Default true. */
     allowNone?: boolean;
 }
