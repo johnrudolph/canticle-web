@@ -15,7 +15,10 @@ import { NewRelicDialog } from '@/components/game/new-relic-dialog';
 import { RelicPickerDialog } from '@/components/game/relic-picker-dialog';
 import { RiftInTimeDialog } from '@/components/game/rift-in-time-dialog';
 import { WandererPickerDialog } from '@/components/game/wanderer-picker-dialog';
-import { WandererRelicPanel } from '@/components/game/wanderer-relic-panel';
+import {
+    SLOT_LABELS,
+    WandererRelicPanel,
+} from '@/components/game/wanderer-relic-panel';
 import { WandererSummaryRow } from '@/components/game/wanderer-summary-row';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -1147,6 +1150,10 @@ export default function GameShow({ game }: { game: GameSummary }) {
                   cellData,
               }))
         : [];
+
+    // Only the front of the queue is ever awaited at once — see
+    // GameEngine::resolveStatusTokenChoice.
+    const statusTokenChoice = state.pending_status_token_choices[0] ?? null;
 
     const golemChoiceRole = state.pending_golem_card_choice?.awaiting.find(
         (role) => myRoles.includes(role),
@@ -2616,6 +2623,48 @@ export default function GameShow({ game }: { game: GameSummary }) {
                         card_key: chosen,
                     });
                     setGolemLogPeek(null);
+                }}
+            />
+
+            <RelicPickerDialog
+                open={
+                    !!statusTokenChoice &&
+                    myRoles.includes(statusTokenChoice.role)
+                }
+                title={
+                    statusTokenChoice?.token === 'shame_token'
+                        ? 'Shame token'
+                        : 'Scar token'
+                }
+                description="Which slot should it go into?"
+                candidates={
+                    statusTokenChoice
+                        ? (
+                              Object.keys(SLOT_LABELS) as Array<
+                                  keyof typeof SLOT_LABELS
+                              >
+                          )
+                              .filter(
+                                  (slot) =>
+                                      state.wanderers[statusTokenChoice.role]
+                                          .equipped[slot] === null,
+                              )
+                              .map((slot) => ({
+                                  key: slot,
+                                  label: SLOT_LABELS[slot],
+                              }))
+                        : []
+                }
+                relicCatalog={{}}
+                processing={processing}
+                onConfirm={(keys) => {
+                    if (!statusTokenChoice) return;
+                    const slot = keys[0];
+                    if (!slot) return;
+                    submitMove(statusTokenChoice.role, {
+                        type: 'resolve_status_token_choice',
+                        slot,
+                    });
                 }}
             />
 

@@ -50,6 +50,8 @@ test('Great Sweeping Scythe damages everyone on/adjacent to the Golem and Scars 
     $state = startedGame();
 
     [$state, $events] = resolveGolemCardForTest($state, 'great-sweeping-scythe');
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_status_token_choice', 'slot' => 'body']);
+    [$state] = GameEngine::apply($state, 'wanderer_b', ['type' => 'resolve_status_token_choice', 'slot' => 'body']);
 
     expect($state->wanderers['wanderer_a']['hp'])->toBe(10)
         ->and($state->wanderers['wanderer_a']['equipped'])->toContain('scar_token')

@@ -18,7 +18,7 @@ import { WandererDetailDialog } from './wanderer-detail-dialog';
 // the server still executes them correctly, there's just no board-click
 // flow wired up to supply the extra input.
 
-const SLOT_LABELS: Record<EquipSlot, string> = {
+export const SLOT_LABELS: Record<EquipSlot, string> = {
     body: '🥋 Body',
     mind: '🧠 Mind',
     hand_left: '🖐️ Hand',

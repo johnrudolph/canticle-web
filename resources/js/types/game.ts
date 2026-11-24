@@ -92,6 +92,10 @@ export interface GameStateDto {
         card_key: string;
         awaiting: RoleKey[];
     } | null;
+    pending_status_token_choices: {
+        role: RoleKey;
+        token: 'shame_token' | 'scar_token';
+    }[];
     location_just_built_cell: [number, number] | null;
     parallel_used_this_round: boolean;
     outcome: 'elite_victory' | 'simple_victory' | 'defeat' | null;

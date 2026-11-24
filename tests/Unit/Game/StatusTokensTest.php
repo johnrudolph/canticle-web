@@ -93,6 +93,49 @@ test('Shame is capped at 3 tokens; further gains are a no-op', function () {
         ->and($newState->wanderers['wanderer_a']['equipped']['hand_right'])->toBeNull();
 });
 
+test('with 2+ empty slots, gaining a status token queues a slot choice instead of auto-picking one', function () {
+    $state = startedGame();
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyStatusToken');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state, 'wanderer_a', 'scar_token');
+
+    expect($state->wanderers['wanderer_a']['equipped'])->not->toContain('scar_token')
+        ->and($state->pendingStatusTokenChoices)->toBe([['role' => 'wanderer_a', 'token' => 'scar_token']])
+        ->and(collect($events)->pluck('type'))->toContain('status_token_choice_offered');
+});
+
+test('resolve_status_token_choice places the token in the exact slot chosen, and blocks other moves until then', function () {
+    $state = startedGame();
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyStatusToken');
+    $reflection->setAccessible(true);
+    [$state] = $reflection->invoke(null, $state, 'wanderer_a', 'scar_token');
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'rest']))
+        ->toThrow(InvalidMoveException::class, 'A Shame/Scar token slot choice is waiting before anything else can happen.');
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_status_token_choice', 'slot' => 'mind']);
+
+    expect($state->wanderers['wanderer_a']['equipped']['mind'])->toBe('scar_token')
+        ->and($state->wanderers['wanderer_a']['equipped']['body'])->toBeNull()
+        ->and($state->pendingStatusTokenChoices)->toBe([]);
+});
+
+test('an invalid slot choice is a no-op but still clears the pending queue', function () {
+    $state = startedGame();
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyStatusToken');
+    $reflection->setAccessible(true);
+    [$state] = $reflection->invoke(null, $state, 'wanderer_a', 'scar_token');
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_status_token_choice', 'slot' => 'not-a-real-slot']);
+
+    expect($state->wanderers['wanderer_a']['equipped'])->not->toContain('scar_token')
+        ->and($state->pendingStatusTokenChoices)->toBe([]);
+});
+
 test('a status token only ever occupies an empty slot, never displacing a Relic', function () {
     $state = startedGame();
     $allFull = ['body' => 'r1', 'mind' => 'r2', 'hand_left' => 'r3', 'hand_right' => 'r4', 'bag' => 'r5'];
@@ -117,6 +160,12 @@ function resolveGolemCardForTest(GameState $state, string $cardKey, bool $allowP
 test('the Scar Golem card scars the nearest Wanderer', function () {
     $state = startedGame();
     [$newState] = resolveGolemCardForTest($state, 'scar');
+
+    // A fresh mat has every slot empty, so the actual placement is
+    // queued for the Wanderer to pick a slot rather than auto-applied.
+    expect($newState->pendingStatusTokenChoices)->toHaveCount(1);
+    $queuedRole = $newState->pendingStatusTokenChoices[0]['role'];
+    [$newState] = GameEngine::apply($newState, $queuedRole, ['type' => 'resolve_status_token_choice', 'slot' => 'body']);
 
     $scarredRoles = array_filter(
         $newState->wanderers,

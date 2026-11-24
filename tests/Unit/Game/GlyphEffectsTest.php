@@ -288,6 +288,7 @@ test('Accusing gives a Wanderer 1 Shame when a Golem attack actually costs them 
     $reflection = new ReflectionMethod(GameEngine::class, 'applyDamage');
     $reflection->setAccessible(true);
     [$state] = $reflection->invoke(null, $state, 'wanderer_a', 3, true);
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_status_token_choice', 'slot' => 'body']);
 
     expect($state->wanderers['wanderer_a']['equipped'])->toContain('shame_token');
 });

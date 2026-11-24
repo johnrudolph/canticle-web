@@ -47,6 +47,14 @@ final class GameEngine
             throw new InvalidMoveException('The Golem\'s card is waiting on a choice before anything else can happen.');
         }
 
+        // See applyStatusToken()'s own doc comment for why this is a
+        // separate, simpler gate than pendingGolemCardChoice's — it
+        // doesn't need to pause the Golem phase mid-resolution, only
+        // block whatever move would otherwise come after this one.
+        if ($state->pendingStatusTokenChoices !== [] && ($move['type'] ?? null) !== 'resolve_status_token_choice') {
+            throw new InvalidMoveException('A Shame/Scar token slot choice is waiting before anything else can happen.');
+        }
+
         [$state, $events] = match ($move['type'] ?? null) {
             'choose_starting_cell' => self::chooseStartingCell($state, $actorRole, $move),
             'choose_golem_cell' => self::chooseGolemCell($state, $actorRole, $move),
@@ -78,6 +86,7 @@ final class GameEngine
             'resolve_epiphany' => self::resolveEpiphany($state, $actorRole, $move),
             'resolve_golem_log' => self::resolveGolemLog($state, $actorRole, $move),
             'resolve_golem_card_choice' => self::resolveGolemCardChoice($state, $actorRole, $move),
+            'resolve_status_token_choice' => self::resolveStatusTokenChoice($state, $actorRole, $move),
             'end_wanderer_turn' => self::endWandererTurn($state, $actorRole),
             default => throw new InvalidMoveException('Unknown move type.'),
         };
@@ -8192,11 +8201,29 @@ final class GameEngine
      * bounded only by there being 5 equip slots.
      *
      * Who picks *which* slot is confirmed (the affected Wanderer in
-     * co-op, the Golem-pilot in adversary mode — rules.md), but applying
-     * this mid-way through an already-automatic Golem card resolution has
-     * no interactive pause to ask either of them; this always picks the
-     * first empty slot instead, or does nothing if every slot is full.
-     * Flagged as a real gap, not a rules question, in rules-todo.md.
+     * co-op, the Golem-pilot in adversary mode — rules.md; always the
+     * Wanderer here, adversary mode isn't modeled). With 0 or 1 empty
+     * slots there's nothing to actually decide, so this still applies
+     * immediately either way; with 2+, it queues the choice on
+     * pendingStatusTokenChoices (resolved one at a time via
+     * resolve_status_token_choice) instead of auto-picking the first
+     * one.
+     *
+     * Deliberately NOT the same pendingGolemCardChoice machinery Fire
+     * storm/Roar/Sacrifice of Possessions use — that one pauses the
+     * Golem phase's own card-resolution loop so the right number of
+     * "remaining cards" get resumed afterward (see golemPlayCards()).
+     * This queue instead just lets whatever's in the middle of calling
+     * applyStatusToken() (a Golem card's own resolution, a Relic's
+     * effect, a Glyph reaction) run to completion normally with the
+     * grant deferred, and only blocks the *next* move() call until
+     * every queued choice is resolved (see the gate at the top of
+     * apply()). The tradeoff: anything later in that SAME resolution
+     * that reads the Wanderer's current Shame count (Legalistic Glyph,
+     * Whip of Justice, Accused) won't see this one yet, since it
+     * hasn't actually been placed — same "no mid-phase interactive
+     * decision point built yet" category as every other simplification
+     * in this file, just applied here instead of to target selection.
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
@@ -8213,18 +8240,75 @@ final class GameEngine
             return [$state, []];
         }
 
-        $emptySlot = array_search(null, $equipped, true);
+        $emptySlots = array_keys(array_filter($equipped, fn (mixed $v) => $v === null));
 
-        if ($emptySlot === false) {
+        if ($emptySlots === []) {
             return [$state, []];
         }
 
-        $equipped[$emptySlot] = $token;
+        if (count($emptySlots) === 1) {
+            return self::placeStatusToken($state, $targetRole, $token, $emptySlots[0]);
+        }
+
+        $state = $state->with(['pendingStatusTokenChoices' => [
+            ...$state->pendingStatusTokenChoices,
+            ['role' => $targetRole, 'token' => $token],
+        ]]);
+
+        return [$state, [['type' => 'status_token_choice_offered', 'role_key' => $targetRole, 'payload' => ['token' => $token]]]];
+    }
+
+    /**
+     * The actual slot assignment, shared by applyStatusToken()'s
+     * single-empty-slot case and resolveStatusTokenChoice()'s real
+     * choice.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function placeStatusToken(GameState $state, string $targetRole, string $token, string $slot): array
+    {
+        $equipped = $state->wanderers[$targetRole]['equipped'];
+        $equipped[$slot] = $token;
         $state = $state->with(['wanderers' => $state->wanderersWith($targetRole, ['equipped' => $equipped])]);
 
         $eventType = $token === 'shame_token' ? 'wanderer_shamed' : 'wanderer_scarred';
 
-        return [$state, [['type' => $eventType, 'role_key' => $targetRole, 'payload' => ['slot' => $emptySlot]]]];
+        return [$state, [['type' => $eventType, 'role_key' => $targetRole, 'payload' => ['slot' => $slot]]]];
+    }
+
+    /**
+     * Resolves the Wanderer's choice of which empty slot their queued
+     * Shame/Scar token goes into. Only the front of the queue is ever
+     * awaited at once (matches a single pendingXxx resolve pattern
+     * rather than pendingGolemCardChoice's multi-role 'awaiting' list,
+     * since in practice these never need more than one role to answer
+     * before the next move can happen). An invalid choice (not actually
+     * an empty slot) is a no-op for this entry — still consumes it from
+     * the queue rather than deadlocking, same as every other pendingXxx
+     * resolve.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function resolveStatusTokenChoice(GameState $state, string $actorRole, array $move): array
+    {
+        $queue = $state->pendingStatusTokenChoices;
+
+        if ($queue === [] || $queue[0]['role'] !== $actorRole) {
+            throw new InvalidMoveException('There is no status token choice pending for you.');
+        }
+
+        $pending = $queue[0];
+        $state = $state->with(['pendingStatusTokenChoices' => array_slice($queue, 1)]);
+
+        $slot = (string) ($move['slot'] ?? '');
+        $equipped = $state->wanderers[$actorRole]['equipped'];
+
+        if (! array_key_exists($slot, $equipped) || $equipped[$slot] !== null) {
+            return [$state, []];
+        }
+
+        return self::placeStatusToken($state, $actorRole, $pending['token'], $slot);
     }
 
     /**

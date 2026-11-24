@@ -97,6 +97,7 @@ final class GameStateRepository
             pendingEpiphany: $data['pending_epiphany'] ?? null,
             pendingGolemLog: $data['pending_golem_log'] ?? null,
             pendingGolemCardChoice: $data['pending_golem_card_choice_full'] ?? null,
+            pendingStatusTokenChoices: $data['pending_status_token_choices'] ?? [],
         );
     }
 
@@ -135,6 +136,7 @@ final class GameStateRepository
                 'pending_epiphany' => $state->pendingEpiphany,
                 'pending_golem_log' => $state->pendingGolemLog,
                 'pending_golem_card_choice_full' => $state->pendingGolemCardChoice,
+                'pending_status_token_choices' => $state->pendingStatusTokenChoices,
             ],
         ]);
     }

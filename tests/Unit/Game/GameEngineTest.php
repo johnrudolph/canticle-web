@@ -81,7 +81,25 @@ function startedGame(): GameState
  */
 function resolveAnyPendingGolemCardChoice(GameState $state): GameState
 {
-    while ($state->pendingGolemCardChoice !== null) {
+    // A fresh/sparse mat can trigger a Shame/Scar slot choice too
+    // (applyStatusToken) — drained the same "pick any valid answer so
+    // the test's own point holds regardless of which cards came up"
+    // way. Looped alongside pendingGolemCardChoice (not just once
+    // before it) since resuming the rest of a paused Golem phase could
+    // in principle surface another one.
+    while ($state->pendingStatusTokenChoices !== [] || $state->pendingGolemCardChoice !== null) {
+        while ($state->pendingStatusTokenChoices !== []) {
+            $role = $state->pendingStatusTokenChoices[0]['role'];
+            $slot = (string) array_search(null, $state->wanderers[$role]['equipped'], true);
+            [$state] = GameEngine::apply($state, $role, [
+                'type' => 'resolve_status_token_choice', 'slot' => $slot,
+            ]);
+        }
+
+        if ($state->pendingGolemCardChoice === null) {
+            break;
+        }
+
         $pending = $state->pendingGolemCardChoice;
         $role = $pending['awaiting'][0];
 

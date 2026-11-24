@@ -36,6 +36,10 @@ test('Guilty by association and Guilty conscience both grant 1 Shame token', fun
     $state = startedGame();
 
     [$state] = resolveEventRelicForTest($state, 'wanderer_a', $key);
+    // A fresh mat has every slot empty, so the actual placement is
+    // queued for the Wanderer to pick a slot (see
+    // GameEngine::applyStatusToken) rather than auto-applied.
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_status_token_choice', 'slot' => 'body']);
 
     expect($state->wanderers['wanderer_a']['equipped'])->toContain('shame_token');
 })->with(['guilty-by-association', 'guilty-conscience']);
@@ -44,6 +48,7 @@ test('Sharp objects grants 1 Scar token', function () {
     $state = startedGame();
 
     [$state] = resolveEventRelicForTest($state, 'wanderer_a', 'sharp-objects');
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_status_token_choice', 'slot' => 'body']);
 
     expect($state->wanderers['wanderer_a']['equipped'])->toContain('scar_token');
 });
@@ -222,6 +227,7 @@ test('Finding an Event Relic via search resolves it immediately instead of holdi
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
     [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'search_location']);
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_status_token_choice', 'slot' => 'body']);
 
     expect($state->wanderers['wanderer_a']['holding'])->toBe([])
         ->and($state->wanderers['wanderer_a']['equipped'])->toContain('scar_token')

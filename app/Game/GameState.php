@@ -132,6 +132,7 @@ final readonly class GameState
         public ?string $pendingEpiphany = null, // Epiphany's "choose another Location to search as if you were there" choice — same problem again; resolved via resolve_epiphany
         public ?string $pendingGolemLog = null, // Golem log's "look at the top 3 cards, then tuck one" choice — same problem again; resolved via resolve_golem_log
         public ?array $pendingGolemCardChoice = null, // Fire storm/Roar/Sacrifice of Possessions force each affected Wanderer to choose something mid-Golem-phase; {type: 'trash_relic'|'move_direction', card_key: string, awaiting: list<string>, remaining_cards: int} — pauses the whole Golem phase (and the round) until everyone in `awaiting` has responded via resolve_golem_card_choice
+        public array $pendingStatusTokenChoices = [], // Shame/Scar tokens go into an equip slot (there's no separate status area on the mat) — rules.md confirms the affected Wanderer picks which, so when 2+ slots are empty this queues {role, token} instead of auto-picking the first one, resolved one at a time via resolve_status_token_choice. Unlike pendingGolemCardChoice, this does NOT pause the Golem phase mid-resolution (see applyStatusToken) — only blocks any further move once the whole apply() call returns, so a same-phase effect that reads the Wanderer's Shame count before they've actually chosen a slot (Legalistic Glyph, Whip of Justice, etc.) can undercount; accepted as the same category of simplification as everything else in GameEngine with "no mid-phase interactive decision point built yet."
     ) {}
 
     /**
@@ -308,6 +309,7 @@ final readonly class GameState
                 'card_key' => $this->pendingGolemCardChoice['card_key'],
                 'awaiting' => $this->pendingGolemCardChoice['awaiting'],
             ],
+            'pending_status_token_choices' => $this->pendingStatusTokenChoices,
             'location_just_built_cell' => $this->locationJustBuiltCell,
             'parallel_used_this_round' => $this->parallelUsedThisRound,
             'outcome' => $this->phase === 'finished' ? $this->outcome() : null,

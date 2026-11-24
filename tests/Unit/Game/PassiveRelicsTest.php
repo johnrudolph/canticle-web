@@ -795,8 +795,9 @@ test('Prohibition of inscribing gives the actor who added a Glyph 1 Shame token,
     $reflection->setAccessible(true);
     $type = GlyphCatalog::find($state->glyphDeck[0])?->type;
     [$state, $events] = $reflection->invoke(null, $state, $type, 'wanderer_a');
+    [$state, $resolveEvents] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_status_token_choice', 'slot' => 'body']);
 
-    expect(collect($events)->pluck('type'))->toContain('wanderer_shamed')
+    expect(collect($resolveEvents)->pluck('type'))->toContain('wanderer_shamed')
         ->and($state->wanderers['wanderer_a']['equipped'])->toContain('shame_token');
 });
 
