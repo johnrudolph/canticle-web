@@ -64,6 +64,7 @@ final class GameEngine
             'rest' => self::rest($state, $actorRole),
             'tuck_relic_at_bazaar' => self::tuckRelicAtBazaar($state, $actorRole, $move),
             'tuck_relic_at_cathedral' => self::tuckRelicAtCathedral($state, $actorRole, $move),
+            'tuck_relic_at_garbage_barricade' => self::tuckRelicAtGarbageBarricade($state, $actorRole, $move),
             'cleanse_at_purification_pools' => self::cleanseAtPurificationPools($state, $actorRole),
             'magnetic_mail_move' => self::magneticMailMove($state, $actorRole, $move),
             'telekinesis_move' => self::telekinesisMove($state, $actorRole, $move),
@@ -1053,13 +1054,13 @@ final class GameEngine
                 ? null
                 : 'Pray requires being exactly 3 spaces from the Golem.',
 
-            'peacemakers-spirit', 'whip-of-justice', 'armistice', 'cabalist-brand', 'golem-intuition', 'golem-prod', 'defanging-tool' => self::golemSharesCellWith($state, $actorRole)
+            'peacemakers-spirit', 'whip-of-justice', 'armistice', 'cabalist-brand', 'golem-intuition', 'golem-prod', 'defanging-tool', 'shear', 'golem-counter' => self::golemSharesCellWith($state, $actorRole)
                 ? null
                 : 'This requires sharing the Golem\'s space.',
 
             'pointed-finger' => self::golemSharesCellWith($state, $actorRole)
                 ? null
-                : 'Pointed finger requires sharing the Golem\'s space.',
+                : 'Accusing mind requires sharing the Golem\'s space.',
 
             'divine-aura' => self::hasMonolithShardFor($state, $actorRole, $casterCell)
                 ? null
@@ -1300,8 +1301,239 @@ final class GameEngine
             'golem-log' => self::offerGolemLog($state, $actorRole),
             'merchants-gloves' => [...self::relicMerchantsGloves($state, $actorRole, $move), false],
             'emperors-timepiece' => self::relicEmperorsTimepiece($state, $actorRole),
+            'rod' => [...self::relicRod($state, $move), true],
+            'shear' => [...self::relicShear($state, $move), true],
+            'solidarity-badge' => [...self::relicSolidarityBadge($state, $actorRole, $move), true],
+            'golem-influence' => [...self::relicGolemInfluence($state, $move), true],
+            'darkness-into-light' => [...self::relicDarknessIntoLight($state), true],
+            'harbinger-of-death' => [...self::relicHarbingerOfDeath($state, $actorRole), true],
+            'golem-counter' => [...self::relicGolemCounter($state, $move), true],
             default => [$state, [], false],
         };
+    }
+
+    /**
+     * Rod: "Discard one of the active Glyphs from the Golem's mat.
+     * Trash this." $move['glyph_key'] picks which currently-active
+     * Glyph; a missing key or one not actually active is a no-op on the
+     * discard, but the Relic still trashes (same "Then, trash this" is
+     * unconditional" reading used throughout).
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicRod(GameState $state, array $move): array
+    {
+        $glyphKey = (string) ($move['glyph_key'] ?? '');
+        $glyphs = $state->golem['glyphs'];
+        $index = array_search($glyphKey, $glyphs, true);
+
+        if ($index === false) {
+            return [$state, []];
+        }
+
+        unset($glyphs[$index]);
+        $glyphs = array_values($glyphs);
+        $glyphDiscardPile = [...$state->glyphDiscardPile, $glyphKey];
+        $state = $state->with(['golem' => $state->golemWith(['glyphs' => $glyphs]), 'glyphDiscardPile' => $glyphDiscardPile]);
+
+        return [$state, [['type' => 'glyph_discarded', 'role_key' => null, 'payload' => ['glyph_key' => $glyphKey]]]];
+    }
+
+    /**
+     * Shear: "If you are in the Golem's space: Trash any number of the
+     * face-up prepared Golem Cards from its mat as you choose. Trash
+     * this." "Prepared" cards are the Golem's revealed row
+     * ($golem['revealed'], size GOLEM_REVEALED_SIZE). Unlike discarding
+     * a Golem card (which recycles it into the discard pile to
+     * eventually reshuffle back in), trashing here removes it from
+     * circulation permanently — there's no recovery mechanic for Golem
+     * cards the way Re-creation recovers trashed Relics, so it simply
+     * never returns. $move['card_keys'] is a list of 0+ keys among the
+     * currently-revealed cards; unrecognized keys are ignored.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicShear(GameState $state, array $move): array
+    {
+        $requested = array_values(array_filter((array) ($move['card_keys'] ?? []), 'is_string'));
+
+        if ($requested === []) {
+            return [$state, []];
+        }
+
+        $golem = $state->golem;
+        $events = [];
+
+        foreach ($golem['revealed'] as $i => $entry) {
+            if (in_array($entry['key'], $requested, true)) {
+                unset($golem['revealed'][$i]);
+                $events[] = ['type' => 'golem_card_trashed', 'role_key' => null, 'payload' => ['card_key' => $entry['key']]];
+            }
+        }
+
+        $golem['revealed'] = array_values($golem['revealed']);
+        $state = $state->with(['golem' => $golem]);
+        $state = self::refillGolemRevealed($state);
+
+        return [$state, $events];
+    }
+
+    /**
+     * Solidarity badge: "Choose an ally. They may perform the action
+     * from one of their Relics, even though it is not their turn."
+     * $move['ally_role'] picks the ally, $move['ally_relic_key'] picks
+     * which of THEIR equipped Relics to fire — resolved exactly as if
+     * the ally had played it on their own turn (same resolveRelicAction
+     * chokepoint, same self-trash semantics for that Relic), just with
+     * the active player choosing the moment. Deliberately a distinct
+     * key from $move['relic_key'] — that one is already consumed by
+     * useRelic() to mean "Solidarity badge itself." A missing/invalid
+     * ally or an un-equipped Relic key is a no-op.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicSolidarityBadge(GameState $state, string $actorRole, array $move): array
+    {
+        $allyRole = (string) ($move['ally_role'] ?? '');
+        $relicKey = (string) ($move['ally_relic_key'] ?? '');
+
+        if ($allyRole === $actorRole || ! isset($state->wanderers[$allyRole])) {
+            return [$state, []];
+        }
+
+        if (! in_array($relicKey, $state->wanderers[$allyRole]['equipped'], true)) {
+            return [$state, []];
+        }
+
+        $baseKey = (string) preg_replace('/-\d+$/', '', $relicKey);
+        [$state, $events, $trashUsed] = self::resolveRelicAction($state, $allyRole, $baseKey, $relicKey, $move);
+
+        $events[] = ['type' => 'solidarity_badge_used', 'role_key' => $actorRole, 'payload' => ['ally_role' => $allyRole, 'relic_key' => $relicKey]];
+
+        if ($trashUsed) {
+            $state = self::trashEquippedRelic($state, $allyRole, $relicKey);
+            $events[] = ['type' => 'relic_trashed', 'role_key' => $allyRole, 'payload' => ['relic_key' => $relicKey]];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Golem influence: "Choose an active Golem Glyph, and discard it.
+     * Replace it with a random Glyph of the same type." Same discard +
+     * addGlyphOfType composition as Rift in time (resolveRiftInTime),
+     * just available as a direct Action rather than an Event that has
+     * to park itself on a pending choice.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicGolemInfluence(GameState $state, array $move): array
+    {
+        $glyphKey = (string) ($move['glyph_key'] ?? '');
+        $glyphs = $state->golem['glyphs'];
+        $index = array_search($glyphKey, $glyphs, true);
+
+        if ($index === false) {
+            return [$state, []];
+        }
+
+        $type = GlyphCatalog::find($glyphKey)?->type;
+
+        if ($type === null) {
+            return [$state, []];
+        }
+
+        unset($glyphs[$index]);
+        $glyphs = array_values($glyphs);
+        $glyphDiscardPile = [...$state->glyphDiscardPile, $glyphKey];
+        $state = $state->with(['golem' => $state->golemWith(['glyphs' => $glyphs]), 'glyphDiscardPile' => $glyphDiscardPile]);
+
+        $events = [['type' => 'glyph_discarded', 'role_key' => null, 'payload' => ['glyph_key' => $glyphKey]]];
+
+        [$state, $replaceEvents] = self::addGlyphOfType($state, $type);
+
+        return [$state, [...$events, ...$replaceEvents]];
+    }
+
+    /**
+     * Darkness into light: "🌿2 for all Wanderers. If any Wanderers are
+     * on locations that produce 🌑, they 🌿7 instead."
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicDarknessIntoLight(GameState $state): array
+    {
+        $events = [];
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            $location = LocationCatalog::find($state->board[Board::key($cell)]['location_key']);
+            $amount = $location?->producesEmoji === '🌑' ? 7 : 2;
+
+            $hp = min(self::maxHpFor($state, $role), $state->wanderers[$role]['hp'] + $amount);
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
+            $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Harbinger of death: "Every Wanderer loses 15 health. Trash this,
+     * and gain 📜📜." Self-inflicted, not a Golem attack — none of the
+     * "when the Golem 👊 you" passive reactions apply.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicHarbingerOfDeath(GameState $state, string $actorRole): array
+    {
+        $events = [];
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            [$state, $damageEvents] = self::applyDamage($state, $role, 15, false);
+            $events = [...$events, ...$damageEvents];
+        }
+
+        $state = $state->with(['prophecy' => $state->prophecy + 2]);
+        $events[] = ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => 2]];
+
+        return [$state, $events];
+    }
+
+    /**
+     * Golem counter: "If you are on the Golem's space: choose one of
+     * the 3 prepared Golem cards, and tap it." Taps a single entry in
+     * the revealed row ($golem['revealed']) rather than the draw pile —
+     * same tapped flag, same "cannot be tapped" Enraged gate as
+     * everything routed through tapGolemDrawPile, just applied to the
+     * other array. $move['card_key'] picks which of the (at most 3)
+     * revealed cards; a missing/already-tapped key is a no-op.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicGolemCounter(GameState $state, array $move): array
+    {
+        if (in_array('enraged', $state->golem['glyphs'], true)) {
+            return [$state, []];
+        }
+
+        $cardKey = (string) ($move['card_key'] ?? '');
+        $golem = $state->golem;
+
+        foreach ($golem['revealed'] as $i => $entry) {
+            if ($entry['key'] === $cardKey && ! $entry['tapped']) {
+                $golem['revealed'][$i]['tapped'] = true;
+                $state = $state->with(['golem' => $golem]);
+
+                return [$state, [['type' => 'golem_card_flipped_tapped', 'role_key' => null, 'payload' => ['card_key' => $cardKey]]]];
+            }
+        }
+
+        return [$state, []];
     }
 
     /**
@@ -2037,10 +2269,20 @@ final class GameEngine
      * missing its verb (data issue, not a design question — see
      * rules-todo.md) and is also unimplemented pending a fix.
      *
+     * Enraged Glyph: "Golem Cards cannot be tapped" — the single
+     * chokepoint every tap effect routes through (plus Golem counter's
+     * own revealed-row tap, gated the same way directly in
+     * relicGolemCounter), so gating here covers every other Relic in
+     * the list above for free.
+     *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: int} 2 = how many were actually tapped
      */
     private static function tapGolemDrawPile(GameState $state, int $count): array
     {
+        if (in_array('enraged', $state->golem['glyphs'], true)) {
+            return [$state, [], 0];
+        }
+
         $golem = $state->golem;
         $tapped = 0;
         $events = [];
@@ -2245,9 +2487,10 @@ final class GameEngine
     }
 
     /**
-     * Pointed finger: "If you are on the Golem's space, add one Shame
-     * token to the Golem, and one to yourself. Then, trash this, and
-     * gain 📜." The Golem's own Shame counter has no printed cap
+     * Accusing mind (key frozen as 'pointed-finger' from before this
+     * Relic was renamed): "If you are on the Golem's space, add one
+     * Shame token to the Golem, and one to yourself. Then, trash this,
+     * and gain 📜." The Golem's own Shame counter has no printed cap
      * (unlike a Wanderer's 5 equip slots) anywhere else in the engine,
      * so it's left uncapped here too.
      *
@@ -2335,7 +2578,7 @@ final class GameEngine
      * Ban of dangerous ideas: "Any Wanderer or Golem on a space that
      * produces 📖, 💭, 🎨, or 🪙 gains 1 Shame token (max 3 Shame
      * tokens). Then, trash this." The Golem has no equip slots to hold a
-     * Shame token in, so (like Pointed finger) its Shame is tracked on
+     * Shame token in, so (like Accusing mind) its Shame is tracked on
      * its own uncapped counter — this card's printed cap of 3 only binds
      * the comparison for symmetry with the Wanderer side, since nothing
      * else in rules.md caps the Golem's Shame today.
@@ -3977,6 +4220,9 @@ final class GameEngine
             $events[] = ['type' => 'fruit_tree_bonus_action', 'role_key' => $firstRole, 'payload' => []];
         }
 
+        [$state, $tiesEvents] = self::applyTiesThatBindHeal($state, $firstRole);
+        $events = [...$events, ...$tiesEvents];
+
         return [$state, $events];
     }
 
@@ -4301,6 +4547,9 @@ final class GameEngine
                 $events[] = ['type' => 'fruit_tree_bonus_action', 'role_key' => $nextRole, 'payload' => []];
             }
 
+            [$state, $tiesEvents] = self::applyTiesThatBindHeal($state, $nextRole);
+            $events = [...$events, ...$tiesEvents];
+
             return [$state, $events];
         }
 
@@ -4422,6 +4671,51 @@ final class GameEngine
         $actionsPerTurn += $state->wanderers[$role]['pending_bonus_actions'];
 
         return $actionsPerTurn;
+    }
+
+    /**
+     * The ties that bind: "When you start your turn on a space with
+     * allies, all Wanderers on your space 🌿3." "You" is whoever has
+     * this Relic equipped — the trigger is THEIR turn starting, but
+     * the heal (like Union Garb's own-space check) applies to every
+     * Wanderer sharing that space, not just the equip-holder.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function applyTiesThatBindHeal(GameState $state, string $role): array
+    {
+        $cell = $state->wanderers[$role]['cell'];
+
+        if ($cell === null || ! in_array('the-ties-that-bind', $state->wanderers[$role]['equipped'], true)) {
+            return [$state, []];
+        }
+
+        $cellKey = Board::key($cell);
+        $hasAlly = false;
+
+        foreach (self::activeWanderers($state) as $otherRole => $otherCell) {
+            if ($otherRole !== $role && Board::key($otherCell) === $cellKey) {
+                $hasAlly = true;
+                break;
+            }
+        }
+
+        if (! $hasAlly) {
+            return [$state, []];
+        }
+
+        $events = [];
+        foreach (self::activeWanderers($state) as $otherRole => $otherCell) {
+            if (Board::key($otherCell) !== $cellKey) {
+                continue;
+            }
+
+            $hp = min(self::maxHpFor($state, $otherRole), $state->wanderers[$otherRole]['hp'] + 3);
+            $state = $state->with(['wanderers' => $state->wanderersWith($otherRole, ['hp' => $hp])]);
+            $events[] = ['type' => 'wanderer_healed', 'role_key' => $otherRole, 'payload' => ['hp' => $hp]];
+        }
+
+        return [$state, $events];
     }
 
     /**
@@ -4698,6 +4992,39 @@ final class GameEngine
             }
 
             break;
+        }
+
+        // Garbage barricade: "End of game: If there are no Relics
+        // face-up or face-down on any Locations, gain 📜📜📜." Checks
+        // every board cell's own relic piles (`relics` = face-down,
+        // not yet searched; `relics_face_up` = searched but not taken)
+        // plus `tucked` (physically laid face-up on that Location,
+        // same category as Bazaar/Cathedral/this Location's own tuck
+        // pile) — Relics equipped or held by a Wanderer are on the
+        // Wanderer, not "on" any Location, so they don't count against
+        // this. Gated on Garbage barricade actually being built, same
+        // as every other Location-flavored end-of-game bonus.
+        $barricadeBuilt = false;
+        foreach ($state->board as $entry) {
+            if ($entry['location_key'] === 'garbage-barricade') {
+                $barricadeBuilt = true;
+                break;
+            }
+        }
+
+        if ($barricadeBuilt) {
+            $anyRelicsOnLocations = false;
+            foreach ($state->board as $entry) {
+                if ($entry['relics'] !== [] || $entry['relics_face_up'] !== [] || $entry['tucked'] !== []) {
+                    $anyRelicsOnLocations = true;
+                    break;
+                }
+            }
+
+            if (! $anyRelicsOnLocations) {
+                $state = $state->with(['prophecy' => $state->prophecy + 3]);
+                $events[] = ['type' => 'prophecy_gained', 'role_key' => null, 'payload' => ['amount' => 3, 'reason' => 'garbage-barricade']];
+            }
         }
 
         return [$state, $events];
@@ -5251,6 +5578,16 @@ final class GameEngine
 
             case 'targeted-attack':
                 [$state, $e] = self::golemTargetedAttack($state);
+                $events = [...$events, ...$e];
+                break;
+
+            case 'rage-against-time':
+                [$state, $e] = self::golemAttackHere($state, $state->prophecy);
+                $events = [...$events, ...$e];
+                break;
+
+            case 'whirlwind':
+                [$state, $e] = self::golemWhirlwind($state);
                 $events = [...$events, ...$e];
                 break;
         }
@@ -6067,6 +6404,64 @@ final class GameEngine
     }
 
     /**
+     * Whirlwind: "Pick up all infrastructure tokens. Shuffle them, and
+     * redistribute them at random. Ensure no space has two of the same
+     * token as usual." Flattens every currently-placed token (any mix
+     * of monolith_shard/fruit_tree/walls) off the whole board, shuffles
+     * both the tokens and the candidate cells, then deals tokens back
+     * out one at a time — skipping a cell that would end up with two
+     * of the same type, same uniqueness Build/Divine aura already
+     * enforce. A token that can't legally land anywhere (more of one
+     * type than there are eligible cells left) returns to
+     * infrastructurePool rather than vanishing.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemWhirlwind(GameState $state): array
+    {
+        $tokens = [];
+        $board = $state->board;
+
+        foreach ($board as $key => $entry) {
+            foreach ($entry['infrastructure'] as $type) {
+                $tokens[] = $type;
+            }
+
+            $board[$key] = [...$entry, 'infrastructure' => []];
+        }
+
+        if ($tokens === []) {
+            return [$state, []];
+        }
+
+        shuffle($tokens);
+        $cellKeys = array_keys($board);
+        shuffle($cellKeys);
+
+        $pool = $state->infrastructurePool;
+
+        foreach ($tokens as $type) {
+            $placed = false;
+
+            foreach ($cellKeys as $key) {
+                if (! in_array($type, $board[$key]['infrastructure'], true)) {
+                    $board[$key] = [...$board[$key], 'infrastructure' => [...$board[$key]['infrastructure'], $type]];
+                    $placed = true;
+                    break;
+                }
+            }
+
+            if (! $placed) {
+                $pool[$type] = ($pool[$type] ?? 0) + 1;
+            }
+        }
+
+        $state = $state->with(['board' => $board, 'infrastructurePool' => $pool]);
+
+        return [$state, [['type' => 'infrastructure_redistributed', 'role_key' => null, 'payload' => []]]];
+    }
+
+    /**
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
     private static function golemAttackHere(GameState $state, int $damage): array
@@ -6330,6 +6725,17 @@ final class GameEngine
             $modifiers[] = "Dark sacrifice (-{$darkCount})";
         }
         $damage = max(0, $damage - $darkCount);
+
+        // Garbage barricade: "When the Golem attacks Wanderers in this
+        // space, reduce damage by 1 for every 2 Relics tucked here."
+        if ($isGolemAttack && $cell !== null && $state->board[Board::key($cell)]['location_key'] === 'garbage-barricade') {
+            $barricadeReduction = intdiv(count($state->board[Board::key($cell)]['tucked']), 2);
+
+            if ($barricadeReduction > 0) {
+                $modifiers[] = "Garbage barricade (-{$barricadeReduction})";
+            }
+            $damage = max(0, $damage - $barricadeReduction);
+        }
 
         // Combat Glyphs — all five only ever modify a Golem attack's
         // damage, never damage from any other source.
@@ -6722,6 +7128,27 @@ final class GameEngine
 
         if ($discardedGlyph !== null) {
             $events[] = ['type' => 'glyph_discarded', 'role_key' => null, 'payload' => ['glyph_key' => $discardedGlyph]];
+        }
+
+        // Enraged: "Untap any tapped Golem Cards." Fires once, right as
+        // Enraged itself becomes active — not an ongoing re-check, so
+        // this only needs to run when $glyphKey === 'enraged', not on
+        // every subsequent addGlyphOfType call while it's still active
+        // (tapGolemDrawPile's own gate already prevents anything from
+        // becoming tapped again in the meantime).
+        if ($glyphKey === 'enraged') {
+            $golem = $state->golem;
+
+            foreach ($golem['draw_pile'] as $i => $entry) {
+                $golem['draw_pile'][$i]['tapped'] = false;
+            }
+
+            foreach ($golem['revealed'] as $i => $entry) {
+                $golem['revealed'][$i]['tapped'] = false;
+            }
+
+            $state = $state->with(['golem' => $golem]);
+            $events[] = ['type' => 'golem_cards_untapped', 'role_key' => null, 'payload' => []];
         }
 
         // Prohibition of inscribing: "If anyone (Wanderer or Golem) adds
@@ -7191,6 +7618,56 @@ final class GameEngine
 
         if ($state->board[$cellKey]['location_key'] !== 'cathedral') {
             throw new InvalidMoveException('You must be on the Cathedral to do this.');
+        }
+
+        $relicKey = (string) ($move['relic_key'] ?? '');
+        $equipped = $wanderer['equipped'];
+        $fromSlot = array_search($relicKey, $equipped, true);
+        $fromHolding = in_array($relicKey, $wanderer['holding'], true);
+
+        if (! $fromSlot && ! $fromHolding) {
+            throw new InvalidMoveException('You do not have that Relic.');
+        }
+
+        if ($fromSlot !== false) {
+            $equipped[$fromSlot] = null;
+        }
+
+        $wanderers = $state->wanderersWith($actorRole, [
+            'equipped' => $equipped,
+            'holding' => array_values(array_diff($wanderer['holding'], [$relicKey])),
+        ]);
+        $state = $state->with(['wanderers' => $wanderers]);
+
+        $board = $state->board;
+        $board[$cellKey] = [...$board[$cellKey], 'tucked' => [...$board[$cellKey]['tucked'], $relicKey]];
+        $state = $state->with(['board' => $board]);
+
+        $events = [['type' => 'relic_tucked', 'role_key' => $actorRole, 'payload' => ['relic_key' => $relicKey, 'cell' => $wanderer['cell']]]];
+
+        return [$state, $events];
+    }
+
+    /**
+     * Garbage barricade: "Ongoing: You may tuck Relics from your mat
+     * here. When the Golem attacks Wanderers in this space, reduce
+     * damage by 1 for every 2 Relics tucked here." No heal (unlike
+     * Bazaar) and no action cost, same free-tuck shape as Bazaar/
+     * Cathedral — see applyDamage() for the matching damage-reduction
+     * half.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function tuckRelicAtGarbageBarricade(GameState $state, string $actorRole, array $move): array
+    {
+        self::requireRole($state, $actorRole, $state->activeWandererRole(), 'wanderer');
+
+        $wanderer = $state->wanderers[$actorRole];
+        $cellKey = Board::key($wanderer['cell']);
+
+        if ($state->board[$cellKey]['location_key'] !== 'garbage-barricade') {
+            throw new InvalidMoveException('You must be on the Garbage barricade to do this.');
         }
 
         $relicKey = (string) ($move['relic_key'] ?? '');

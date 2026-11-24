@@ -214,5 +214,11 @@
         "Name": "Miraculous",
         "Type": "📖",
         "Description": "If any Wanderer becomes exhausted, they immediately 🌿3."
+    },
+    {
+        "Print": true,
+        "Name": "Enraged",
+        "Type": "👺",
+        "Description": "Untap any tapped Golem Cards. Golem Cards cannot be tapped."
     }
 ]

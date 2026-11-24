@@ -143,5 +143,15 @@
         "print": false,
         "name": "Time Paradox",
         "action": "Draw and resolve 2 additional Golem cards from the bottom of the Golem deck after this."
+    },
+    {
+        "print": true,
+        "name": "Rage against time",
+        "action": "👊X to all Wanderers in the Golem's space, where X = the current 📜 level."
+    },
+    {
+        "print": true,
+        "name": "Whirlwind",
+        "action": "Pick up all infrastructure tokens. Shuffle them, and redistribute them at random. Ensure no space has two of the same token as usual."
     }
 ]
