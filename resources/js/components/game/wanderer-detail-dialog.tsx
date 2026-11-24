@@ -18,6 +18,15 @@ const SLOT_LABELS: Record<EquipSlot, string> = {
     bag: '👝 Bag',
 };
 
+// Shame/Scar are status markers, not Relics — the engine just stores
+// them in an equip slot (there's no separate status area on the mat),
+// so this has to special-case these two sentinel keys rather than
+// looking them up in the Relic catalog.
+const STATUS_TOKEN_LABELS: Record<string, string> = {
+    shame_token: '😳 Shame token',
+    scar_token: '🩹 Scar token',
+};
+
 function RelicRow({
     relicKey,
     entry,
@@ -25,10 +34,13 @@ function RelicRow({
     relicKey: string;
     entry: RelicCatalogEntry | undefined;
 }) {
+    const statusLabel = STATUS_TOKEN_LABELS[relicKey];
+
     return (
         <div className="min-w-0 rounded-md border p-2">
             <p className="font-medium break-words">
-                {entry ? `${entry.slot_emoji} ${entry.name}` : relicKey}
+                {statusLabel ??
+                    (entry ? `${entry.slot_emoji} ${entry.name}` : relicKey)}
                 {entry?.is_bound && (
                     <span className="ml-2 text-[10px] font-normal text-muted-foreground">
                         🪡 Bound

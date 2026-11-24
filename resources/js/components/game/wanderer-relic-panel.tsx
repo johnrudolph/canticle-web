@@ -33,10 +33,24 @@ const RELIC_SLOT_TO_EQUIP_SLOTS: Record<string, EquipSlot[]> = {
     Hand: ['hand_left', 'hand_right'],
 };
 
+// Shame/Scar are status markers, not Relics — the engine just stores
+// them in an equip slot (there's no separate status area on the mat),
+// so every slot render has to special-case these two sentinel keys
+// rather than looking them up in the Relic catalog.
+const STATUS_TOKEN_LABELS: Record<string, string> = {
+    shame_token: '😳 Shame token',
+    scar_token: '🩹 Scar token',
+};
+
+function isStatusToken(key: string): boolean {
+    return key in STATUS_TOKEN_LABELS;
+}
+
 function relicLabel(
     key: string,
     catalog: Record<string, RelicCatalogEntry>,
 ): string {
+    if (isStatusToken(key)) return STATUS_TOKEN_LABELS[key];
     const entry = catalog[key];
     return entry ? `${entry.slot_emoji} ${entry.name}` : key;
 }
@@ -280,7 +294,11 @@ export function WandererRelicPanel({
                             <p className="text-muted-foreground">
                                 {SLOT_LABELS[slot]}
                             </p>
-                            {relicKey ? (
+                            {relicKey && isStatusToken(relicKey) ? (
+                                <span className="truncate">
+                                    {relicLabel(relicKey, relicCatalog)}
+                                </span>
+                            ) : relicKey ? (
                                 <div className="flex flex-col gap-1">
                                     <div className="flex items-center justify-between gap-1">
                                         <span className="truncate">
