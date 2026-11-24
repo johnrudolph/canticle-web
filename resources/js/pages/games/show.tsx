@@ -88,9 +88,29 @@ function occupiedNeighbors(cell: Cell, board: Record<string, unknown>): Cell[] {
  * map of reachable cellKey -> the sequence of directions to replay as
  * individual move_wanderer calls to actually get there.
  */
+/**
+ * Catacombs: "A Wanderer may not enter this space unless they have
+ * ever been exhausted (0 HP) — rules.md" — GameEngine::catacombsBlocks.
+ * Mirrored here so the highlight matches what the server will actually
+ * accept; without this, Catacombs still showed as a reachable/
+ * clickable space even for a Wanderer who'd be rejected for trying
+ * (confirmed in prod: correctly bounced server-side, but still
+ * highlighted).
+ */
+function catacombsBlocks(
+    cell: Cell,
+    board: Record<string, BoardCell>,
+    wasEverExhausted: boolean,
+): boolean {
+    return (
+        board[cellKey(cell)]?.location_key === 'catacombs' && !wasEverExhausted
+    );
+}
+
 function reachableByRoad(
     start: Cell,
     board: Record<string, BoardCell>,
+    wasEverExhausted: boolean,
 ): Map<string, Direction[]> {
     const startKey = cellKey(start);
     const paths = new Map<string, Direction[]>();
@@ -114,6 +134,7 @@ function reachableByRoad(
         for (const next of occupiedNeighbors(cell, board)) {
             const nextKey = cellKey(next);
             if (visited.has(nextKey)) continue;
+            if (catacombsBlocks(next, board, wasEverExhausted)) continue;
 
             const direction = directionBetween(cell, next);
             if (!direction) continue;
@@ -1296,7 +1317,11 @@ export default function GameShow({ game }: { game: GameSummary }) {
             // Beyond the immediate neighbors, everything else here is
             // only reachable by chaining through Road spaces — see
             // reachableByRoad's own comment for the exact rule.
-            const paths = reachableByRoad(mine.cell, state.board);
+            const paths = reachableByRoad(
+                mine.cell,
+                state.board,
+                mine.was_ever_exhausted,
+            );
             highlightedCells = new Set(paths.keys());
             onCellClick = async (cell) => {
                 const path = paths.get(cellKey(cell));

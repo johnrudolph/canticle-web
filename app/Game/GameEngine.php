@@ -2283,6 +2283,12 @@ final class GameEngine
     }
 
     /**
+     * Last rites: "🌿 an Ally on your space to their maximum Health,
+     * then trash this. If you healed 10+ Health, gain 📜." The
+     * Prophecy clause was missing entirely — confirmed in prod: used
+     * successfully, never granted it regardless of how much HP was
+     * actually restored.
+     *
      * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
@@ -2294,9 +2300,18 @@ final class GameEngine
             return [$state, []];
         }
 
-        $state = $state->with(['wanderers' => $state->wanderersWith($targetRole, ['hp' => 15])]);
+        $hpBefore = $state->wanderers[$targetRole]['hp'];
+        $maxHp = self::maxHpFor($state, $targetRole);
+        $state = $state->with(['wanderers' => $state->wanderersWith($targetRole, ['hp' => $maxHp])]);
 
-        return [$state, [['type' => 'wanderer_healed', 'role_key' => $targetRole, 'payload' => ['hp' => 15]]]];
+        $events = [['type' => 'wanderer_healed', 'role_key' => $targetRole, 'payload' => ['hp' => $maxHp]]];
+
+        if ($maxHp - $hpBefore >= 10) {
+            $state = $state->with(['prophecy' => $state->prophecy + 1]);
+            $events[] = ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => 1]];
+        }
+
+        return [$state, $events];
     }
 
     /**

@@ -70,7 +70,28 @@ test('Last rites heals the chosen Ally to full and trashes itself', function () 
 
     expect($state->wanderers['wanderer_b']['hp'])->toBe(15)
         ->and($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBeNull()
-        ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
+        ->and(collect($events)->pluck('type'))->toContain('relic_trashed')
+        // Healed 13 (2 -> 15) — "If you healed 10+ Health, gain 📜."
+        ->and($state->prophecy)->toBe(1)
+        ->and(collect($events)->pluck('type'))->toContain('prophecy_gained');
+});
+
+test('Last rites grants no Prophecy if the Ally was healed less than 10', function () {
+    $state = startedGame();
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'last-rites'];
+    $wanderers = $state->wanderersWith('wanderer_a', ['equipped' => $equipped]);
+    $wanderers = [...$wanderers, 'wanderer_b' => [...$wanderers['wanderer_b'], 'hp' => 10]];
+    $state = $state->with(['wanderers' => $wanderers]);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', [
+        'type' => 'use_relic', 'relic_key' => 'last-rites', 'target_role' => 'wanderer_b',
+    ]);
+
+    expect($state->wanderers['wanderer_b']['hp'])->toBe(15)
+        ->and($state->prophecy)->toBe(0)
+        ->and(collect($events)->pluck('type'))->not->toContain('prophecy_gained');
 });
 
 test('an Ally target must actually be sharing the caster\'s space', function () {

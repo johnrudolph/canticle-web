@@ -76,6 +76,26 @@ const PROMPTED_RELICS = new Set([
     'golem-prod',
 ]);
 
+/**
+ * Relics whose engine behavior actually reads an Ally/target_role —
+ * only these get a "Use on {ally}" button. Every other Action relic
+ * (Inscribe, Golem log, Artist's insight, etc.) has no such concept —
+ * confirmed in prod: Inscribe offered "Use on Wanderer B" even though
+ * its only target is the Golem's own mat, and submitting it would've
+ * just silently ignored target_role server-side.
+ */
+const ALLY_TARGETABLE_RELICS = new Set([
+    'holy-water',
+    'quantum-robes',
+    'teleportation-stone',
+    'warlocks-robes',
+    'cabalist-brew',
+    'divine-healing-oil',
+    'last-rites',
+    'emperors-robes',
+    'hands-of-forgiveness',
+]);
+
 const TUCK_LABELS: Record<'bazaar' | 'cathedral', string> = {
     bazaar: 'Tuck (Bazaar, 🌿1)',
     cathedral: 'Tuck (Cathedral)',
@@ -402,42 +422,47 @@ export function WandererRelicPanel({
                                                         </Tooltip>
                                                     );
                                                 })()}
-                                                {allies.map((ally) => (
-                                                    <Button
-                                                        key={ally.role}
-                                                        size="sm"
-                                                        variant="outline"
-                                                        className="h-5 px-1.5 text-[10px]"
-                                                        disabled={processing}
-                                                        onClick={() => {
-                                                            const base =
-                                                                baseRelicKey(
-                                                                    relicKey,
-                                                                );
-                                                            if (
-                                                                PROMPTED_RELICS.has(
-                                                                    base,
-                                                                ) &&
-                                                                onUsePrompted
-                                                            ) {
-                                                                onUsePrompted(
-                                                                    relicKey,
-                                                                    ally.role,
-                                                                );
-                                                            } else {
-                                                                onSubmit({
-                                                                    type: 'use_relic',
-                                                                    relic_key:
-                                                                        relicKey,
-                                                                    target_role:
-                                                                        ally.role,
-                                                                });
+                                                {ALLY_TARGETABLE_RELICS.has(
+                                                    baseRelicKey(relicKey),
+                                                ) &&
+                                                    allies.map((ally) => (
+                                                        <Button
+                                                            key={ally.role}
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="h-5 px-1.5 text-[10px]"
+                                                            disabled={
+                                                                processing
                                                             }
-                                                        }}
-                                                    >
-                                                        Use on {ally.label}
-                                                    </Button>
-                                                ))}
+                                                            onClick={() => {
+                                                                const base =
+                                                                    baseRelicKey(
+                                                                        relicKey,
+                                                                    );
+                                                                if (
+                                                                    PROMPTED_RELICS.has(
+                                                                        base,
+                                                                    ) &&
+                                                                    onUsePrompted
+                                                                ) {
+                                                                    onUsePrompted(
+                                                                        relicKey,
+                                                                        ally.role,
+                                                                    );
+                                                                } else {
+                                                                    onSubmit({
+                                                                        type: 'use_relic',
+                                                                        relic_key:
+                                                                            relicKey,
+                                                                        target_role:
+                                                                            ally.role,
+                                                                    });
+                                                                }
+                                                            }}
+                                                        >
+                                                            Use on {ally.label}
+                                                        </Button>
+                                                    ))}
                                             </div>
                                         )}
                                 </div>
