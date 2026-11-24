@@ -1,14 +1,21 @@
 import { Head } from '@inertiajs/react';
 import { useState } from 'react';
 import { AdminNav } from '@/components/admin/admin-nav';
+import { BranchSummaryTable } from '@/components/admin/branch-summary-table';
 import { CardEditModal } from '@/components/admin/card-edit-modal';
 import { CardTable } from '@/components/admin/card-table';
 import { LOCATION_COLUMNS } from '@/lib/admin-columns';
 import comments from '@/routes/admin/comments';
 import locations from '@/routes/admin/locations';
-import type { CardRecord } from '@/types/admin';
+import type { BranchSummary, CardRecord } from '@/types/admin';
 
-export default function AdminLocations({ cards }: { cards: CardRecord[] }) {
+export default function AdminLocations({
+    cards,
+    branchSummary,
+}: {
+    cards: CardRecord[];
+    branchSummary: BranchSummary;
+}) {
     const [editing, setEditing] = useState<CardRecord | null | 'new'>(null);
 
     return (
@@ -17,6 +24,7 @@ export default function AdminLocations({ cards }: { cards: CardRecord[] }) {
             <AdminNav />
             <div className="mx-auto flex max-w-6xl flex-col gap-6 p-4 py-12">
                 <h1 className="text-2xl font-semibold">Locations</h1>
+                <BranchSummaryTable summary={branchSummary} />
                 <CardTable
                     cards={cards}
                     columns={LOCATION_COLUMNS}

@@ -140,6 +140,27 @@ test('an invalid location produces/cost branch is rejected', function () {
     ])->assertSessionHasErrors('costs.0');
 });
 
+test('the locations index includes a branch summary of Relic and Location counts', function () {
+    $admin = adminUser();
+
+    // The test DB is seeded with the real card set, so assert against
+    // the baseline + what this test adds, not an absolute count.
+    $relicsBefore = \App\Models\Cards\Relic::where('symbol', '🎨')->count();
+    $locationsBefore = Location::where('produces', 'Art')->count();
+
+    \App\Models\Cards\Relic::create(['key' => 'art-relic-a', 'name' => 'Art Relic A', 'symbol' => '🎨']);
+    \App\Models\Cards\Relic::create(['key' => 'art-relic-b', 'name' => 'Art Relic B', 'symbol' => '🎨']);
+    Location::create(['key' => 'art-place', 'name' => 'Art Place', 'produces' => 'Art']);
+
+    $response = $this->actingAs($admin)->get('/admin/locations');
+
+    $response->assertInertia(fn ($page) => $page
+        ->where('branchSummary.relicCounts.Art', $relicsBefore + 2)
+        ->where('branchSummary.locationCounts.Art', $locationsBefore + 1)
+        ->where('branchSummary.relicCounts.Agriculture', 0)
+    );
+});
+
 test('GET /admin/locations/{id} renders the dedicated detail page', function () {
     $admin = adminUser();
     $location = Location::create(['key' => 'detail-page-place', 'name' => 'Detail Page Place']);

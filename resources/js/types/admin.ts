@@ -44,3 +44,10 @@ export interface RelicSummary {
     columns: string[];
     matrix: Record<string, Record<string, number>>;
 }
+
+/** Per-branch Relic count (by symbol) side by side with Location count (by produces) — see LocationController::buildBranchSummary. */
+export interface BranchSummary {
+    branches: string[];
+    relicCounts: Record<string, number>;
+    locationCounts: Record<string, number>;
+}

@@ -42,6 +42,51 @@ class LocationController extends CardController
         return 'admin/location-detail';
     }
 
+    protected function extraProps(): array
+    {
+        return [
+            'branchSummary' => $this->buildBranchSummary(),
+        ];
+    }
+
+    /**
+     * Per-branch counts: how many Relics belong to that branch (by
+     * `symbol`) side by side with how many Locations `produces` it.
+     *
+     * Like RelicController::buildRelicSummary(), this deliberately
+     * avoids SQL `GROUP BY` on the emoji-valued Relic.symbol column —
+     * MySQL's utf8mb4_unicode_ci/utf8mb4_general_ci collations merge
+     * distinct 4-byte emoji under GROUP BY. Location.produces is a
+     * plain ASCII branch name, so it's safe to tally either way, but
+     * tallying both in PHP keeps the two counts built the same way.
+     */
+    private function buildBranchSummary(): array
+    {
+        $branches = array_keys(self::BRANCH_EMOJI);
+
+        $locationCounts = array_fill_keys($branches, 0);
+        foreach (Location::query()->pluck('produces') as $produces) {
+            if (isset($locationCounts[$produces])) {
+                $locationCounts[$produces]++;
+            }
+        }
+
+        $branchBySymbol = array_flip(self::BRANCH_EMOJI);
+        $relicCounts = array_fill_keys($branches, 0);
+        foreach (Relic::query()->pluck('symbol') as $symbol) {
+            $branch = $branchBySymbol[$symbol] ?? null;
+            if ($branch !== null) {
+                $relicCounts[$branch]++;
+            }
+        }
+
+        return [
+            'branches' => $branches,
+            'relicCounts' => $relicCounts,
+            'locationCounts' => $locationCounts,
+        ];
+    }
+
     protected function rules(): array
     {
         $branches = implode(',', array_keys(self::BRANCH_EMOJI));
