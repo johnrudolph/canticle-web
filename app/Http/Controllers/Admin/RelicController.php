@@ -16,8 +16,8 @@ class RelicController extends CardController
         '' => '',
     ];
 
-    /** The 8 branch emojis a Relic's `symbol` ever takes (no Relics in Agriculture/Commerce/Engineering). */
-    private const RELIC_SYMBOLS = ['⏳', '⚖️', '✨', '🌑', '🎨', '🐾', '📖', '🤝'];
+    /** The branch emojis a Relic's `symbol` ever takes (no Relics in Agriculture/Commerce/Engineering). */
+    private const RELIC_SYMBOLS = ['⏳', '⚖️', '✨', '🌑', '🎨', '🐾', '📖', '🤝', '🔥'];
 
     protected function modelClass(): string
     {
@@ -89,6 +89,8 @@ class RelicController extends CardController
 
     protected function rules(): array
     {
+        $symbols = implode(',', self::RELIC_SYMBOLS);
+
         return [
             'print' => ['boolean'],
             'name' => ['required', 'string', 'max:255'],
@@ -98,7 +100,7 @@ class RelicController extends CardController
             // pick a slot for. Everything else still needs one.
             'slot' => ['required_unless:type,Event', 'nullable', 'string', 'in:Body,Mind,Hand,Bag,'],
             'type' => ['required', 'string', 'in:Action,Passive,Event'],
-            'symbol' => ['nullable', 'string', 'in:⏳,⚖️,✨,🌑,🎨,🐾,📖,🤝,'],
+            'symbol' => ['nullable', 'string', "in:{$symbols},"],
             'effect' => ['nullable', 'string'],
         ];
     }

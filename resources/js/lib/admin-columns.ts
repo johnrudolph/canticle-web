@@ -1,12 +1,13 @@
 import type { ColumnDef } from '@/types/admin';
 
-/** 11 branches a Location can produce / a Relic can belong to (by symbol). */
+/** Branches a Location can produce / a Relic can belong to (by symbol). */
 export const BRANCHES = [
     'Agriculture',
     'Art',
     'Commerce',
     'Dark',
     'Engineering',
+    'Fire',
     'Golem',
     'Law',
     'Magic',
@@ -15,8 +16,8 @@ export const BRANCHES = [
     'Time',
 ];
 
-/** Relic `symbol` only ever takes one of these 8 (no Relics in Agriculture/Commerce/Engineering). */
-export const RELIC_SYMBOLS = ['⏳', '⚖️', '✨', '🌑', '🎨', '🐾', '📖', '🤝'];
+/** Relic `symbol` only ever takes one of these (no Relics in Agriculture/Commerce/Engineering). */
+export const RELIC_SYMBOLS = ['⏳', '⚖️', '✨', '🌑', '🎨', '🐾', '📖', '🤝', '🔥'];
 
 export const RELIC_SLOTS = ['Body', 'Mind', 'Hand', 'Bag'];
 

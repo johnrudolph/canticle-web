@@ -14,6 +14,7 @@ class LocationController extends CardController
         'Commerce' => '🪙',
         'Dark' => '🌑',
         'Engineering' => '⚙️',
+        'Fire' => '🔥',
         'Golem' => '🐾',
         'Law' => '⚖️',
         'Magic' => '✨',
