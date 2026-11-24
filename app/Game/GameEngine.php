@@ -47,7 +47,7 @@ final class GameEngine
             throw new InvalidMoveException('The Golem\'s card is waiting on a choice before anything else can happen.');
         }
 
-        return match ($move['type'] ?? null) {
+        [$state, $events] = match ($move['type'] ?? null) {
             'choose_starting_cell' => self::chooseStartingCell($state, $actorRole, $move),
             'choose_golem_cell' => self::chooseGolemCell($state, $actorRole, $move),
             'play_location' => self::playLocation($state, $actorRole, $move),
@@ -81,6 +81,109 @@ final class GameEngine
             'end_wanderer_turn' => self::endWandererTurn($state, $actorRole),
             default => throw new InvalidMoveException('Unknown move type.'),
         };
+
+        [$state, $chapelEvents] = self::checkFragileChapelDestruction($state);
+
+        return [$state, [...$events, ...$chapelEvents]];
+    }
+
+    /**
+     * Fragile Chapel: "Ongoing: ... If the Golem is ever on or
+     * adjacent to this space, trash this, and move all Wanderers here
+     * to adjacent spaces they choose, and set them to 0HP." Checked
+     * once at the end of every apply() call rather than at each of the
+     * half-dozen individual call sites that can move the Golem — by
+     * the time a move() call fully settles, the Golem's position is
+     * final for this transition regardless of how it got there
+     * (a card's own movement, Golem whistle, a forced retreat, or
+     * several cards cascading through one Golem phase).
+     *
+     * Simplification: "adjacent spaces they choose" has no real
+     * interactive choice built — same category as Roar's own
+     * non-paused fallback (self::golemRoar's $allowPause = false
+     * branch), each displaced Wanderer is sent to whichever occupied
+     * neighbor is farthest from the Golem (ties broken by iteration
+     * order), or left in place if boxed in.
+     *
+     * The Location's identity is cleared (location_key set to '', its
+     * Relics/tucked piles emptied) rather than the board entry being
+     * unset entirely. Unsetting it would match how a not-yet-built
+     * cell has no board entry at all (GameSetup::create()/
+     * playLocation()), but everything that reads the current Golem or
+     * Wanderer cell indexes straight into $state->board[cellKey] with
+     * no isset guard — and rules.md never actually moves the Golem off
+     * this space, only the Wanderers, so the Golem can legitimately
+     * still be standing exactly here afterward. Keeping the entry (with
+     * an empty location_key, same "no Location here" reading every
+     * other check already gives LocationCatalog::find('')) avoids that
+     * risk entirely. One side effect: unlike a genuinely unbuilt cell,
+     * this space can't be built over again (playLocation() rejects any
+     * cellKey already present in $state->board) — not addressed by
+     * rules.md either way, so left as the conservative default.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function checkFragileChapelDestruction(GameState $state): array
+    {
+        $golemCell = $state->golem['cell'];
+
+        if ($golemCell === null) {
+            return [$state, []];
+        }
+
+        $chapelKey = null;
+        foreach ($state->board as $key => $entry) {
+            if ($entry['location_key'] === 'fragile-chapel') {
+                $chapelKey = $key;
+                break;
+            }
+        }
+
+        if ($chapelKey === null) {
+            return [$state, []];
+        }
+
+        $golemCellKey = Board::key($golemCell);
+        $adjacentToChapel = array_map(Board::key(...), Board::occupiedNeighbors(Board::fromKey($chapelKey), $state->board));
+
+        if ($golemCellKey !== $chapelKey && ! in_array($golemCellKey, $adjacentToChapel, true)) {
+            return [$state, []];
+        }
+
+        $events = [];
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            if (Board::key($cell) !== $chapelKey) {
+                continue;
+            }
+
+            $best = null;
+            $bestDistance = -1;
+
+            foreach (Board::occupiedNeighbors($cell, $state->board) as $option) {
+                $distance = Board::distance($golemCell, $option, $state->board) ?? 0;
+
+                if ($distance > $bestDistance) {
+                    $best = $option;
+                    $bestDistance = $distance;
+                }
+            }
+
+            if ($best !== null) {
+                $state = $state->with(['wanderers' => $state->wanderersWith($role, ['cell' => $best])]);
+                $events[] = ['type' => 'wanderer_moved', 'role_key' => $role, 'payload' => ['to' => $best, 'reason' => 'fragile-chapel']];
+            }
+
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => 0])]);
+            $events[] = ['type' => 'wanderer_hp_set', 'role_key' => $role, 'payload' => ['hp' => 0]];
+        }
+
+        $board = $state->board;
+        $board[$chapelKey] = [...$board[$chapelKey], 'location_key' => '', 'relics' => [], 'relics_face_up' => [], 'tucked' => []];
+        $state = $state->with(['board' => $board]);
+        $events[] = ['type' => 'location_destroyed', 'role_key' => null, 'payload' => ['location_key' => 'fragile-chapel', 'cell' => Board::fromKey($chapelKey)]];
+
+        return [$state, $events];
     }
 
     /**
@@ -1308,6 +1411,7 @@ final class GameEngine
             'darkness-into-light' => [...self::relicDarknessIntoLight($state), true],
             'harbinger-of-death' => [...self::relicHarbingerOfDeath($state, $actorRole), true],
             'golem-counter' => [...self::relicGolemCounter($state, $move), true],
+            'shroud-of-time' => [...self::relicShroudOfTime($state, $actorRole), false],
             default => [$state, [], false],
         };
     }
@@ -1534,6 +1638,63 @@ final class GameEngine
         }
 
         return [$state, []];
+    }
+
+    /**
+     * Shroud of time: "Trash all Relics you have equipped, including
+     * this. Replace each with a random Relic from its source deck (not
+     * from the cards on Locations)." "Its source deck" is the shared,
+     * global relicDecks pool keyed by branch emoji (symbol) — the same
+     * pool Location-builds draw from, just drawn from directly here
+     * instead of going through RelicDealer's per-Location allotment
+     * rules. Handles its own trash (returns trash=false to the
+     * dispatch table) since by the time the caller's own unconditional
+     * trash-this-Relic step would run, this slot may already hold a
+     * brand new replacement — trashEquippedRelic() keyed on the
+     * original 'shroud-of-time' key would safely no-op by then, but
+     * would still emit a spurious extra 'relic_trashed' event for it.
+     * A branch with no Relics left in its deck just leaves that slot
+     * empty.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicShroudOfTime(GameState $state, string $actorRole): array
+    {
+        $equipped = $state->wanderers[$actorRole]['equipped'];
+        $relicDecks = $state->relicDecks;
+        $trashedRelics = $state->trashedRelics;
+        $events = [];
+
+        foreach ($equipped as $slot => $relicKey) {
+            if (! is_string($relicKey) || self::isStatusToken($relicKey)) {
+                continue;
+            }
+
+            $relic = RelicCatalog::find($relicKey);
+            $trashedRelics[] = $relicKey;
+            $equipped[$slot] = null;
+            $events[] = ['type' => 'relic_trashed', 'role_key' => $actorRole, 'payload' => ['relic_key' => $relicKey]];
+
+            $branch = $relic?->symbol;
+            $deck = $branch !== null ? ($relicDecks[$branch] ?? []) : [];
+
+            if ($deck !== []) {
+                $index = array_rand($deck);
+                $newRelicKey = $deck[$index];
+                unset($deck[$index]);
+                $relicDecks[$branch] = array_values($deck);
+                $equipped[$slot] = $newRelicKey;
+                $events[] = ['type' => 'relic_equipped', 'role_key' => $actorRole, 'payload' => ['relic_key' => $newRelicKey, 'slot' => $slot]];
+            }
+        }
+
+        $state = $state->with([
+            'wanderers' => $state->wanderersWith($actorRole, ['equipped' => $equipped]),
+            'relicDecks' => $relicDecks,
+            'trashedRelics' => $trashedRelics,
+        ]);
+
+        return [$state, $events];
     }
 
     /**
@@ -4739,6 +4900,16 @@ final class GameEngine
             return [$state, $events];
         }
 
+        // Checked here too (not just apply()'s own post-processing
+        // pass) so a Golem move during this very phase that triggers
+        // Fragile Chapel's destruction is already reflected before
+        // finishRoundAfterGolemPhase() runs its "is it still here?"
+        // end-of-game scoring check on round 8 — otherwise the order
+        // would be backwards (scoring seeing it as still standing one
+        // tick before it's destroyed).
+        [$state, $chapelEvents] = self::checkFragileChapelDestruction($state);
+        $events = [...$events, ...$chapelEvents];
+
         return self::finishRoundAfterGolemPhase($state, $events);
     }
 
@@ -4892,6 +5063,9 @@ final class GameEngine
             return [$state, $events]; // hit another forced choice further on
         }
 
+        [$state, $chapelEvents] = self::checkFragileChapelDestruction($state);
+        $events = [...$events, ...$chapelEvents];
+
         return self::finishRoundAfterGolemPhase($state, $events);
     }
 
@@ -5024,6 +5198,19 @@ final class GameEngine
             if (! $anyRelicsOnLocations) {
                 $state = $state->with(['prophecy' => $state->prophecy + 3]);
                 $events[] = ['type' => 'prophecy_gained', 'role_key' => null, 'payload' => ['amount' => 3, 'reason' => 'garbage-barricade']];
+            }
+        }
+
+        // Fragile Chapel: "End of Game: If this is still here gain
+        // 📜📜." "Still here" means it was never destroyed by the
+        // Golem (see checkFragileChapelDestruction, which clears this
+        // same location_key to '' the moment that happens) — simply
+        // whether any cell's location_key is still 'fragile-chapel'.
+        foreach ($state->board as $entry) {
+            if ($entry['location_key'] === 'fragile-chapel') {
+                $state = $state->with(['prophecy' => $state->prophecy + 2]);
+                $events[] = ['type' => 'prophecy_gained', 'role_key' => null, 'payload' => ['amount' => 2, 'reason' => 'fragile-chapel']];
+                break;
             }
         }
 

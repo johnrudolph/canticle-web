@@ -671,7 +671,7 @@
         "name": "Fragile Chapel",
         "Relics": "4📖",
         "lore": "A holy place",
-        "rule": "Ongoing: If Wanderers begin their turn here, they 🌿5. If the Golem is ever on or adjacent to this space, trash it, and move all Wanderers here to other spaces, and set them to 0HP.\n\nEnd of Game: If this is still here gain 📜📜.",
+        "rule": "Ongoing: If Wanderers begin their turn here, they 🌿5. If the Golem is ever on or adjacent to this space, trash this, and move all Wanderers here to adjacent spaces they choose, and set them to 0HP.\n\nEnd of Game: If this is still here gain 📜📜.",
         "cost_1": "Religion",
         "cost_2": "",
         "cost_3": "",

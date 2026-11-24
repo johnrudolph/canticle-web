@@ -283,3 +283,99 @@ test('Garbage barricade awards 📜📜📜 at end of game only if no Relics rem
     [$dirtyState] = $reflection->invoke(null, $dirtyState);
     expect($dirtyState->prophecy)->toBe($prophecyBefore);
 });
+
+test('Fragile Chapel is destroyed and evacuates its Wanderers when the Golem is on or adjacent', function () {
+    $state = startedGame();
+    $chapelKey = array_values(array_filter(array_keys($state->board), fn (string $k) => $k !== Board::key([1, 0])))[0];
+    $board = $state->board;
+    $board[$chapelKey] = [...$board[$chapelKey], 'location_key' => 'fragile-chapel'];
+    $state = $state->with(['board' => $board]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 10, 'cell' => Board::fromKey($chapelKey)])]);
+    $state = $state->with(['golem' => $state->golemWith(['cell' => Board::fromKey($chapelKey)])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'checkFragileChapelDestruction');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state);
+
+    expect($state->board[$chapelKey]['location_key'])->toBe('')
+        ->and($state->wanderers['wanderer_a']['hp'])->toBe(0)
+        ->and($state->wanderers['wanderer_a']['cell'])->not->toBe(Board::fromKey($chapelKey))
+        ->and(collect($events)->pluck('type'))->toContain('location_destroyed')
+        ->and(collect($events)->pluck('type'))->toContain('wanderer_hp_set');
+});
+
+test('Fragile Chapel does not trigger while the Golem is neither on nor adjacent to it', function () {
+    $state = startedGame();
+    // A synthetic, far-flung cell — every one of the 6 real starting
+    // Locations is adjacent to the hub by construction (see
+    // startedGame()'s own doc comment), so none of them would do here.
+    $chapelKey = Board::key([50, 50]);
+    $board = $state->board;
+    $board[$chapelKey] = ['location_key' => 'fragile-chapel', 'placed_round' => 1, 'relics' => [], 'relics_face_up' => [], 'infrastructure' => [], 'tucked' => []];
+    $state = $state->with(['board' => $board, 'golem' => $state->golemWith(['cell' => [1, 0]])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'checkFragileChapelDestruction');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state);
+
+    expect($state->board[$chapelKey]['location_key'])->toBe('fragile-chapel')
+        ->and($events)->toBe([]);
+});
+
+test('Fragile Chapel awards 📜📜 at end of game only if it was never destroyed', function () {
+    $state = startedGame();
+    $chapelKey = array_keys($state->board)[0];
+    $board = $state->board;
+    $board[$chapelKey] = [...$board[$chapelKey], 'location_key' => 'fragile-chapel'];
+    $state = $state->with(['board' => $board]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyEndOfGameScoring');
+    $reflection->setAccessible(true);
+    $prophecyBefore = $state->prophecy;
+    [$stillHereState] = $reflection->invoke(null, $state);
+    expect($stillHereState->prophecy)->toBe($prophecyBefore + 2);
+
+    $board[$chapelKey]['location_key'] = '';
+    $destroyedState = $state->with(['board' => $board]);
+    [$destroyedState] = $reflection->invoke(null, $destroyedState);
+    expect($destroyedState->prophecy)->toBe($prophecyBefore);
+});
+
+test('Shroud of time trashes every equipped Relic (including itself) and replaces each from its branch deck', function () {
+    $state = startedGame();
+    $burialRobesBranch = App\Game\Catalog\RelicCatalog::find('burial-robes')->symbol;
+    $deckBefore = count($state->relicDecks[$burialRobesBranch] ?? []);
+    $equipped = [
+        ...$state->wanderers['wanderer_a']['equipped'],
+        'body' => 'shroud-of-time', 'hand_left' => 'burial-robes',
+    ];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'shroud-of-time']);
+
+    expect($deckBefore)->toBeGreaterThan(0);
+    expect($state->trashedRelics)->toContain('shroud-of-time')
+        ->and($state->trashedRelics)->toContain('burial-robes')
+        ->and(collect($events)->pluck('type')->filter(fn ($t) => $t === 'relic_trashed'))->toHaveCount(2)
+        ->and(count($state->relicDecks[$burialRobesBranch] ?? []))->toBe($deckBefore - 1);
+});
+
+test('Shroud of time leaves a slot empty if its branch deck is exhausted', function () {
+    $state = startedGame();
+    $burialRobesBranch = App\Game\Catalog\RelicCatalog::find('burial-robes')->symbol;
+    $relicDecks = $state->relicDecks;
+    $relicDecks[$burialRobesBranch] = [];
+    $equipped = [
+        ...$state->wanderers['wanderer_a']['equipped'],
+        'hand_left' => 'burial-robes',
+    ];
+    $state = $state->with(['relicDecks' => $relicDecks, 'wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'relicShroudOfTime');
+    $reflection->setAccessible(true);
+    [$state] = $reflection->invoke(null, $state, 'wanderer_a');
+
+    expect($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBeNull()
+        ->and($state->trashedRelics)->toContain('burial-robes');
+});

@@ -1443,7 +1443,7 @@
         "is_event": "Hide"
     },
     {
-        "print": false,
+        "print": true,
         "name": "Shroud of time",
         "location": "",
         "slot": "Body",
