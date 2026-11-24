@@ -257,5 +257,19 @@
         "Name": "Enraged",
         "Type": "👺",
         "Description": "Untap any tapped Golem Cards. Golem Cards cannot be tapped."
+    },
+    {
+        "key": "bad-fruit",
+        "Print": true,
+        "Name": "Bad fruit",
+        "Type": "👺",
+        "Description": "🌳 cause Wanderers to lose HP instead of gain it."
+    },
+    {
+        "key": "earthquake",
+        "Print": true,
+        "Name": "Earthquake",
+        "Type": "👺",
+        "Description": "Roads and walls have no effect."
     }
 ]

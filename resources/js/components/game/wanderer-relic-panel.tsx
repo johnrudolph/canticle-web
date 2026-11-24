@@ -66,6 +66,7 @@ const PROMPTED_RELICS = new Set([
     'quantum-robes',
     'teleportation-stone',
     'hands-of-deliverance',
+    'hands-of-transport',
     'warlocks-robes',
     'magistrates-robes',
     'divine-cabalist-pyre',

@@ -704,6 +704,41 @@ export default function GameShow({ game }: { game: GameSummary }) {
                 return;
             }
 
+            case 'hands-of-transport': {
+                const shardCells = Object.entries(state.board)
+                    .filter(([, cellData]) =>
+                        cellData.infrastructure.includes('monolith_shard'),
+                    )
+                    .map(([key]) => key);
+                setBoardPick({
+                    description:
+                        'Hands of transport: pick the Shard space to move Relics FROM.',
+                    eligible: new Set(shardCells),
+                    onPick: (fromCell) => {
+                        setBoardPick(null);
+                        setBoardPick({
+                            description:
+                                'Hands of transport: pick the Shard space to move Relics TO.',
+                            eligible: new Set(
+                                shardCells.filter(
+                                    (key) => key !== cellKey(fromCell),
+                                ),
+                            ),
+                            onPick: (toCell) => {
+                                setBoardPick(null);
+                                submitMove(role, {
+                                    type: 'use_relic',
+                                    relic_key: relicKey,
+                                    from_cell: fromCell,
+                                    to_cell: toCell,
+                                });
+                            },
+                        });
+                    },
+                });
+                return;
+            }
+
             case 'warlocks-robes': {
                 const pickRelicAndMode = (targetRole: string) => {
                     setWandererPrompt(null);

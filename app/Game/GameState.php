@@ -225,11 +225,19 @@ final readonly class GameState
 
     /**
      * Cell keys with a Walls fixture — the Golem cannot enter these.
+     * Earthquake Glyph: "Roads and walls have no effect" — while
+     * active, Walls stop blocking the Golem at all (an empty list here
+     * means every path-finding/distance call that treats wallKeys() as
+     * impassable sees nothing blocked).
      *
      * @return list<string>
      */
     public function wallKeys(): array
     {
+        if (in_array('earthquake', $this->golem['glyphs'], true)) {
+            return [];
+        }
+
         return array_keys(array_filter(
             $this->board,
             fn (array $entry) => in_array('walls', $entry['infrastructure'], true)

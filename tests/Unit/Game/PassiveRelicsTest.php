@@ -1,5 +1,6 @@
 <?php
 
+use App\Game\Board;
 use App\Game\Catalog\GlyphCatalog;
 use App\Game\GameEngine;
 use App\Game\InvalidMoveException;
@@ -1016,4 +1017,119 @@ test('Cathedral does not score when nothing tucked there has "Divine" in its nam
 
     expect($state->prophecy)->toBe(0)
         ->and($events)->toBe([]);
+});
+
+test('Invisibility Cloak removes a Wanderer from single-target selection once 5+ Shards are on or adjacent', function () {
+    $state = startedGame(); // both wanderers share the hub [1,0]
+    $board = $state->board;
+    $neighborKeys = array_map(Board::key(...), Board::occupiedNeighbors([1, 0], $board));
+    foreach (array_slice($neighborKeys, 0, 5) as $key) {
+        $board[$key] = [...$board[$key], 'infrastructure' => ['monolith_shard']];
+    }
+    $state = $state->with(['board' => $board]);
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'invisibility-cloak'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 5])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['hp' => 15])]);
+
+    $leastHp = new ReflectionMethod(GameEngine::class, 'leastHpWanderer');
+    $leastHp->setAccessible(true);
+    $mostHp = new ReflectionMethod(GameEngine::class, 'mostHpWanderer');
+    $mostHp->setAccessible(true);
+
+    // Without the Cloak, wanderer_a (5 HP) would be picked as least-HP.
+    // Cloaked and invisible, wanderer_b is the only one left to pick.
+    expect($leastHp->invoke(null, $state))->toBe('wanderer_b')
+        ->and($mostHp->invoke(null, $state))->toBe('wanderer_b');
+});
+
+test('Invisibility Cloak does nothing short of 5 Shards on or adjacent', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'invisibility-cloak'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 5])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['hp' => 15])]);
+
+    $leastHp = new ReflectionMethod(GameEngine::class, 'leastHpWanderer');
+    $leastHp->setAccessible(true);
+
+    expect($leastHp->invoke(null, $state))->toBe('wanderer_a');
+});
+
+test('Hands of transport moves all Relics from one Shard space to another, shuffling only when combining', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'infrastructure' => ['monolith_shard'], 'relics' => ['golem-whistle', 'last-rites']];
+    $board['0,1'] = [...$board['0,1'], 'infrastructure' => ['monolith_shard'], 'relics' => []];
+    $state = $state->with(['board' => $board]);
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'hands-of-transport'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', [
+        'type' => 'use_relic', 'relic_key' => 'hands-of-transport', 'from_cell' => [1, 0], 'to_cell' => [0, 1],
+    ]);
+
+    expect($state->board['1,0']['relics'])->toBe([])
+        ->and($state->board['0,1']['relics'])->toBe(['golem-whistle', 'last-rites'])
+        ->and(collect($events)->pluck('type'))->toContain('relics_moved');
+});
+
+test('Hands of transport is rejected when either space lacks a Monolith Shard', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'infrastructure' => [], 'relics' => ['golem-whistle']];
+    $board['0,1'] = [...$board['0,1'], 'infrastructure' => ['monolith_shard'], 'relics' => []];
+    $state = $state->with(['board' => $board]);
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'hands-of-transport'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', [
+        'type' => 'use_relic', 'relic_key' => 'hands-of-transport', 'from_cell' => [1, 0], 'to_cell' => [0, 1],
+    ]);
+
+    expect($state->board['1,0']['relics'])->toBe(['golem-whistle'])
+        ->and($state->board['0,1']['relics'])->toBe([])
+        ->and(collect($events)->pluck('type'))->not->toContain('relics_moved');
+});
+
+test('Aura eruption heals all Wanderers 15 (including exhausted ones), clears Burns/Shame, trashes, and grants Prophecy at 7+ Shards', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $neighborKeys = array_map(Board::key(...), Board::occupiedNeighbors([1, 0], $board));
+    $board['1,0'] = [...$board['1,0'], 'infrastructure' => ['monolith_shard', 'monolith_shard']];
+    foreach (array_slice($neighborKeys, 0, 5) as $key) {
+        $board[$key] = [...$board[$key], 'infrastructure' => ['monolith_shard']];
+    }
+    $state = $state->with(['board' => $board]);
+    $burnEquipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'burn_token'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 0, 'shame' => 2, 'equipped' => $burnEquipped])]);
+    $equipped = [...$state->wanderers['wanderer_b']['equipped'], 'hand_left' => 'aura-eruption'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['hp' => 10, 'equipped' => $equipped])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'end_wanderer_turn']);
+    $prophecyBefore = $state->prophecy;
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_b', ['type' => 'use_relic', 'relic_key' => 'aura-eruption']);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(15) // exhausted (0 HP) wanderer healed too
+        ->and($state->wanderers['wanderer_a']['shame'])->toBe(0)
+        ->and($state->wanderers['wanderer_a']['equipped']['body'])->toBeNull()
+        ->and($state->wanderers['wanderer_b']['hp'])->toBe(15) // capped at max HP
+        ->and($state->wanderers['wanderer_b']['equipped']['hand_left'])->toBeNull()
+        ->and($state->prophecy)->toBe($prophecyBefore + 1)
+        ->and(collect($events)->pluck('type'))->toContain('relic_trashed')
+        ->and(collect($events)->pluck('type'))->toContain('prophecy_gained');
+});
+
+test('Aura eruption is rejected short of 7 Shards on or adjacent', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'aura-eruption'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 5])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'aura-eruption']);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(5)
+        ->and($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBe('aura-eruption')
+        ->and(collect($events)->pluck('type'))->not->toContain('relic_trashed');
 });

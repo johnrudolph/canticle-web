@@ -1394,6 +1394,8 @@ final class GameEngine
             'harbinger-of-death' => [...self::relicHarbingerOfDeath($state, $actorRole), true],
             'golem-counter' => [...self::relicGolemCounter($state, $move), true],
             'shroud-of-time' => [...self::relicShroudOfTime($state, $actorRole), false],
+            'hands-of-transport' => [...self::relicHandsOfTransport($state, $move), false],
+            'aura-eruption' => self::relicAuraEruption($state, $actorRole),
             default => [$state, [], false],
         };
     }
@@ -2898,6 +2900,106 @@ final class GameEngine
         $state = $state->with(['board' => $board]);
 
         return [$state, [['type' => 'relic_moved', 'role_key' => null, 'payload' => ['relic_key' => $relicKey, 'from' => $fromKey, 'to' => $toKey]]]];
+    }
+
+    /**
+     * Hands of transport: "Choose two spaces that have Monolith
+     * Shards. Move all the Relics from one space to the other. If you
+     * combined sets of face-down Relics doing this, shuffle them."
+     * Moves the face-down pile (board[cell]['relics'], not the
+     * face-up/dropped one Hands of deliverance moves) — only shuffled
+     * if the destination already had Relics of its own to combine
+     * with; moving into an empty pile keeps the source's own order.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicHandsOfTransport(GameState $state, array $move): array
+    {
+        $fromCell = $move['from_cell'] ?? null;
+        $toCell = $move['to_cell'] ?? null;
+
+        if (! is_array($fromCell) || count($fromCell) !== 2 || ! is_array($toCell) || count($toCell) !== 2) {
+            return [$state, []];
+        }
+
+        $fromKey = Board::key([(int) $fromCell[0], (int) $fromCell[1]]);
+        $toKey = Board::key([(int) $toCell[0], (int) $toCell[1]]);
+
+        if (! array_key_exists($fromKey, $state->board) || ! array_key_exists($toKey, $state->board) || $fromKey === $toKey) {
+            return [$state, []];
+        }
+
+        if (! in_array('monolith_shard', $state->board[$fromKey]['infrastructure'], true)
+            || ! in_array('monolith_shard', $state->board[$toKey]['infrastructure'], true)) {
+            return [$state, []];
+        }
+
+        $board = $state->board;
+        $moving = $board[$fromKey]['relics'];
+
+        if ($moving === []) {
+            return [$state, []];
+        }
+
+        $destinationHadRelics = $board[$toKey]['relics'] !== [];
+        $combined = [...$board[$toKey]['relics'], ...$moving];
+
+        if ($destinationHadRelics) {
+            shuffle($combined);
+        }
+
+        $board[$fromKey] = [...$board[$fromKey], 'relics' => []];
+        $board[$toKey] = [...$board[$toKey], 'relics' => $combined];
+        $state = $state->with(['board' => $board]);
+
+        return [$state, [['type' => 'relics_moved', 'role_key' => null, 'payload' => ['count' => count($moving), 'from' => $fromKey, 'to' => $toKey]]]];
+    }
+
+    /**
+     * Aura eruption: "If there are 7+ Monolith Shards on or adjacent
+     * to your space, all Wanderers: 🌿15, remove all Burns, remove
+     * all Shame. Trash this and gain 📜."
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function relicAuraEruption(GameState $state, string $actorRole): array
+    {
+        $casterCell = $state->wanderers[$actorRole]['cell'];
+
+        if ($casterCell === null || self::monolithShardsWithin($state, $casterCell, 1) < 7) {
+            return [$state, [], false];
+        }
+
+        $events = [];
+
+        // "All Wanderers" here deliberately means every Wanderer, not
+        // just activeWanderers() — an exhausted (0 HP) Wanderer is
+        // exactly who most needs this heal, not someone to skip.
+        foreach ($state->wanderers as $role => $wanderer) {
+            if ($wanderer['cell'] === null) {
+                continue;
+            }
+
+            $hp = min(self::maxHpFor($state, $role), $state->wanderers[$role]['hp'] + 15);
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
+            $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
+
+            while (in_array('burn_token', $state->wanderers[$role]['equipped'], true)) {
+                [$state, $e] = self::removeBurn($state, $role);
+                $events = [...$events, ...$e];
+            }
+
+            if ($state->wanderers[$role]['shame'] > 0) {
+                [$state, $e] = self::removeShame($state, $role, $state->wanderers[$role]['shame']);
+                $events = [...$events, ...$e];
+            }
+        }
+
+        $state = $state->with(['prophecy' => $state->prophecy + 1]);
+        $events[] = ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => 1]];
+
+        return [$state, $events, true];
     }
 
     /**
@@ -4491,8 +4593,9 @@ final class GameEngine
         // costs its action, even if the Wanderer is already standing on
         // a Road when their turn starts — has_moved_this_turn gates
         // that. Only moves after that first paid one can be free for
-        // stepping off a Road space.
-        $freeMove = $wanderer['has_moved_this_turn'] && in_array('road', $originInfrastructure, true);
+        // stepping off a Road space. Earthquake Glyph: "Roads and
+        // walls have no effect" — Roads simply stop granting this.
+        $freeMove = $wanderer['has_moved_this_turn'] && in_array('road', $originInfrastructure, true) && ! in_array('earthquake', $state->golem['glyphs'], true);
 
         if (! $freeMove && $wanderer['actions_remaining'] <= 0) {
             throw new InvalidMoveException('No actions remaining this turn.');
@@ -7171,6 +7274,40 @@ final class GameEngine
         return self::extremeWanderer($state, fn (int $a, int $b) => $a > $b);
     }
 
+    /**
+     * Invisibility Cloak: "If there are 5+ Monolith Shards on or
+     * adjacent to your space, the Golem cannot target you." Only ever
+     * excludes a Wanderer from single-target selection (nearest/
+     * farthest/least-HP/most-HP/most-Shame — every function below that
+     * reads this instead of activeWanderers()) — same scope as Focused
+     * Glyph's own override; area-effect cards still hit them.
+     *
+     * @return array<string, array{0: int, 1: int}>
+     */
+    private static function targetableWanderers(GameState $state): array
+    {
+        return array_filter(
+            self::activeWanderers($state),
+            fn (array $cell, string $role) => ! self::isInvisibleToGolem($state, $role),
+            ARRAY_FILTER_USE_BOTH,
+        );
+    }
+
+    private static function isInvisibleToGolem(GameState $state, string $role): bool
+    {
+        if (! in_array('invisibility-cloak', $state->wanderers[$role]['equipped'], true)) {
+            return false;
+        }
+
+        $cell = $state->wanderers[$role]['cell'];
+
+        if ($cell === null) {
+            return false;
+        }
+
+        return self::monolithShardsWithin($state, $cell, 1) >= 5;
+    }
+
     private static function extremeWanderer(GameState $state, \Closure $isBetter): ?string
     {
         // Focused Glyph: "The Golem can only ever target the Wanderer
@@ -7191,7 +7328,7 @@ final class GameEngine
         $best = null;
         $bestDistance = null;
 
-        foreach (self::activeWanderers($state) as $role => $cell) {
+        foreach (self::targetableWanderers($state) as $role => $cell) {
             $distance = Board::distance($golemCell, $cell, $state->board, $state->wallKeys());
 
             if ($distance === null) {
@@ -7212,7 +7349,7 @@ final class GameEngine
         $best = null;
         $bestShame = -1;
 
-        foreach (self::activeWanderers($state) as $role => $cell) {
+        foreach (self::targetableWanderers($state) as $role => $cell) {
             $shame = $state->wanderers[$role]['shame'];
 
             if ($shame > $bestShame) {
@@ -7241,7 +7378,7 @@ final class GameEngine
         $best = null;
         $bestHp = null;
 
-        foreach (self::activeWanderers($state) as $role => $cell) {
+        foreach (self::targetableWanderers($state) as $role => $cell) {
             $hp = $state->wanderers[$role]['hp'];
 
             if ($bestHp === null || $hp < $bestHp) {
@@ -7258,7 +7395,7 @@ final class GameEngine
         $best = null;
         $bestHp = null;
 
-        foreach (self::activeWanderers($state) as $role => $cell) {
+        foreach (self::targetableWanderers($state) as $role => $cell) {
             $hp = $state->wanderers[$role]['hp'];
 
             if ($bestHp === null || $hp > $bestHp) {
@@ -7413,7 +7550,11 @@ final class GameEngine
                 return true;
             }
 
+            // Earthquake Glyph: "Roads and walls have no effect" —
+            // Road's own network-production extension is one of
+            // those effects.
             if (in_array('road', $entry['infrastructure'], true)
+                && ! in_array('earthquake', $state->golem['glyphs'], true)
                 && in_array($branch, self::roadNetworkProduces($state, $neighbor), true)) {
                 return true;
             }
@@ -8020,7 +8161,7 @@ final class GameEngine
 
         // Road: see moveWanderer()'s identical comment — the first move
         // of a turn always costs its action, regardless of mechanism.
-        $freeMove = $wanderer['has_moved_this_turn'] && in_array('road', $originInfrastructure, true);
+        $freeMove = $wanderer['has_moved_this_turn'] && in_array('road', $originInfrastructure, true) && ! in_array('earthquake', $state->golem['glyphs'], true);
 
         if (! $freeMove && $wanderer['actions_remaining'] <= 0) {
             throw new InvalidMoveException('No actions remaining this turn.');

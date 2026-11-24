@@ -3,7 +3,9 @@
 use App\Game\Board;
 use App\Game\Catalog\LocationCatalog;
 use App\Game\GameEngine;
+use App\Game\GameSetup;
 use App\Game\InvalidMoveException;
+use App\Game\RoleKeys;
 
 // startedGame() (GameEngineTest.php) is declared in a sibling file,
 // loaded in the same run. It puts both Wanderers and the Golem on the
@@ -641,4 +643,38 @@ test('Parallel skips the next-to-resolve Golem card once per round, drawing a re
 
     expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'skip_golem_card']))
         ->toThrow(InvalidMoveException::class, 'already been used this round');
+});
+
+test('Earthquake disables Road\'s free second move', function () {
+    $state = startedGame();
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'place_infrastructure', 'infrastructure_type' => 'road', 'cell' => [1, 0]]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'place_infrastructure', 'infrastructure_type' => 'road', 'cell' => [0, 1]]);
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['earthquake']])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    $toRoad = Board::directionBetween([1, 0], [0, 1]);
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $toRoad]);
+    expect($events[0]['payload']['free'])->toBeFalse();
+
+    $backToHub = Board::directionBetween([0, 1], [1, 0]);
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $backToHub]);
+
+    // Without Earthquake this second move off a Road would be free.
+    expect($events[0]['payload']['free'])->toBeFalse()
+        ->and($state->wanderers['wanderer_a']['actions_remaining'])->toBe(1);
+});
+
+test('Earthquake disables Walls blocking the Golem\'s pathing', function () {
+    $state = GameSetup::create(2);
+    foreach (RoleKeys::wanderers(2) as $role) {
+        [$state] = GameEngine::apply($state, $role, ['type' => 'choose_starting_cell', 'cell' => [0, 0]]);
+    }
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'choose_golem_cell', 'cell' => [2, 0]]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'place_infrastructure', 'infrastructure_type' => 'walls', 'cell' => [1, 0]]);
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['earthquake']])]);
+
+    expect($state->wallKeys())->toBe([]);
+
+    $direct = Board::distance([2, 0], [1, 0], $state->board, $state->wallKeys());
+    expect($direct)->not->toBeNull();
 });
