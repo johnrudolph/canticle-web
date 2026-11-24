@@ -82,6 +82,7 @@ class LocationController extends CardController
 
         return [
             'branches' => $branches,
+            'emoji' => self::BRANCH_EMOJI,
             'relicCounts' => $relicCounts,
             'locationCounts' => $locationCounts,
         ];

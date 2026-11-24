@@ -48,6 +48,7 @@ export interface RelicSummary {
 /** Per-branch Relic count (by symbol) side by side with Location count (by produces) — see LocationController::buildBranchSummary. */
 export interface BranchSummary {
     branches: string[];
+    emoji: Record<string, string>;
     relicCounts: Record<string, number>;
     locationCounts: Record<string, number>;
 }
