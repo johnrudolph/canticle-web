@@ -61,6 +61,14 @@ export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
 
     const textColumn = columns.find((c) => c.showInTable);
 
+    const baseCount = useMemo(
+        () =>
+            showDeleted
+                ? cards.length
+                : cards.filter((c) => c.deleted_at === null).length,
+        [cards, showDeleted],
+    );
+
     const visible = useMemo(() => {
         let rows = cards;
 
@@ -131,6 +139,11 @@ export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
 
     return (
         <div className="flex flex-col gap-4">
+            <p className="text-sm text-muted-foreground">
+                {visible.length === baseCount
+                    ? `${baseCount} card${baseCount === 1 ? '' : 's'}`
+                    : `${visible.length} of ${baseCount} card${baseCount === 1 ? '' : 's'}`}
+            </p>
             <div className="flex flex-wrap items-end gap-3">
                 <Button onClick={onNew}>New</Button>
                 <div className="flex flex-col gap-1">
