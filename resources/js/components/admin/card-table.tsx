@@ -37,6 +37,9 @@ export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
     const [showDeleted, setShowDeleted] = useState(false);
     const [filters, setFilters] = useState<Record<string, string>>({});
     const [quickFilter, setQuickFilter] = useState('');
+    const [prophecyFilter, setProphecyFilter] = useState<'all' | 'yes' | 'no'>(
+        'all',
+    );
     const quickFilterRef = useRef<HTMLInputElement>(null);
 
     useKeyboardShortcut('f', () => quickFilterRef.current?.focus());
@@ -55,6 +58,8 @@ export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
         }
         return options;
     }, [cards, filterableColumns]);
+
+    const textColumn = columns.find((c) => c.showInTable);
 
     const visible = useMemo(() => {
         let rows = cards;
@@ -78,6 +83,17 @@ export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
             }
         }
 
+        if (textColumn && prophecyFilter !== 'all') {
+            rows = rows.filter((c) => {
+                const hasProphecy = cellValue(c, textColumn.key).includes(
+                    '📜',
+                );
+                return prophecyFilter === 'yes'
+                    ? hasProphecy
+                    : !hasProphecy;
+            });
+        }
+
         rows = [...rows].sort((a, b) => {
             const av = cellValue(a, sortKey);
             const bv = cellValue(b, sortKey);
@@ -86,7 +102,16 @@ export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
         });
 
         return rows;
-    }, [cards, filters, quickFilter, showDeleted, sortKey, sortDesc]);
+    }, [
+        cards,
+        filters,
+        prophecyFilter,
+        quickFilter,
+        showDeleted,
+        sortKey,
+        sortDesc,
+        textColumn,
+    ]);
 
     function toggleSort(key: string) {
         if (sortKey === key) {
@@ -97,7 +122,6 @@ export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
         }
     }
 
-    const textColumn = columns.find((c) => c.showInTable);
     const headerColumns: ColumnDef[] = [
         { key: 'name', label: 'Name', type: 'text' },
         ...(textColumn ? [textColumn] : []),
@@ -149,6 +173,28 @@ export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
                         </Select>
                     </div>
                 ))}
+                {textColumn && (
+                    <div className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">
+                            Has 📜
+                        </span>
+                        <Select
+                            value={prophecyFilter}
+                            onValueChange={(value) =>
+                                setProphecyFilter(value as typeof prophecyFilter)
+                            }
+                        >
+                            <SelectTrigger size="sm">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All</SelectItem>
+                                <SelectItem value="yes">Has 📜</SelectItem>
+                                <SelectItem value="no">No 📜</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                )}
                 <div className="flex items-center gap-2 pb-2">
                     <Checkbox
                         id="show-deleted"
