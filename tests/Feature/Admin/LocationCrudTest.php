@@ -89,7 +89,6 @@ test('creating a location with costs and produces computes the emoji/boolean fie
         'print' => false,
         'rule' => 'Does something.',
         'relics' => '6 🎨',
-        'relic_names' => 'Specific Relic',
         'produces' => 'Art',
         'costs' => ['Magic', 'Solidarity'],
     ])->assertRedirect();
@@ -105,6 +104,25 @@ test('creating a location with costs and produces computes the emoji/boolean fie
         ->and($location->produces_anything)->toBeTrue()
         ->and($location->has_back_text)->toBeTrue()
         ->and($location->has_relics)->toBeTrue()
+        ->and($location->has_specific_relics)->toBeFalse()
+        ->and($location->relic_names)->toBe('');
+});
+
+test('relic_names is derived from Relics whose location points at this Location, not typed in directly', function () {
+    $admin = adminUser();
+    \App\Models\Cards\Relic::create(['key' => 'specific-relic-b', 'name' => 'Specific Relic B', 'location' => 'Relic-Linked Place']);
+    \App\Models\Cards\Relic::create(['key' => 'specific-relic-a', 'name' => 'Specific Relic A', 'location' => 'Relic-Linked Place']);
+
+    $this->actingAs($admin)->post('/admin/locations', [
+        'name' => 'Relic-Linked Place',
+        // Submitting relic_names should have no effect — it's never
+        // accepted from the request at all.
+        'relic_names' => 'Ignored Input',
+    ])->assertRedirect();
+
+    $location = Location::where('name', 'Relic-Linked Place')->first();
+
+    expect($location->relic_names)->toBe('Specific Relic A, Specific Relic B')
         ->and($location->has_specific_relics)->toBeTrue();
 });
 

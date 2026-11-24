@@ -62,8 +62,11 @@ export function relicColumns(locationNames: string[]): ColumnDef[] {
 
 /**
  * produces_emoji/cost_emoji/has_back_text/has_relics/has_specific_relics/
- * produces_anything/has_cost are server-computed (see
+ * produces_anything/has_cost/relic_names are all server-computed (see
  * LocationController::beforeSave) — deliberately absent here.
+ * relic_names specifically is just "which Relics currently point at
+ * this Location by name" (Relic.location) — an implied column from the
+ * Relics table, never something to type in directly.
  * has_shard/has_tree stay real editable fields — nothing else implies
  * them.
  */
@@ -73,7 +76,6 @@ export const LOCATION_COLUMNS: ColumnDef[] = [
     { key: 'costs', label: 'Costs', type: 'multiselect', options: BRANCHES },
     { key: 'produces', label: 'Produces', type: 'select', filterable: true, options: BRANCHES },
     { key: 'relics', label: 'Relics', type: 'text' },
-    { key: 'relic_names', label: 'Relic names', type: 'textarea' },
     { key: 'is_starter', label: 'Is starter', type: 'boolean', filterable: true },
     { key: 'has_shard', label: 'Has shard', type: 'boolean' },
     { key: 'has_tree', label: 'Has tree', type: 'boolean' },

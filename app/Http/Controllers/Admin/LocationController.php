@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Models\Cards\Location;
+use App\Models\Cards\Relic;
 
 class LocationController extends CardController
 {
@@ -54,7 +55,6 @@ class LocationController extends CardController
             'costs.*' => ['string', "in:{$branches}"],
             'produces' => ['nullable', 'string', "in:{$branches},"],
             'relics' => ['nullable', 'string', 'max:255'],
-            'relic_names' => ['nullable', 'string'],
             'is_starter' => ['boolean'],
             'has_shard' => ['boolean'],
             'has_tree' => ['boolean'],
@@ -80,7 +80,19 @@ class LocationController extends CardController
         $data['produces_anything'] = ($data['produces'] ?? '') !== '';
         $data['has_back_text'] = trim((string) ($data['rule'] ?? '')) !== '';
         $data['has_relics'] = trim((string) ($data['relics'] ?? '')) !== '';
-        $data['has_specific_relics'] = trim((string) ($data['relic_names'] ?? '')) !== '';
+
+        // relic_names isn't something anyone types in — it's just which
+        // Relics currently point at this Location by name (Relic.location,
+        // the rare ⭐ location-locked case). Recomputed every time this
+        // Location is saved; not used by any gameplay logic, purely
+        // reference text for the Emperor/Figma plugin.
+        $relicNames = Relic::query()
+            ->where('location', $data['name'])
+            ->orderBy('name')
+            ->pluck('name')
+            ->implode(', ');
+        $data['relic_names'] = $relicNames;
+        $data['has_specific_relics'] = $relicNames !== '';
 
         return $data;
     }
