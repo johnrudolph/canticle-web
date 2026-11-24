@@ -81,7 +81,11 @@ export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
             rows = rows.filter(
                 (c) =>
                     c.name.toLowerCase().includes(needle) ||
-                    c.key.toLowerCase().includes(needle),
+                    c.key.toLowerCase().includes(needle) ||
+                    (textColumn !== undefined &&
+                        cellValue(c, textColumn.key)
+                            .toLowerCase()
+                            .includes(needle)),
             );
         }
 
@@ -153,7 +157,7 @@ export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
                     <Input
                         ref={quickFilterRef}
                         className="h-8 w-48"
-                        placeholder="Name or key..."
+                        placeholder="Name, key, or text..."
                         value={quickFilter}
                         onChange={(e) => setQuickFilter(e.target.value)}
                     />
