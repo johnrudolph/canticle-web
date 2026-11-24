@@ -43,6 +43,31 @@ test('an invalid relic type or slot is rejected', function () {
     ])->assertSessionHasErrors('slot');
 });
 
+test('an Event relic can be saved with no slot — Event relics are never equipped', function () {
+    $admin = adminUser();
+
+    $this->actingAs($admin)->post('/admin/relics', [
+        'name' => 'Test Event Relic',
+        'slot' => '',
+        'type' => 'Event',
+        'symbol' => '🐾',
+        'effect' => 'Gain 1 Burn Token.',
+    ])->assertRedirect()->assertSessionDoesntHaveErrors('slot');
+
+    expect(Relic::where('name', 'Test Event Relic')->first())->not->toBeNull();
+});
+
+test('a non-Event relic still requires a slot', function () {
+    $admin = adminUser();
+
+    $this->actingAs($admin)->post('/admin/relics', [
+        'name' => 'Test Action Relic',
+        'slot' => '',
+        'type' => 'Action',
+        'symbol' => '🐾',
+    ])->assertSessionHasErrors('slot');
+});
+
 test('a relic cannot be created without a type — it is required, never null', function () {
     $admin = adminUser();
 

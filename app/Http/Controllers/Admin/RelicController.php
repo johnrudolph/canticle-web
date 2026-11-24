@@ -93,7 +93,10 @@ class RelicController extends CardController
             'print' => ['boolean'],
             'name' => ['required', 'string', 'max:255'],
             'location' => ['nullable', 'string', 'max:255'],
-            'slot' => ['required', 'string', 'in:Body,Mind,Hand,Bag,'],
+            // Event Relics are intentionally slot-less — they resolve
+            // immediately and are never equipped, so there's nothing to
+            // pick a slot for. Everything else still needs one.
+            'slot' => ['required_unless:type,Event', 'nullable', 'string', 'in:Body,Mind,Hand,Bag,'],
             'type' => ['required', 'string', 'in:Action,Passive,Event'],
             'symbol' => ['nullable', 'string', 'in:⏳,⚖️,✨,🌑,🎨,🐾,📖,🤝,'],
             'effect' => ['nullable', 'string'],
@@ -102,6 +105,12 @@ class RelicController extends CardController
 
     protected function beforeSave(array $data): array
     {
+        // Laravel's ConvertEmptyStringsToNull middleware turns the
+        // empty-string slot an Event Relic submits into null before
+        // validation ever sees it — normalize back to '' so it matches
+        // SLOT_EMOJI's own '' key and the column's existing convention
+        // (every other slot-less-by-nature field already stores '').
+        $data['slot'] ??= '';
         $data['slot_emoji'] = self::SLOT_EMOJI[$data['slot']] ?? '';
         $data['is_action'] = $data['type'] === 'Action';
         $data['is_passive'] = $data['type'] === 'Passive';

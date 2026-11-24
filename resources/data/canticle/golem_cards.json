@@ -30,9 +30,9 @@
         "action": "👊3 to Wanderers on or adjacent to the Golem's space. Each Wanderer who lost health as a result must trash one Relic they have equipped. They may trash a Bound relic this way."
     },
     {
-        "print": false,
-        "name": "Great Sweeping Scythe",
-        "action": "👊5 to all Wanderers on or adjacent to the Golem's space. Give a Scar token to all Wanderers who lost Health."
+        "print": true,
+        "name": "Eruption",
+        "action": "👊5 to all Wanderers on or adjacent to the Golem's space. Give a Burn token to all Wanderers who lost Health."
     },
     {
         "print": false,
@@ -85,9 +85,9 @@
         "action": "All Wanderers must trash one Relic they have equipped."
     },
     {
-        "print": false,
-        "name": "Scar",
-        "action": "🦶1 to the nearest Wanderer. Place a Scar token on their mat (see Wanderer mat for details on scars)."
+        "print": true,
+        "name": "Char",
+        "action": "🦶1 to the nearest Wanderer. Give them a Burn token."
     },
     {
         "print": false,

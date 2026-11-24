@@ -437,11 +437,11 @@
         "is_starter": "Hide"
     },
     {
-        "print": false,
+        "print": true,
         "name": "Purification pools",
         "Relics": "3 📖",
         "lore": "Absolve shame, lay down your burdens, and be healed",
-        "rule": "Ongoing: If you begin your turn here, you may remove Shame tokens, Scar tokens, and Bound Relics from your mat.\n\nEnd of game: If all Wanderers have 0 Shame tokens, and 0 Scar tokens, gain 📜.",
+        "rule": "Ongoing: If you begin your turn here, you may remove 1 Shame token, 1 Burn token, and 1 Bound Relic from your mat.\n\nEnd of game: If all Wanderers have 0 Shame tokens, and 0 Burn tokens, gain 📜.",
         "cost_1": "",
         "cost_2": "",
         "cost_3": "",

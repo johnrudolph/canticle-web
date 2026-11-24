@@ -108,16 +108,15 @@ Relic rules:
   
 Using your basic 🦶 action, you move 1 space to any adjacent Location (Wanderers must always be on a Location). But many 🦵 Relics allow you to travel extra spaces when you move. If you move multiple spaces, you cannot stop midway to perform actions.
 
-Other Symbols  
+**Other Symbols**
 
 - 🌿 increases your health. Unless otherwise stated, you use 🌿effects on yourself.
 - 🪡: Bound. Relics with this symbol must equip after discovering, unless this slot is Scarred, or already has a Bound Relic. You cannot drop, tuck, trash, or trade this.
 
-Status Tokens  
+**Status Tokens **
   
-Placed in a Relic slot of your choice. No Relic can go in that slot while the token remains.  
-
-Shame has no intrinsic value, but interacts with many Relics and Locations.
+- **Burn**: When a Wanderer receives a Burn Token, they choose which Relic slot it goes into. If there was a Relic there, they drop it. They cannot equip a Relic there until the Burn is healed.
+- **Shame**: Shame Tokens have no intrinsic value, but interact with various cards. Shame Tokens are placed in the Shame Zone of the Wanderer mat.
 
 ### Golem phase
   

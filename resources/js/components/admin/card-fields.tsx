@@ -80,6 +80,7 @@ export function CardFields({
     const [newComment, setNewComment] = useState('');
     const [deleteReason, setDeleteReason] = useState('');
     const [confirmingDelete, setConfirmingDelete] = useState(false);
+    const [errors, setErrors] = useState<Record<string, string>>({});
 
     // The modal reuses this same component across different cards
     // without remounting — re-sync form state whenever the target card
@@ -115,10 +116,16 @@ export function CardFields({
             payload[key] = col?.type === 'multiselect' ? JSON.parse(value as string) : value;
         }
 
+        setErrors({});
+        const options = {
+            onSuccess: onSaved,
+            onError: (errors: Record<string, string>) => setErrors(errors),
+        };
+
         if (card) {
-            router.put(updateUrl(card.id), payload, { onSuccess: onSaved });
+            router.put(updateUrl(card.id), payload, options);
         } else if (storeUrl) {
-            router.post(storeUrl, payload, { onSuccess: onSaved });
+            router.post(storeUrl, payload, options);
         }
     }
 
@@ -241,6 +248,11 @@ export function CardFields({
                             )}
                         </>
                     )}
+                    {errors[col.key] && (
+                        <p className="text-xs text-destructive">
+                            {errors[col.key]}
+                        </p>
+                    )}
                 </div>
             ))}
 
@@ -333,6 +345,12 @@ export function CardFields({
                         </Button>
                     )}
                 </div>
+            )}
+
+            {Object.keys(errors).length > 0 && (
+                <p className="text-sm text-destructive">
+                    Couldn't save — see the field{Object.keys(errors).length > 1 ? 's' : ''} marked above.
+                </p>
             )}
 
             <Button onClick={save} className="self-start">

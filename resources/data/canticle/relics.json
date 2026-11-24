@@ -1183,13 +1183,13 @@
         "is_event": "Hide"
     },
     {
-        "print": false,
+        "print": true,
         "name": "Hands of forgiveness",
         "location": "Catacombs",
         "slot": "Hand",
         "type": "Action",
         "symbol": "📖",
-        "effect": "Bound (🪡)\n\nChoose a Wanderer in your space, and remove all of their Shame and Scar tokens.",
+        "effect": "Bound (🪡)\n\nChoose a Wanderer in your space, and remove all of their Shame and Burn tokens.",
         "slot_emoji": "🖐️",
         "is_action": "Show",
         "is_passive": "Hide",
@@ -1209,13 +1209,13 @@
         "is_event": "Hide"
     },
     {
-        "print": false,
+        "print": true,
         "name": "Holy water",
         "location": "Purification pools",
         "slot": "Bag",
         "type": "Action",
         "symbol": "📖",
-        "effect": "Remove 1 Shame or 1 Scar from yourself or an Ally in your space.",
+        "effect": "Remove 1 Shame or 1 Burn from yourself or an Ally in your space.",
         "slot_emoji": "👝",
         "is_action": "Show",
         "is_passive": "Hide",
