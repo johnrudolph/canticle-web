@@ -1,5 +1,6 @@
 [
     {
+        "key": "an-insight-from-the-future",
         "print": false,
         "name": "An insight from the future",
         "location": "",
@@ -13,6 +14,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "buckler",
         "print": false,
         "name": "Buckler",
         "location": "",
@@ -26,6 +28,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "emperors-diary",
         "print": false,
         "name": "Emperor's Diary",
         "location": "Sundial",
@@ -39,6 +42,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "emperors-robes",
         "print": false,
         "name": "Emperor's Robes",
         "location": "Sundial",
@@ -52,6 +56,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "emperors-timepiece",
         "print": true,
         "name": "Emperor's Timepiece",
         "location": "Enchanted clocktower",
@@ -65,6 +70,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "inscribe",
         "print": false,
         "name": "Inscribe",
         "location": "",
@@ -78,6 +84,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "inscribe-2",
         "print": false,
         "name": "Inscribe",
         "location": "",
@@ -91,6 +98,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "inscribe-3",
         "print": false,
         "name": "Inscribe",
         "location": "",
@@ -104,6 +112,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "past-troubles",
         "print": true,
         "name": "Past troubles",
         "location": "",
@@ -117,6 +126,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "quantum-robes",
         "print": false,
         "name": "Quantum Robes",
         "location": "",
@@ -130,6 +140,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "rift-in-time",
         "print": true,
         "name": "Rift in time",
         "location": "",
@@ -143,6 +154,7 @@
         "is_event": "Show"
     },
     {
+        "key": "time-jump",
         "print": false,
         "name": "Time jump",
         "location": "",
@@ -156,6 +168,7 @@
         "is_event": "Show"
     },
     {
+        "key": "time-spasm",
         "print": false,
         "name": "Time spasm",
         "location": "",
@@ -169,19 +182,21 @@
         "is_event": "Show"
     },
     {
+        "key": "ban-of-dangerous-ideas",
         "print": true,
         "name": "Ban of dangerous ideas",
         "location": "",
         "slot": "Bag",
         "type": "Action",
         "symbol": "⚖️",
-        "effect": "Any Wanderer or Golem on a space that produces 📖, 💭, 🎨, or 🪙 gains 1 Shame token (max 3 Shame tokens). Then, trash this",
+        "effect": "Any Wanderer or Golem on a space that produces 📖, 💭, 🎨, or 🪙 gains 1 Shame token. Then, trash this",
         "slot_emoji": "👝",
         "is_action": "Show",
         "is_passive": "Hide",
         "is_event": "Hide"
     },
     {
+        "key": "guilty-by-association",
         "print": false,
         "name": "Guilty by association",
         "location": "",
@@ -195,6 +210,7 @@
         "is_event": "Show"
     },
     {
+        "key": "incarceration",
         "print": false,
         "name": "Incarceration",
         "location": "",
@@ -208,6 +224,7 @@
         "is_event": "Show"
     },
     {
+        "key": "inscribe-4",
         "print": false,
         "name": "Inscribe",
         "location": "",
@@ -221,6 +238,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "inscribe-5",
         "print": false,
         "name": "Inscribe",
         "location": "",
@@ -234,6 +252,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "magistrates-robes",
         "print": false,
         "name": "Magistrate's robes",
         "location": "",
@@ -247,6 +266,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "pointed-finger",
         "print": true,
         "name": "Accusing mind",
         "location": "",
@@ -260,19 +280,21 @@
         "is_event": "Hide"
     },
     {
+        "key": "prohibition-of-inscribing",
         "print": true,
         "name": "Prohibition of inscribing",
         "location": "",
-        "slot": "Hand",
+        "slot": "Mind",
         "type": "Passive",
         "symbol": "⚖️",
-        "effect": "If anyone (Wanderer or Golem) adds a Glyph to the Golem mat, they gain 1 Shame token (max 3 Shame tokens).",
-        "slot_emoji": "🖐️",
+        "effect": "If anyone (Wanderer or Golem) adds a Glyph to the Golem mat, they gain 1 Shame token.",
+        "slot_emoji": "🧠",
         "is_action": "Hide",
         "is_passive": "Show",
         "is_event": "Hide"
     },
     {
+        "key": "whip-of-justice",
         "print": true,
         "name": "Whip of Justice",
         "location": "",
@@ -286,6 +308,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "writ-of-solitude",
         "print": true,
         "name": "Writ of solitude",
         "location": "",
@@ -299,19 +322,21 @@
         "is_event": "Hide"
     },
     {
+        "key": "emperors-knowledge",
         "print": false,
         "name": "Emperor's Knowledge",
-        "location": "Sundial",
+        "location": "Monolith",
         "slot": "Mind",
         "type": "Action",
         "symbol": "✨",
-        "effect": "When moving, move an additional space for every 2 Relics you have equipped that starts with \"Emperor's __.\"",
+        "effect": "When moving, you may move +1 space for every 2 Relics you have equipped that starts with \"Emperor's __.\"",
         "slot_emoji": "🧠",
         "is_action": "Show",
         "is_passive": "Hide",
         "is_event": "Hide"
     },
     {
+        "key": "emperors-staff",
         "print": false,
         "name": "Emperor's Staff",
         "location": "Monolith",
@@ -325,6 +350,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "ephemeral-protection",
         "print": false,
         "name": "Ephemeral Protection",
         "location": "",
@@ -338,6 +364,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "divine-aura",
         "print": false,
         "name": "Divine aura",
         "location": "",
@@ -351,6 +378,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "inscribe-6",
         "print": false,
         "name": "Inscribe",
         "location": "",
@@ -364,6 +392,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "magic-explosion",
         "print": false,
         "name": "Magic explosion",
         "location": "",
@@ -377,6 +406,7 @@
         "is_event": "Show"
     },
     {
+        "key": "magnetic-mail",
         "print": false,
         "name": "Magnetic mail",
         "location": "",
@@ -390,6 +420,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "poof",
         "print": true,
         "name": "Poof",
         "location": "",
@@ -403,32 +434,35 @@
         "is_event": "Hide"
     },
     {
+        "key": "rejuvenation-gown",
         "print": true,
         "name": "Rejuvenation gown",
         "location": "",
         "slot": "Body",
-        "type": "Passive",
+        "type": "Action",
         "symbol": "✨",
-        "effect": "When entering a space that contains a Monolith Shard, 🌿2.",
+        "effect": "Move as usual. If you end in a space that contains a Monolith Shard, 🌿2.",
         "slot_emoji": "🥋",
-        "is_action": "Hide",
-        "is_passive": "Show",
+        "is_action": "Show",
+        "is_passive": "Hide",
         "is_event": "Hide"
     },
     {
-        "print": false,
+        "key": "telekenesis",
+        "print": true,
         "name": "Telekenesis",
         "location": "",
         "slot": "Mind",
-        "type": "Passive",
+        "type": "Action",
         "symbol": "✨",
-        "effect": "When moving from a space with a Monolith Shard, you may move to any space.",
+        "effect": "If you are on a Monolith Shard, you move to any space.",
         "slot_emoji": "🧠",
-        "is_action": "Hide",
-        "is_passive": "Show",
+        "is_action": "Show",
+        "is_passive": "Hide",
         "is_event": "Hide"
     },
     {
+        "key": "teleportation-stone",
         "print": false,
         "name": "Teleportation stone",
         "location": "",
@@ -442,6 +476,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "the-monolith-within",
         "print": false,
         "name": "The Monolith within",
         "location": "",
@@ -455,6 +490,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "warlocks-robes",
         "print": false,
         "name": "Warlock's robes",
         "location": "",
@@ -468,6 +504,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "blinding-explosion",
         "print": true,
         "name": "Blinding explosion",
         "location": "",
@@ -481,6 +518,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "cabalist-brand",
         "print": false,
         "name": "Cabalist brand",
         "location": "",
@@ -494,6 +532,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "cabalist-brew",
         "print": false,
         "name": "Cabalist brew",
         "location": "",
@@ -507,6 +546,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "divine-cabalist-pyre",
         "print": false,
         "name": "Divine Cabalist pyre",
         "location": "",
@@ -520,6 +560,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "cabalist-wraps",
         "print": false,
         "name": "Cabalist wraps",
         "location": "",
@@ -533,6 +574,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "cabalists-gown",
         "print": false,
         "name": "Cabalist's Gown",
         "location": "",
@@ -546,32 +588,35 @@
         "is_event": "Hide"
     },
     {
+        "key": "dark-shackles",
         "print": true,
         "name": "Dark shackles",
         "location": "",
         "slot": "Body",
         "type": "Passive",
         "symbol": "🌑",
-        "effect": "Bound (🪡)\n\nIf you are on the Golem's: you move with it when it moves, and it moves with you when you move.",
+        "effect": "Bound (🪡)\n\nIf you are on the Golem's space: you move with it when it moves, and it moves with you when you move.",
         "slot_emoji": "🥋",
         "is_action": "Hide",
         "is_passive": "Show",
         "is_event": "Hide"
     },
     {
-        "print": false,
+        "key": "dark-limitations",
+        "print": true,
         "name": "Dark limitations",
         "location": "",
         "slot": "Mind",
         "type": "Passive",
         "symbol": "🌑",
-        "effect": "Bound (🪡)\n\nYour Health can never exceed 5.",
+        "effect": "Bound (🪡)\n\nYour Health can never exceed 7.",
         "slot_emoji": "🧠",
         "is_action": "Hide",
         "is_passive": "Show",
         "is_event": "Hide"
     },
     {
+        "key": "dark-sacrifice",
         "print": false,
         "name": "Dark sacrifice",
         "location": "",
@@ -585,6 +630,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "dark-sigil",
         "print": false,
         "name": "Dark sigil",
         "location": "",
@@ -598,6 +644,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "immolation-rags",
         "print": false,
         "name": "Immolation rags",
         "location": "",
@@ -611,6 +658,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "inscribe-7",
         "print": false,
         "name": "Inscribe",
         "location": "Beds of poison",
@@ -624,6 +672,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "invigoration",
         "print": true,
         "name": "Invigoration",
         "location": "",
@@ -637,6 +686,7 @@
         "is_event": "Show"
     },
     {
+        "key": "poison-blouse",
         "print": false,
         "name": "Poison Blouse",
         "location": "Beds of poison",
@@ -650,6 +700,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "poison-charm",
         "print": false,
         "name": "Poison Charm",
         "location": "Beds of poison",
@@ -663,6 +714,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "divine-poison-inversion",
         "print": true,
         "name": "Divine Poison Inversion",
         "location": "Beds of poison",
@@ -676,6 +728,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "scapegoats-catharsis",
         "print": true,
         "name": "Scapegoat's catharsis",
         "location": "Scapegoat's sty",
@@ -689,6 +742,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "a-keen-eye",
         "print": false,
         "name": "A keen eye",
         "location": "",
@@ -702,6 +756,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "an-expansive-mind",
         "print": false,
         "name": "An expansive mind",
         "location": "",
@@ -715,6 +770,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "artists-insight",
         "print": false,
         "name": "Artist's insight",
         "location": "",
@@ -728,6 +784,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "aural-inscription",
         "print": false,
         "name": "Aural inscription",
         "location": "Music academy",
@@ -741,6 +798,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "builders-gloves",
         "print": false,
         "name": "Builder's gloves",
         "location": "",
@@ -754,6 +812,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "buoyant-spirit",
         "print": false,
         "name": "Buoyant spirit",
         "location": "",
@@ -767,6 +826,7 @@
         "is_event": "Show"
     },
     {
+        "key": "creative-alterations",
         "print": false,
         "name": "Creative alterations",
         "location": "",
@@ -780,6 +840,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "divine-chant",
         "print": false,
         "name": "Divine Chant",
         "location": "Music academy",
@@ -793,6 +854,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "divine-icon",
         "print": false,
         "name": "Divine Icon",
         "location": "",
@@ -806,6 +868,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "epiphany",
         "print": false,
         "name": "Epiphany",
         "location": "",
@@ -819,6 +882,7 @@
         "is_event": "Show"
     },
     {
+        "key": "farmers-insight",
         "print": true,
         "name": "Farmer's insight",
         "location": "",
@@ -832,6 +896,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "inscribe-8",
         "print": false,
         "name": "Inscribe",
         "location": "",
@@ -845,6 +910,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "jericho-inscription",
         "print": true,
         "name": "Jericho inscription",
         "location": "Music academy",
@@ -858,6 +924,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "lost-in-thought",
         "print": false,
         "name": "Lost in thought",
         "location": "",
@@ -871,6 +938,7 @@
         "is_event": "Show"
     },
     {
+        "key": "lute",
         "print": false,
         "name": "Lute",
         "location": "Music academy",
@@ -884,6 +952,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "merchants-gloves",
         "print": false,
         "name": "Merchant's gloves",
         "location": "",
@@ -897,6 +966,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "pipe",
         "print": false,
         "name": "Pipe",
         "location": "Music academy",
@@ -910,6 +980,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "re-creation",
         "print": false,
         "name": "Re-creation",
         "location": "",
@@ -923,6 +994,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "soothing-lullaby",
         "print": false,
         "name": "Soothing Lullaby",
         "location": "Music academy",
@@ -936,6 +1008,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "tabor-drum",
         "print": false,
         "name": "Tabor drum",
         "location": "Music academy",
@@ -949,6 +1022,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "defanging-tool",
         "print": false,
         "name": "Defanging tool",
         "location": "House of Cryptids",
@@ -962,6 +1036,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "golem-anthropology",
         "print": false,
         "name": "Golem anthropology",
         "location": "",
@@ -975,6 +1050,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "golem-avarice",
         "print": false,
         "name": "Golem avarice",
         "location": "",
@@ -988,6 +1064,7 @@
         "is_event": "Show"
     },
     {
+        "key": "golem-disguise",
         "print": false,
         "name": "Golem disguise",
         "location": "",
@@ -1001,6 +1078,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "golem-insight",
         "print": false,
         "name": "Golem insight",
         "location": "",
@@ -1014,6 +1092,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "golem-intuition",
         "print": false,
         "name": "Golem intuition",
         "location": "",
@@ -1027,6 +1106,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "golem-log",
         "print": false,
         "name": "Golem log",
         "location": "",
@@ -1040,6 +1120,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "golem-prod",
         "print": false,
         "name": "Golem Prod",
         "location": "",
@@ -1053,6 +1134,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "golem-whistle",
         "print": false,
         "name": "Golem Whistle",
         "location": "",
@@ -1066,6 +1148,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "inscribe-9",
         "print": false,
         "name": "Inscribe",
         "location": "",
@@ -1079,19 +1162,21 @@
         "is_event": "Hide"
     },
     {
+        "key": "sharp-objects",
         "print": false,
-        "name": "Sharp objects",
+        "name": "Hot coals",
         "location": "",
         "slot": "",
         "type": "Event",
         "symbol": "🐾",
-        "effect": "Gain 1 Scar Token.",
+        "effect": "Gain 1 Burn Token.",
         "slot_emoji": "",
         "is_action": "Hide",
         "is_passive": "Hide",
         "is_event": "Show"
     },
     {
+        "key": "silent-hunting-cloak",
         "print": true,
         "name": "Silent hunting cloak",
         "location": "",
@@ -1105,6 +1190,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "alms-for-the-poor",
         "print": false,
         "name": "Alms for the poor",
         "location": "",
@@ -1118,6 +1204,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "burial-robes",
         "print": false,
         "name": "Burial Robes",
         "location": "Catacombs",
@@ -1131,6 +1218,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "divine-robes",
         "print": false,
         "name": "Divine robes",
         "location": "",
@@ -1144,6 +1232,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "divine-sack-cloth-of-sacrifice",
         "print": false,
         "name": "Divine sack cloth of sacrifice",
         "location": "",
@@ -1157,6 +1246,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "guilty-conscience",
         "print": false,
         "name": "Guilty conscience",
         "location": "",
@@ -1170,6 +1260,7 @@
         "is_event": "Show"
     },
     {
+        "key": "hands-of-deliverance",
         "print": false,
         "name": "Hands of deliverance",
         "location": "Catacombs",
@@ -1183,6 +1274,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "hands-of-forgiveness",
         "print": true,
         "name": "Hands of forgiveness",
         "location": "Catacombs",
@@ -1196,6 +1288,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "divine-healing-oil",
         "print": false,
         "name": "Divine healing oil",
         "location": "",
@@ -1209,6 +1302,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "holy-water",
         "print": true,
         "name": "Holy water",
         "location": "Purification pools",
@@ -1222,6 +1316,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "icon-of-the-resurrected",
         "print": false,
         "name": "Icon of the resurrected",
         "location": "Catacombs",
@@ -1235,6 +1330,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "inscribe-10",
         "print": false,
         "name": "Inscribe",
         "location": "",
@@ -1248,6 +1344,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "last-rites",
         "print": false,
         "name": "Last rites",
         "location": "",
@@ -1261,6 +1358,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "peacemakers-spirit",
         "print": false,
         "name": "Peacemaker's spirit",
         "location": "Catacombs",
@@ -1274,6 +1372,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "pray",
         "print": false,
         "name": "Pray",
         "location": "",
@@ -1287,6 +1386,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "shamlessness",
         "print": false,
         "name": "Shamlessness",
         "location": "",
@@ -1300,6 +1400,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "a-rush-of-companionship",
         "print": false,
         "name": "A rush of companionship",
         "location": "",
@@ -1313,19 +1414,21 @@
         "is_event": "Show"
     },
     {
-        "print": false,
+        "key": "guide-rope",
+        "print": true,
         "name": "Guide rope",
         "location": "",
         "slot": "Hand",
-        "type": "Passive",
+        "type": "Action",
         "symbol": "🤝",
-        "effect": "When moving from a space with other Wanderers, you may bring them with you.",
+        "effect": "Move as usual. But if a Wanderer is in your space, you may bring them with you.",
         "slot_emoji": "🖐️",
-        "is_action": "Hide",
-        "is_passive": "Show",
+        "is_action": "Show",
+        "is_passive": "Hide",
         "is_event": "Hide"
     },
     {
+        "key": "inscribe-11",
         "print": false,
         "name": "Inscribe",
         "location": "",
@@ -1339,6 +1442,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "inscribe-12",
         "print": false,
         "name": "Inscribe",
         "location": "",
@@ -1352,6 +1456,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "laborers-jacket",
         "print": false,
         "name": "Laborer's Jacket",
         "location": "",
@@ -1365,19 +1470,21 @@
         "is_event": "Hide"
     },
     {
-        "print": false,
+        "key": "rally",
+        "print": true,
         "name": "Rally",
         "location": "",
         "slot": "Mind",
-        "type": "Passive",
+        "type": "Action",
         "symbol": "🤝",
-        "effect": "After moving, each Ally may 🦶1.",
+        "effect": "Move as usual. Then, each Ally may 🦶1.",
         "slot_emoji": "🧠",
-        "is_action": "Hide",
-        "is_passive": "Show",
+        "is_action": "Show",
+        "is_passive": "Hide",
         "is_event": "Hide"
     },
     {
+        "key": "armistice",
         "print": true,
         "name": "Armistice",
         "location": "",
@@ -1391,6 +1498,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "divine-solidarity",
         "print": false,
         "name": "Divine solidarity",
         "location": "",
@@ -1404,6 +1512,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "union-garb",
         "print": false,
         "name": "Union Garb",
         "location": "",
@@ -1417,6 +1526,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "rod",
         "print": true,
         "name": "Rod",
         "location": "",
@@ -1430,6 +1540,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "shear",
         "print": true,
         "name": "Shear",
         "location": "",
@@ -1443,6 +1554,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "shroud-of-time",
         "print": true,
         "name": "Shroud of time",
         "location": "",
@@ -1456,6 +1568,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "solidarity-badge",
         "print": true,
         "name": "Solidarity badge",
         "location": "",
@@ -1469,6 +1582,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "golem-influence",
         "print": true,
         "name": "Golem influence",
         "location": "",
@@ -1482,19 +1596,21 @@
         "is_event": "Hide"
     },
     {
+        "key": "the-ties-that-bind",
         "print": true,
         "name": "The ties that bind",
         "location": "",
         "slot": "Bag",
-        "type": "Passive",
+        "type": "Action",
         "symbol": "🤝",
-        "effect": "When you start your turn on a space with allies, all Wanderers on your space 🌿3.",
+        "effect": "Move as usual. If you end your movement in a space with another Wanderer, 🌿3.",
         "slot_emoji": "👝",
-        "is_action": "Hide",
-        "is_passive": "Show",
+        "is_action": "Show",
+        "is_passive": "Hide",
         "is_event": "Hide"
     },
     {
+        "key": "darkness-into-light",
         "print": true,
         "name": "Darkness into light",
         "location": "",
@@ -1508,6 +1624,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "harbinger-of-death",
         "print": true,
         "name": "Harbinger of death",
         "location": "",
@@ -1521,6 +1638,7 @@
         "is_event": "Hide"
     },
     {
+        "key": "golem-counter",
         "print": true,
         "name": "Golem counter",
         "location": "",

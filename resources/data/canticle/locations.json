@@ -1,5 +1,6 @@
 [
     {
+        "key": "field",
         "print": true,
         "name": "Field",
         "Relics": "",
@@ -23,6 +24,7 @@
         "is_starter": "Show"
     },
     {
+        "key": "medicinal-herb-garden",
         "print": false,
         "name": "Medicinal herb garden",
         "Relics": "",
@@ -46,6 +48,7 @@
         "is_starter": "Show"
     },
     {
+        "key": "artists-hovel",
         "print": false,
         "name": "Artist's hovel",
         "Relics": "6 🎨",
@@ -69,6 +72,7 @@
         "is_starter": "Show"
     },
     {
+        "key": "apprentices-bottega",
         "print": false,
         "name": "Apprentice's bottega",
         "Relics": "6 🎨",
@@ -92,6 +96,7 @@
         "is_starter": "Hide"
     },
     {
+        "key": "music-academy",
         "print": false,
         "name": "Music academy",
         "Relics": "7 🎨",
@@ -115,6 +120,7 @@
         "is_starter": "Hide"
     },
     {
+        "key": "bazaar",
         "print": true,
         "name": "Bazaar",
         "Relics": "1 of each type already produced by the city",
@@ -138,6 +144,7 @@
         "is_starter": "Show"
     },
     {
+        "key": "cabalist-inferno",
         "print": false,
         "name": "Cabalist inferno",
         "Relics": "6 🌑",
@@ -161,6 +168,7 @@
         "is_starter": "Show"
     },
     {
+        "key": "scapegoats-sty",
         "print": false,
         "name": "Scapegoat's sty",
         "Relics": "6 🌑",
@@ -184,6 +192,7 @@
         "is_starter": "Hide"
     },
     {
+        "key": "cursed-tomb",
         "print": false,
         "name": "Cursed Tomb",
         "Relics": "",
@@ -207,6 +216,7 @@
         "is_starter": "Hide"
     },
     {
+        "key": "builders-site",
         "print": false,
         "name": "Builder's site",
         "Relics": "",
@@ -230,6 +240,7 @@
         "is_starter": "Show"
     },
     {
+        "key": "defenders-guild",
         "print": false,
         "name": "Defenders' Guild",
         "Relics": "",
@@ -253,6 +264,7 @@
         "is_starter": "Show"
     },
     {
+        "key": "pen",
         "print": true,
         "name": "Pen",
         "Relics": "7 🐾",
@@ -276,6 +288,7 @@
         "is_starter": "Show"
     },
     {
+        "key": "house-of-cryptids",
         "print": true,
         "name": "House of Cryptids",
         "Relics": "7 🐾",
@@ -299,6 +312,7 @@
         "is_starter": "Hide"
     },
     {
+        "key": "school-of-law",
         "print": false,
         "name": "School of Law",
         "Relics": "5 ⚖️",
@@ -322,11 +336,12 @@
         "is_starter": "Show"
     },
     {
+        "key": "prison",
         "print": false,
         "name": "Prison",
         "Relics": "5 ⚖️",
         "lore": "What use are our shame laws if we can't imprison the truly abhorrent?",
-        "rule": "End of game: If the Golem has 3 Shame, gain 📜.",
+        "rule": "End of game: If the Golem has 3+ Shame, gain 📜.",
         "cost_1": "Law",
         "cost_2": "",
         "cost_3": "",
@@ -345,6 +360,7 @@
         "is_starter": "Hide"
     },
     {
+        "key": "monolith",
         "print": false,
         "name": "Monolith",
         "Relics": "7 ✨",
@@ -368,12 +384,13 @@
         "is_starter": "Show"
     },
     {
-        "print": false,
+        "key": "scriptorium",
+        "print": true,
         "name": "Scriptorium",
         "Relics": "7 ✨",
         "lore": "Enhanced magical powers are only possible if we spread Monolith Shards as far as the eye can see",
-        "rule": "When building this: Move all Monolith Shards to the Emperor's infrastructure pool, and read the Shard rules aloud from the Emperor's Mat. \n\nEnd of game: If all Shards are on the board, gain 📜📜.",
-        "cost_1": "Engineering",
+        "rule": "Ongoing: Wanderers may only enter this Location if it has 4 adjacent locations that have Monolith Shards.\n\nEnd of game: If all Shards are on the board, gain 📜📜.",
+        "cost_1": "Magic",
         "cost_2": "",
         "cost_3": "",
         "cost_4": "",
@@ -387,10 +404,11 @@
         "produces_anything": "Show",
         "produces_emoji": "✨",
         "has_cost": "Show",
-        "cost_emoji": "⚙️",
+        "cost_emoji": "✨",
         "is_starter": "Hide"
     },
     {
+        "key": "cathedral",
         "print": true,
         "name": "Cathedral",
         "Relics": "5 📖",
@@ -414,6 +432,7 @@
         "is_starter": "Show"
     },
     {
+        "key": "catacombs",
         "print": false,
         "name": "Catacombs",
         "Relics": "6 📖",
@@ -437,6 +456,7 @@
         "is_starter": "Hide"
     },
     {
+        "key": "purification-pools",
         "print": true,
         "name": "Purification pools",
         "Relics": "3 📖",
@@ -460,6 +480,7 @@
         "is_starter": "Show"
     },
     {
+        "key": "exile",
         "print": false,
         "name": "Exile",
         "Relics": "",
@@ -483,6 +504,7 @@
         "is_starter": "Hide"
     },
     {
+        "key": "town-square",
         "print": false,
         "name": "Town square",
         "Relics": "5 🤝",
@@ -506,6 +528,7 @@
         "is_starter": "Show"
     },
     {
+        "key": "golem-sanctuary",
         "print": true,
         "name": "Golem sanctuary",
         "Relics": "6 🤝",
@@ -529,6 +552,7 @@
         "is_starter": "Hide"
     },
     {
+        "key": "sundial",
         "print": false,
         "name": "Sundial",
         "Relics": "6 ⏳",
@@ -552,6 +576,7 @@
         "is_starter": "Show"
     },
     {
+        "key": "enchanted-clocktower",
         "print": false,
         "name": "Enchanted clocktower",
         "Relics": "5 ⏳",
@@ -575,6 +600,7 @@
         "is_starter": "Hide"
     },
     {
+        "key": "haunted-clocktower",
         "print": false,
         "name": "Haunted Clocktower",
         "Relics": "5 ⏳",
@@ -598,6 +624,7 @@
         "is_starter": "Hide"
     },
     {
+        "key": "beds-of-poison",
         "print": false,
         "name": "Beds of poison",
         "Relics": "6 🌑",
@@ -621,6 +648,7 @@
         "is_starter": "Hide"
     },
     {
+        "key": "library",
         "print": false,
         "name": "Library",
         "Relics": "1 Relic of each type already produced by the city",
@@ -644,6 +672,7 @@
         "is_starter": "Show"
     },
     {
+        "key": "garbage-barricade",
         "print": true,
         "name": "Garbage barricade",
         "Relics": "1 of each type already produced by other Locations.",
@@ -667,6 +696,7 @@
         "is_starter": "Hide"
     },
     {
+        "key": "fragile-chapel",
         "print": true,
         "name": "Fragile Chapel",
         "Relics": "4📖",

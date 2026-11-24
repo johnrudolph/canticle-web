@@ -440,33 +440,6 @@ final class GameEngine
             $events[] = ['type' => 'infrastructure_placed', 'role_key' => null, 'payload' => ['infrastructure' => $type, 'cell' => $cell]];
         }
 
-        // Scriptorium: "When building this: Move all Monolith Shards to
-        // the Emperor's infrastructure pool."
-        if ($locationKey === 'scriptorium') {
-            $board = $state->board;
-            $pool = $state->infrastructurePool;
-            $returned = 0;
-
-            foreach ($board as $key => $entry) {
-                $index = array_search('monolith_shard', $entry['infrastructure'], true);
-
-                while ($index !== false) {
-                    $infrastructure = $board[$key]['infrastructure'];
-                    unset($infrastructure[$index]);
-                    $board[$key] = [...$board[$key], 'infrastructure' => array_values($infrastructure)];
-                    $pool['monolith_shard']++;
-                    $returned++;
-                    $index = array_search('monolith_shard', $board[$key]['infrastructure'], true);
-                }
-            }
-
-            $state = $state->with(['board' => $board, 'infrastructurePool' => $pool]);
-
-            if ($returned > 0) {
-                $events[] = ['type' => 'infrastructure_returned', 'role_key' => null, 'payload' => ['count' => $returned, 'infrastructure' => 'monolith_shard']];
-            }
-        }
-
         return [$state, $events];
     }
 
@@ -1757,7 +1730,7 @@ final class GameEngine
                 break;
             }
 
-            if (self::catacombsBlocks($state, $actorRole, $to)) {
+            if (self::entryBlocked($state, $actorRole, $to)) {
                 break;
             }
 
@@ -2867,7 +2840,7 @@ final class GameEngine
             return [$state, []];
         }
 
-        if (self::catacombsBlocks($state, $targetRole, $destination)) {
+        if (self::entryBlocked($state, $targetRole, $destination)) {
             return [$state, []];
         }
 
@@ -4240,7 +4213,7 @@ final class GameEngine
             return [$state, []];
         }
 
-        if (self::catacombsBlocks($state, $actorRole, $targetCell) || self::catacombsBlocks($state, $targetRole, $actorCell)) {
+        if (self::entryBlocked($state, $actorRole, $targetCell) || self::entryBlocked($state, $targetRole, $actorCell)) {
             return [$state, []];
         }
 
@@ -4281,15 +4254,25 @@ final class GameEngine
     }
 
     /**
-     * Dark limitations: "Your Health can never exceed 5." Every heal
-     * site caps at this instead of the usual 15.
+     * Dark limitations: "Your Health can never exceed 7" (raised from
+     * 5 in the 2026-11-24 rules.md revision). Cabalist's Gown keeps
+     * its own, separate cap of 5. Every heal site caps at whichever of
+     * these applies instead of the usual 15.
      */
     private static function maxHpFor(GameState $state, string $role): int
     {
         $equipped = $state->wanderers[$role]['equipped'];
 
         // Cabalist's Gown: "your Health ... cannot rise above 5."
-        return in_array('dark-limitations', $equipped, true) || in_array('cabalists-gown', $equipped, true) ? 5 : 15;
+        if (in_array('cabalists-gown', $equipped, true)) {
+            return 5;
+        }
+
+        if (in_array('dark-limitations', $equipped, true)) {
+            return 7;
+        }
+
+        return 15;
     }
 
     /**
@@ -4397,9 +4380,6 @@ final class GameEngine
             $events[] = ['type' => 'fruit_tree_bonus_action', 'role_key' => $firstRole, 'payload' => []];
         }
 
-        [$state, $tiesEvents] = self::applyTiesThatBindHeal($state, $firstRole);
-        $events = [...$events, ...$tiesEvents];
-
         return [$state, $events];
     }
 
@@ -4443,20 +4423,39 @@ final class GameEngine
 
     /**
      * Catacombs: "A Wanderer can only enter this space if they were
-     * exhausted earlier in the game." Applies to every way a Wanderer's
-     * cell can change — not just a plain move_wanderer — so every
-     * caller below checks this before actually moving someone into
-     * $cell, regardless of whether the move was their own choice (an
-     * explicit move throws) or a side effect of something else (Guide
-     * rope, a relic, the Golem forcing them in) that should just skip
-     * that particular Wanderer rather than fail the whole action.
+     * exhausted earlier in the game." Scriptorium (rules.md 2026-11-24
+     * revision — previously a one-time "move all Shards to the pool
+     * when built" effect, now): "Ongoing: Wanderers may only enter this
+     * Location if it has 4 adjacent locations that have Monolith
+     * Shards." Both are entry restrictions on the destination, so they
+     * share this one chokepoint. Applies to every way a Wanderer's cell
+     * can change — not just a plain move_wanderer — so every caller
+     * below checks this before actually moving someone into $cell,
+     * regardless of whether the move was their own choice (an explicit
+     * move throws) or a side effect of something else (Guide rope, a
+     * relic, the Golem forcing them in) that should just skip that
+     * particular Wanderer rather than fail the whole action.
      *
      * @param  array{0: int, 1: int}  $cell
      */
-    private static function catacombsBlocks(GameState $state, string $role, array $cell): bool
+    private static function entryBlocked(GameState $state, string $role, array $cell): bool
     {
-        return $state->board[Board::key($cell)]['location_key'] === 'catacombs'
-            && ! $state->wanderers[$role]['was_ever_exhausted'];
+        $locationKey = $state->board[Board::key($cell)]['location_key'];
+
+        if ($locationKey === 'catacombs') {
+            return ! $state->wanderers[$role]['was_ever_exhausted'];
+        }
+
+        if ($locationKey === 'scriptorium') {
+            $shardNeighbors = count(array_filter(
+                Board::occupiedNeighbors($cell, $state->board),
+                fn (array $neighbor) => in_array('monolith_shard', $state->board[Board::key($neighbor)]['infrastructure'], true),
+            ));
+
+            return $shardNeighbors < 4;
+        }
+
+        return false;
     }
 
     /**
@@ -4513,7 +4512,7 @@ final class GameEngine
             throw new InvalidMoveException('Wanderers must always be on a Location.');
         }
 
-        if (self::catacombsBlocks($state, $actorRole, $to)) {
+        if (self::entryBlocked($state, $actorRole, $to)) {
             throw new InvalidMoveException('Catacombs: only a Wanderer who has been exhausted before may enter.');
         }
 
@@ -4597,6 +4596,9 @@ final class GameEngine
             $events[] = ['type' => 'wanderer_healed', 'role_key' => $actorRole, 'payload' => ['hp' => $hp]];
         }
 
+        [$state, $tiesEvents] = self::applyTiesThatBindOnMove($state, $actorRole, $to);
+        $events = [...$events, ...$tiesEvents];
+
         [$state, $e] = self::moveDarkShacklesGolem($state, $actorRole, $wanderer['cell'], $to);
         $events = [...$events, ...$e];
 
@@ -4622,7 +4624,7 @@ final class GameEngine
                     continue;
                 }
 
-                if (self::catacombsBlocks($state, $otherRole, $to)) {
+                if (self::entryBlocked($state, $otherRole, $to)) {
                     continue;
                 }
 
@@ -4637,6 +4639,9 @@ final class GameEngine
                     $state = $state->with(['wanderers' => $state->wanderersWith($otherRole, ['hp' => $hp])]);
                     $events[] = ['type' => 'wanderer_healed', 'role_key' => $otherRole, 'payload' => ['hp' => $hp]];
                 }
+
+                [$state, $tiesEvents] = self::applyTiesThatBindOnMove($state, $otherRole, $to);
+                $events = [...$events, ...$tiesEvents];
 
                 if ($state->board[$toKey]['location_key'] === 'beds-of-poison') {
                     [$state, $damageEvents] = self::applyDamage($state, $otherRole, 5);
@@ -4723,9 +4728,6 @@ final class GameEngine
             if (self::wandererStartsOnFruitTree($state, $nextRole)) {
                 $events[] = ['type' => 'fruit_tree_bonus_action', 'role_key' => $nextRole, 'payload' => []];
             }
-
-            [$state, $tiesEvents] = self::applyTiesThatBindHeal($state, $nextRole);
-            $events = [...$events, ...$tiesEvents];
 
             return [$state, $events];
         }
@@ -4851,27 +4853,30 @@ final class GameEngine
     }
 
     /**
-     * The ties that bind: "When you start your turn on a space with
-     * allies, all Wanderers on your space 🌿3." "You" is whoever has
-     * this Relic equipped — the trigger is THEIR turn starting, but
-     * the heal (like Union Garb's own-space check) applies to every
-     * Wanderer sharing that space, not just the equip-holder.
+     * The ties that bind (rules.md 2026-11-24 revision — Passive ->
+     * Action, "start your turn" -> movement-triggered): "Move as
+     * usual. If you end your movement in a space with another
+     * Wanderer, 🌿3." Unlike the old version, only the mover heals —
+     * the Ally doesn't. Checked at every place a Wanderer's `cell`
+     * changes via their own movement, same breadth as Rejuvenation
+     * gown's Monolith Shard check (moveWanderer, Guide rope's
+     * carried-along Allies, telekinesisMove, Magnetic mail/Laborer's
+     * Jacket).
      *
+     * @param  array{0: int, 1: int}  $to
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
-    private static function applyTiesThatBindHeal(GameState $state, string $role): array
+    private static function applyTiesThatBindOnMove(GameState $state, string $role, array $to): array
     {
-        $cell = $state->wanderers[$role]['cell'];
-
-        if ($cell === null || ! in_array('the-ties-that-bind', $state->wanderers[$role]['equipped'], true)) {
+        if (! in_array('the-ties-that-bind', $state->wanderers[$role]['equipped'], true)) {
             return [$state, []];
         }
 
-        $cellKey = Board::key($cell);
+        $toKey = Board::key($to);
         $hasAlly = false;
 
         foreach (self::activeWanderers($state) as $otherRole => $otherCell) {
-            if ($otherRole !== $role && Board::key($otherCell) === $cellKey) {
+            if ($otherRole !== $role && Board::key($otherCell) === $toKey) {
                 $hasAlly = true;
                 break;
             }
@@ -4881,18 +4886,10 @@ final class GameEngine
             return [$state, []];
         }
 
-        $events = [];
-        foreach (self::activeWanderers($state) as $otherRole => $otherCell) {
-            if (Board::key($otherCell) !== $cellKey) {
-                continue;
-            }
+        $hp = min(self::maxHpFor($state, $role), $state->wanderers[$role]['hp'] + 3);
+        $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
 
-            $hp = min(self::maxHpFor($state, $otherRole), $state->wanderers[$otherRole]['hp'] + 3);
-            $state = $state->with(['wanderers' => $state->wanderersWith($otherRole, ['hp' => $hp])]);
-            $events[] = ['type' => 'wanderer_healed', 'role_key' => $otherRole, 'payload' => ['hp' => $hp]];
-        }
-
-        return [$state, $events];
+        return [$state, [['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]]]];
     }
 
     /**
@@ -5049,7 +5046,7 @@ final class GameEngine
 
             if ($destination === null
                 || ! array_key_exists(Board::key($destination), $state->board)
-                || self::catacombsBlocks($state, $actorRole, $destination)
+                || self::entryBlocked($state, $actorRole, $destination)
             ) {
                 throw new InvalidMoveException('You cannot flee in that direction.');
             }
@@ -5976,7 +5973,7 @@ final class GameEngine
                 continue;
             }
 
-            if (self::catacombsBlocks($state, $role, $toCell)) {
+            if (self::entryBlocked($state, $role, $toCell)) {
                 continue;
             }
 
@@ -6353,7 +6350,7 @@ final class GameEngine
             $affectedRoles,
             function (string $role) use ($state) {
                 foreach (Board::occupiedNeighbors($state->wanderers[$role]['cell'], $state->board) as $option) {
-                    if (! self::catacombsBlocks($state, $role, $option)) {
+                    if (! self::entryBlocked($state, $role, $option)) {
                         return true;
                     }
                 }
@@ -6381,7 +6378,7 @@ final class GameEngine
             $bestDistance = -1;
 
             foreach (Board::occupiedNeighbors($cell, $state->board) as $option) {
-                if (self::catacombsBlocks($state, $role, $option)) {
+                if (self::entryBlocked($state, $role, $option)) {
                     continue;
                 }
 
@@ -6537,7 +6534,7 @@ final class GameEngine
             $steps = array_slice($path, 0, 2);
             $destination = $steps[array_key_last($steps)];
 
-            if (self::catacombsBlocks($state, $role, $destination)) {
+            if (self::entryBlocked($state, $role, $destination)) {
                 continue;
             }
 
@@ -7639,7 +7636,7 @@ final class GameEngine
             throw new InvalidMoveException('That is not one of your own 🌿 Relics.');
         }
 
-        if (self::catacombsBlocks($state, $actorRole, $ally['cell'])) {
+        if (self::entryBlocked($state, $actorRole, $ally['cell'])) {
             throw new InvalidMoveException('Catacombs: only a Wanderer who has been exhausted before may enter.');
         }
 
@@ -7694,7 +7691,7 @@ final class GameEngine
             throw new InvalidMoveException('You are already there.');
         }
 
-        if (self::catacombsBlocks($state, $actorRole, $target)) {
+        if (self::entryBlocked($state, $actorRole, $target)) {
             throw new InvalidMoveException('Catacombs: only a Wanderer who has been exhausted before may enter.');
         }
 
@@ -7992,7 +7989,7 @@ final class GameEngine
             throw new InvalidMoveException('That Ally\'s space has no Monolith Shard.');
         }
 
-        if (self::catacombsBlocks($state, $actorRole, $ally['cell'])) {
+        if (self::entryBlocked($state, $actorRole, $ally['cell'])) {
             throw new InvalidMoveException('Catacombs: only a Wanderer who has been exhausted before may enter.');
         }
 
@@ -8058,7 +8055,7 @@ final class GameEngine
 
         $destinationLocationKey = $state->board[$toKey]['location_key'];
 
-        if (self::catacombsBlocks($state, $actorRole, $toCell)) {
+        if (self::entryBlocked($state, $actorRole, $toCell)) {
             throw new InvalidMoveException('Catacombs: only a Wanderer who has been exhausted before may enter.');
         }
 
@@ -8085,6 +8082,9 @@ final class GameEngine
             $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['hp' => $hp])]);
             $events[] = ['type' => 'wanderer_healed', 'role_key' => $actorRole, 'payload' => ['hp' => $hp]];
         }
+
+        [$state, $tiesEvents] = self::applyTiesThatBindOnMove($state, $actorRole, $toCell);
+        $events = [...$events, ...$tiesEvents];
 
         [$state, $e] = self::moveDarkShacklesGolem($state, $actorRole, $wanderer['cell'], $toCell);
         $events = [...$events, ...$e];
@@ -8148,7 +8148,7 @@ final class GameEngine
                 continue;
             }
 
-            if (self::catacombsBlocks($state, $role, $toCell)) {
+            if (self::entryBlocked($state, $role, $toCell)) {
                 continue;
             }
 
@@ -8163,6 +8163,9 @@ final class GameEngine
                 $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
                 $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
             }
+
+            [$state, $tiesEvents] = self::applyTiesThatBindOnMove($state, $role, $toCell);
+            $events = [...$events, ...$tiesEvents];
 
             if ($state->board[$toKey]['location_key'] === 'beds-of-poison') {
                 [$state, $damageEvents] = self::applyDamage($state, $role, 5);

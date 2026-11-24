@@ -13,12 +13,24 @@ use Illuminate\Support\Str;
 /**
  * One-time (re-runnable) cutover from resources/data/canticle/*.json —
  * the last Google Sheets sync — into the database tables that are now
- * the real source of truth. Computes `key` with the exact same
- * slugify-plus-disambiguating-suffix scheme the *Catalog classes used
- * to apply at read time (see e.g. RelicCatalog::all()), so every key
- * already hardcoded throughout GameEngine.php (e.g. 'dark-shackles',
- * 'inscribe-3') comes out identical. Upserts by `key`, so it's safe to
- * run again.
+ * the real source of truth. Upserts by `key`, so it's safe to run
+ * again.
+ *
+ * Every row canticle:pull-changes writes now carries its own real,
+ * already-frozen `key` straight from the database — used as-is here,
+ * never recomputed from the current name. This matters: a card's key
+ * is frozen forever once created (GameEngine.php hardcodes hundreds of
+ * these strings), but its *name* can still change — confirmed in
+ * production, "Sharp objects" renamed to "Hot coals" without its key
+ * ever moving off 'sharp-objects'. Re-deriving the key from the
+ * (possibly renamed) name here would silently create a second,
+ * orphaned row instead of updating the original one — exactly what
+ * happened before this carried the real key through: a fresh seed
+ * produced 'hot-coals' with no 'sharp-objects' row at all, since
+ * nothing in the old JSON mirror remembered which key the name used to
+ * map to. Falls back to the old slugify-plus-suffix scheme only for
+ * legacy JSON (git history from before pull-changes carried `key`)
+ * that has no key of its own yet.
  */
 class SeedCanticleCards extends Command
 {
@@ -49,7 +61,7 @@ class SeedCanticleCards extends Command
                 continue;
             }
 
-            $key = $this->nextKey($seenSlugs, $name);
+            $key = $this->nullableText($row['key'] ?? null) ?? $this->nextKey($seenSlugs, $name);
 
             Location::updateOrCreate(['key' => $key], [
                 'print' => (bool) ($row['print'] ?? false),
@@ -93,7 +105,7 @@ class SeedCanticleCards extends Command
                 continue;
             }
 
-            $key = $this->nextKey($seenSlugs, $name);
+            $key = $this->nullableText($row['key'] ?? null) ?? $this->nextKey($seenSlugs, $name);
 
             Relic::updateOrCreate(['key' => $key], [
                 'print' => (bool) ($row['print'] ?? false),
@@ -127,7 +139,7 @@ class SeedCanticleCards extends Command
                 continue;
             }
 
-            $key = $this->nextKey($seenSlugs, $name);
+            $key = $this->nullableText($row['key'] ?? null) ?? $this->nextKey($seenSlugs, $name);
 
             Glyph::updateOrCreate(['key' => $key], [
                 'print' => (bool) ($row['Print'] ?? false),
@@ -154,7 +166,7 @@ class SeedCanticleCards extends Command
                 continue;
             }
 
-            $key = $this->nextKey($seenSlugs, $name);
+            $key = $this->nullableText($row['key'] ?? null) ?? $this->nextKey($seenSlugs, $name);
 
             GolemCard::updateOrCreate(['key' => $key], [
                 'print' => (bool) ($row['print'] ?? false),

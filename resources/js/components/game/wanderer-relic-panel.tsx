@@ -97,6 +97,30 @@ const ALLY_TARGETABLE_RELICS = new Set([
     'hands-of-forgiveness',
 ]);
 
+/**
+ * Catalogued as Action Relics (is_action: true), but none of these
+ * are reachable through the generic "Use" button — resolveRelicAction
+ * has no dispatch entry for any of them, so clicking it would hit the
+ * no-op default arm and waste the action for nothing. Two different
+ * reasons land a Relic here:
+ *   - Rejuvenation gown/Guide rope/Rally/The ties that bind: the bonus
+ *     is baked directly into moveWanderer() itself and fires
+ *     automatically on the Wanderer's own next normal move — there's
+ *     no separate "Use" at all.
+ *   - Telekinesis/Laborer's Jacket: real Action Relics, but each needs
+ *     its own dedicated move type (telekinesis_move,
+ *     laborers_jacket_move_allies — see the `freeActions` entries in
+ *     show.tsx) to supply input a plain "Use" can't.
+ */
+const NO_GENERIC_USE_RELICS = new Set([
+    'rejuvenation-gown',
+    'guide-rope',
+    'rally',
+    'the-ties-that-bind',
+    'telekenesis',
+    'laborers-jacket',
+]);
+
 const TUCK_LABELS: Record<'bazaar' | 'cathedral', string> = {
     bazaar: 'Tuck (Bazaar, 🌿1)',
     cathedral: 'Tuck (Cathedral)',
@@ -351,7 +375,10 @@ export function WandererRelicPanel({
                                         />
                                     )}
                                     {canAct &&
-                                        relicCatalog[relicKey]?.is_action && (
+                                        relicCatalog[relicKey]?.is_action &&
+                                        !NO_GENERIC_USE_RELICS.has(
+                                            baseRelicKey(relicKey),
+                                        ) && (
                                             <div className="flex flex-wrap gap-1">
                                                 {(() => {
                                                     const reason =

@@ -91,7 +91,8 @@ test('Cabalist wraps does not trigger if the Wanderer survives above 0', functio
         ->and(collect($events)->pluck('type'))->not->toContain('cabalist_wraps_triggered');
 });
 
-test('Dark limitations caps Health at 5 for every heal', function () {
+test('Dark limitations caps Health at 7 for every heal', function () {
+    // rules.md 2026-11-24 revision: raised from 5 to 7.
     $state = startedGame();
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'mind' => 'dark-limitations', 'body' => 'burial-robes'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 1])]);
@@ -99,7 +100,7 @@ test('Dark limitations caps Health at 5 for every heal', function () {
 
     [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'burial-robes']); // normally heals to 15
 
-    expect($state->wanderers['wanderer_a']['hp'])->toBe(5);
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(7);
 });
 
 test('Rejuvenation gown heals 2 when entering a Monolith Shard space', function () {

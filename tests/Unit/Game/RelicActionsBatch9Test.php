@@ -191,25 +191,37 @@ test('Enraged untaps everything the instant it becomes active, and blocks any fu
     expect(array_filter(array_column($state->golem['draw_pile'], 'tapped')))->toBe([]);
 });
 
-test('The ties that bind heals everyone on the space when the equipped Wanderer starts their turn with an ally present', function () {
+test('The ties that bind heals only the mover when they end their move in a space with another Wanderer', function () {
+    // rules.md 2026-11-24 revision: Passive -> Action, "start your
+    // turn" -> "Move as usual. If you end your movement in a space
+    // with another Wanderer, 🌿3" — only the mover heals now, not
+    // every Wanderer sharing the space.
     $state = startedGame();
-    // Neutralize the hub's own randomly-dealt Location text (e.g.
-    // Medicinal herb garden's own end-of-turn heal) so only Ties that
-    // bind's heal is in play.
-    $board = $state->board;
-    $board[Board::key([1, 0])] = [...$board[Board::key([1, 0])], 'location_key' => 'pen'];
-    $state = $state->with(['board' => $board]);
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'bag' => 'the-ties-that-bind'];
-    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 5, 'equipped' => $equipped])]);
-    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['hp' => 5])]); // same hub cell by default
-    // The heal fires the instant wanderer_a's turn actually starts —
-    // here, that's end_emperor_phase (the first Wanderer of the
-    // round), not any later end_wanderer_turn call.
-    [$state, $events] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 5, 'equipped' => $equipped, 'cell' => [0, 1]])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['hp' => 5, 'cell' => [1, 0]])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    $direction = Board::directionBetween([0, 1], [1, 0]);
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $direction]);
 
     expect($state->wanderers['wanderer_a']['hp'])->toBe(8)
-        ->and($state->wanderers['wanderer_b']['hp'])->toBe(8)
+        ->and($state->wanderers['wanderer_b']['hp'])->toBe(5)
         ->and(collect($events)->pluck('type'))->toContain('wanderer_healed');
+});
+
+test('The ties that bind does not trigger moving into an empty space', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'bag' => 'the-ties-that-bind'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 5, 'equipped' => $equipped, 'cell' => [0, 1]])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['hp' => 5, 'cell' => [2, 0]])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    $direction = Board::directionBetween([0, 1], [1, 0]);
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $direction]);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(5)
+        ->and(collect($events)->pluck('type'))->not->toContain('wanderer_healed');
 });
 
 test('Rage against time deals damage to the Golem\'s space equal to current prophecy', function () {

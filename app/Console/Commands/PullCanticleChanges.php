@@ -163,6 +163,7 @@ class PullCanticleChanges extends Command
 
         $transformFor = [
             'locations' => fn (array $row) => [
+                'key' => $row['key'],
                 'print' => $row['print'],
                 'name' => $row['name'],
                 'Relics' => $row['relics'] ?? '',
@@ -186,6 +187,7 @@ class PullCanticleChanges extends Command
                 'is_starter' => $row['is_starter'] ? 'Show' : 'Hide',
             ],
             'relics' => fn (array $row) => [
+                'key' => $row['key'],
                 'print' => $row['print'],
                 'name' => $row['name'],
                 'location' => $row['location'] ?? '',
@@ -199,12 +201,14 @@ class PullCanticleChanges extends Command
                 'is_event' => $row['is_event'] ? 'Show' : 'Hide',
             ],
             'glyphs' => fn (array $row) => [
+                'key' => $row['key'],
                 'Print' => $row['print'],
                 'Name' => $row['name'],
                 'Type' => $row['type'] ?? '',
                 'Description' => $row['description'] ?? '',
             ],
             'golem_cards' => fn (array $row) => [
+                'key' => $row['key'],
                 'print' => $row['print'],
                 'name' => $row['name'],
                 'action' => $row['action'] ?? '',

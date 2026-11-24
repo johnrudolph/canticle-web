@@ -1,155 +1,186 @@
 [
     {
+        "key": "charge",
         "print": false,
         "name": "Charge",
         "action": "🦶2. 👊3."
     },
     {
+        "key": "deaths-door",
         "print": false,
         "name": "Death's Door",
         "action": "All Wanderers on or adjacent to the Golem go to 1 Health."
     },
     {
+        "key": "deface",
         "print": false,
         "name": "Deface",
         "action": "The Emperor trashes the next face-down Relic from the Golem's space."
     },
     {
+        "key": "dissent",
         "print": false,
         "name": "Dissent",
         "action": "Each Wanderer on a Location with another Wanderer loses 3 Health."
     },
     {
+        "key": "double-down",
         "print": false,
         "name": "Double Down",
         "action": "Play another action. Perform the next golem card twice."
     },
     {
+        "key": "fire-storm",
         "print": true,
         "name": "Fire storm",
         "action": "👊3 to Wanderers on or adjacent to the Golem's space. Each Wanderer who lost health as a result must trash one Relic they have equipped. They may trash a Bound relic this way."
     },
     {
+        "key": "great-sweeping-scythe",
         "print": true,
         "name": "Eruption",
         "action": "👊5 to all Wanderers on or adjacent to the Golem's space. Give a Burn token to all Wanderers who lost Health."
     },
     {
+        "key": "lurch",
         "print": false,
         "name": "Lurch",
         "action": "🦶1. 👊4."
     },
     {
+        "key": "overcharge",
         "print": false,
         "name": "Overcharge",
         "action": "Wanderers on spaces with Monolith Shards lose 1 Health for each Monolith Shard on or adjacent to their Location."
     },
     {
+        "key": "penitence",
         "print": false,
         "name": "Penitence",
         "action": "Remove 1 Shame token."
     },
     {
+        "key": "pound",
         "print": false,
         "name": "Pound",
         "action": "🦶1. 👊5."
     },
     {
+        "key": "public-lashings",
         "print": false,
         "name": "Public Lashings",
         "action": "🦶1 to the Wanderer with the most Shame tokens. If the Golem reaches them, 👊3 for each they have."
     },
     {
+        "key": "public-shaming",
         "print": false,
         "name": "Public Shaming",
         "action": "Each Wanderer loses 2 Health for each Shame token they have."
     },
     {
+        "key": "pursue",
         "print": false,
         "name": "Pursue",
         "action": "🦶5 to the space of the farthest Wanderer. 👊2."
     },
     {
+        "key": "quake",
         "print": false,
         "name": "Quake",
         "action": "🦶2 to the nearest Road. All Wanderers on spaces that contain Roads lose 2 Health. Return all infrastructure from that space back to the Emperor's infrastructure pool."
     },
     {
+        "key": "roar",
         "print": false,
         "name": "Roar",
         "action": "👊3 all Wanderers on or adjacent to the Golem's space. All Wanderers on or adjacent to the Golem's space must 🦶1 space away in a direction they choose."
     },
     {
+        "key": "sacrifice-of-possessions",
         "print": false,
         "name": "Sacrifice of Possessions",
         "action": "All Wanderers must trash one Relic they have equipped."
     },
     {
+        "key": "scar",
         "print": true,
         "name": "Char",
         "action": "🦶1 to the nearest Wanderer. Give them a Burn token."
     },
     {
+        "key": "self-inscription",
         "print": false,
         "name": "Self inscription",
         "action": "Add a 👺 Glyph to the Golem's mat."
     },
     {
+        "key": "self-inscription-2",
         "print": false,
         "name": "Self inscription",
         "action": "Add a 👺 Glyph to the Golem's mat."
     },
     {
+        "key": "self-inscription-3",
         "print": false,
         "name": "Self inscription",
         "action": "Add a 👺 Glyph to the Golem's mat."
     },
     {
+        "key": "shard-devourer",
         "print": false,
         "name": "Shard Devourer",
         "action": "🦶2 to the nearest Monolith Shard token. Remove it, and 👊2 all Wanderers on or adjacent to its space."
     },
     {
+        "key": "siege",
         "print": false,
         "name": "Siege",
         "action": "🦶2 to be adjacent to the nearest wall. All Wanderers adjacent to that wall lose 4 Health."
     },
     {
+        "key": "spew",
         "print": false,
         "name": "Spew",
         "action": "👊2 for all Wanderers within 2 spaces."
     },
     {
+        "key": "stalk",
         "print": false,
         "name": "Stalk",
         "action": "🦶5 to the space of the Wanderer with the least Health."
     },
     {
+        "key": "storm",
         "print": false,
         "name": "Storm",
         "action": "All Wanderers lose 2 Health."
     },
     {
+        "key": "summoning-roar",
         "print": false,
         "name": "Summoning Roar",
         "action": "All Wanderers 🦶2 toward the Golem's space. 👊3 all Wanderers in the Golem's space."
     },
     {
+        "key": "targeted-attack",
         "print": false,
         "name": "Targeted attack",
         "action": "🦶2 to the nearest Wanderer. If they have an Ally on or adjacent to the space, 👊5 to each."
     },
     {
+        "key": "time-paradox",
         "print": false,
         "name": "Time Paradox",
         "action": "Draw and resolve 2 additional Golem cards from the bottom of the Golem deck after this."
     },
     {
+        "key": "rage-against-time",
         "print": true,
         "name": "Rage against time",
         "action": "👊X to all Wanderers in the Golem's space, where X = the current 📜 level."
     },
     {
+        "key": "whirlwind",
         "print": true,
         "name": "Whirlwind",
         "action": "Pick up all infrastructure tokens. Shuffle them, and redistribute them at random. Ensure no space has two of the same token as usual."

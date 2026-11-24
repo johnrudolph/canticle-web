@@ -1,221 +1,258 @@
 [
     {
+        "key": "inverted",
         "Print": false,
         "Name": "Inverted",
         "Type": "⏳",
         "Description": "When the Golem 👊 on a space that produces ⏳, it increases Wanderer Health instead of decreasing it."
     },
     {
+        "key": "paradoxical",
         "Print": false,
         "Name": "Paradoxical",
         "Type": "⏳",
         "Description": "After the Golem plays its first card of the Golem Phase, each Wanderer may 🦶1."
     },
     {
+        "key": "perplexing",
         "Print": false,
         "Name": "Perplexing",
         "Type": "⏳",
         "Description": "When the Emperor plays a Location, Wanderers may choose to immediately move there at no cost."
     },
     {
+        "key": "parallel",
         "Print": false,
         "Name": "Parallel",
         "Type": "⏳",
         "Description": "Once per round, Wanderers may choose to skip a drawn Golem card and draw the next card instead."
     },
     {
+        "key": "accused",
         "Print": false,
         "Name": "Accused",
         "Type": "⚖️",
         "Description": "The Golem always has +1 Shame token. This does not count toward its normal max of 3."
     },
     {
+        "key": "chained",
         "Print": false,
         "Name": "Chained",
         "Type": "⚖️",
         "Description": "-3🦶"
     },
     {
+        "key": "penitent",
         "Print": false,
         "Name": "Penitent",
         "Type": "⚖️",
         "Description": "The Golem plays 1 fewer card per turn for each Shame it has."
     },
     {
+        "key": "enchanted",
         "Print": false,
         "Name": "Enchanted",
         "Type": "✨",
         "Description": "-2👊 if the Golem is on a space with a Monolith Shard."
     },
     {
+        "key": "productive",
         "Print": false,
         "Name": "Productive",
         "Type": "✨",
         "Description": "The Emperor plays 3 Infrastructure during their phase."
     },
     {
+        "key": "fearful",
         "Print": false,
         "Name": "Fearful",
         "Type": "🌑",
         "Description": "When the Golem plays a tapped card, it moves 1 space away from Wanderers if possible."
     },
     {
+        "key": "revelatory",
         "Print": false,
         "Name": "Revelatory",
         "Type": "🌑",
         "Description": "When moving, Wanderers may choose to lose any amount of Health. +1🦶 for each Health you lost."
     },
     {
+        "key": "smoldering",
         "Print": false,
         "Name": "Smoldering",
         "Type": "🌑",
         "Description": "On their turn, Wanderers may trash Relics (not including Bound Relics) from their mat, and gain 2 Health for each they trash. This does not cost an action."
     },
     {
+        "key": "energizing",
         "Print": false,
         "Name": "Energizing",
         "Type": "🌑",
         "Description": "Wanderers get +1 Action if they start their turn on the Golem's space."
     },
     {
+        "key": "buoyant",
         "Print": false,
         "Name": "Buoyant",
         "Type": "🎨",
         "Description": "Wanderers get +2🦶 for all of their movements."
     },
     {
+        "key": "contemplative",
         "Print": false,
         "Name": "Contemplative",
         "Type": "🎨",
         "Description": "-1🦶"
     },
     {
+        "key": "lilted",
         "Print": false,
         "Name": "Lilted",
         "Type": "🎨",
         "Description": "Play 1 fewer Golem card for each 🎶 equipped by Wanderers."
     },
     {
+        "key": "empathetic",
         "Print": false,
         "Name": "Empathetic",
         "Type": "🐾",
         "Description": "Play 1 fewer Golem card for each Wanderer that is on its space."
     },
     {
+        "key": "focused",
         "Print": false,
         "Name": "Focused",
         "Type": "🐾",
         "Description": "The Golem can only ever target the Wanderer with the most Health. All other Wanderers are effectively invisible to it."
     },
     {
+        "key": "mobile",
         "Print": false,
         "Name": "Mobile",
         "Type": "👺",
         "Description": "+1🦶"
     },
     {
+        "key": "legalistic",
         "Print": false,
         "Name": "Legalistic",
         "Type": "👺",
         "Description": "+1👊 for each Shame the Wanderer has."
     },
     {
+        "key": "accusing",
         "Print": false,
         "Name": "Accusing",
         "Type": "👺",
         "Description": "When the Golem plays a card with 👊 that causes a Wanderer to lose health, the Wanderer gains 1 Shame."
     },
     {
+        "key": "vindictive",
         "Print": false,
         "Name": "Vindictive",
         "Type": "👺",
         "Description": "When Wanderers play Relics with 🌿, the Golem immediately 👊5 all Wanderers in its space."
     },
     {
+        "key": "cruel",
         "Print": false,
         "Name": "Cruel",
         "Type": "👺",
         "Description": "+1 for all 👊."
     },
     {
+        "key": "relentless",
         "Print": false,
         "Name": "Relentless",
         "Type": "👺",
         "Description": "+2🦶"
     },
     {
+        "key": "tyrannical",
         "Print": false,
         "Name": "Tyrannical",
         "Type": "👺",
         "Description": "Wanderers cannot equip Relics with 🌿"
     },
     {
+        "key": "reactive",
         "Print": false,
         "Name": "Reactive",
         "Type": "👺",
         "Description": "Every time a Wanderer enters the Golem's space, it plays a card."
     },
     {
+        "key": "adaptive",
         "Print": false,
         "Name": "Adaptive",
         "Type": "👺",
         "Description": "If a Golem action causes a Wanderer to lose Health, put the card at the bottom of the Golem draw pile instead of discarding it."
     },
     {
+        "key": "destructive",
         "Print": false,
         "Name": "Destructive",
         "Type": "👺",
         "Description": "When the Golem moves into a space containing Infrastructure, it destroys it immediately."
     },
     {
+        "key": "barricading",
         "Print": false,
         "Name": "Barricading",
         "Type": "👺",
         "Description": "Wanderers cannot move into the Golem's space (but the Golem can still move into theirs)."
     },
     {
+        "key": "outnumbered",
         "Print": false,
         "Name": "Outnumbered",
         "Type": "🤝",
         "Description": "-3👊 when attacking Wanderers who are in a space with other Wanderers"
     },
     {
+        "key": "neighborly",
         "Print": false,
         "Name": "Neighborly",
         "Type": "🤝",
         "Description": "Any time a Wanderer loses Health, one of their Allies may move to their space and immediately use a 🌿 action from one of their Relics for free."
     },
     {
+        "key": "congenial",
         "Print": false,
         "Name": "Congenial",
         "Type": "🤝",
         "Description": "Relics with 🌿 get +3 if played while on a space with another Wanderer."
     },
     {
+        "key": "blessed",
         "Print": false,
         "Name": "Blessed",
         "Type": "📖",
         "Description": "When Wanderers play Relics with 🌿, they heal +2."
     },
     {
+        "key": "forgiving",
         "Print": false,
         "Name": "Forgiving",
         "Type": "📖",
         "Description": "Every time the Golem plays a card, all Wanderers 🌿1."
     },
     {
+        "key": "merciful",
         "Print": false,
         "Name": "Merciful",
         "Type": "📖",
         "Description": "-1👊"
     },
     {
+        "key": "miraculous",
         "Print": false,
         "Name": "Miraculous",
         "Type": "📖",
         "Description": "If any Wanderer becomes exhausted, they immediately 🌿3."
     },
     {
+        "key": "enraged",
         "Print": true,
         "Name": "Enraged",
         "Type": "👺",

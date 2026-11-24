@@ -346,27 +346,26 @@ test('Exile does not end the game early if any Wanderer is elsewhere', function 
 test('Library counts as producing every resource the city already produces, for build-cost purposes', function () {
     $state = startedGame();
     $board = $state->board;
-    // Pin every starting cell to a non-Engineering-producing Location
-    // first — otherwise the random deal could already satisfy
-    // Builder's site's cost on its own, making the first assertion
-    // below flaky.
+    // Pin every starting cell to a non-Magic-producing Location first
+    // — otherwise the random deal could already satisfy Scriptorium's
+    // cost on its own, making the first assertion below flaky.
     foreach (array_keys($board) as $key) {
         $board[$key] = [...$board[$key], 'location_key' => 'artists-hovel'];
     }
     $board['0,0'] = [...$board['0,0'], 'location_key' => 'library'];
     $state = $state->with(['board' => $board, 'locationHand' => [...$state->locationHand, 'scriptorium']]);
 
-    // Scriptorium costs "Engineering" — nothing on the board actually
+    // Scriptorium costs "Magic" — nothing on the board actually
     // produces that yet, so building next to the Library alone
     // shouldn't work...
     expect(fn () => GameEngine::apply($state, 'emperor', [
         'type' => 'play_location', 'location_key' => 'scriptorium', 'cell' => [1, -1],
     ]))->toThrow(InvalidMoveException::class);
 
-    // ...but once something in the city actually produces Engineering,
-    // the Library effectively does too, anywhere adjacent to it.
+    // ...but once something in the city actually produces Magic, the
+    // Library effectively does too, anywhere adjacent to it.
     $board = $state->board;
-    $board['2,1'] = [...$board['2,1'], 'location_key' => 'builders-site'];
+    $board['2,1'] = [...$board['2,1'], 'location_key' => 'monolith'];
     $state = $state->with(['board' => $board]);
 
     [$state] = GameEngine::apply($state, 'emperor', [

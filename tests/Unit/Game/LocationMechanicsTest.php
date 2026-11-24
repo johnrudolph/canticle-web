@@ -1,5 +1,6 @@
 <?php
 
+use App\Game\Board;
 use App\Game\GameEngine;
 use App\Game\InvalidMoveException;
 
@@ -138,34 +139,39 @@ test('Reaching 0 Health for real sets was_ever_exhausted; Cabalist wraps\' save 
     expect($saved->wanderers['wanderer_b']['was_ever_exhausted'])->toBeFalse();
 });
 
-test('Scriptorium returns every Monolith Shard on the board to the Emperor\'s pool when built', function () {
+test('Scriptorium blocks entry unless it has 4 adjacent Locations with Monolith Shards', function () {
+    // rules.md 2026-11-24 revision: previously a one-time "move all
+    // Shards to the Emperor's pool when built" effect; now an ongoing
+    // entry restriction instead.
     $state = startedGame();
     $board = $state->board;
-    foreach (array_keys($board) as $key) {
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'scriptorium'];
+    $state = $state->with(['board' => $board]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['cell' => [0, 1]])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    $direction = Board::directionBetween([0, 1], [1, 0]);
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $direction]))
+        ->toThrow(InvalidMoveException::class);
+});
+
+test('Scriptorium allows entry once it has 4 adjacent Locations with Monolith Shards', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'scriptorium'];
+    $neighborKeys = array_map(Board::key(...), Board::occupiedNeighbors([1, 0], $board));
+    foreach (array_slice($neighborKeys, 0, 4) as $key) {
         $board[$key] = [...$board[$key], 'infrastructure' => ['monolith_shard']];
     }
-    // Scriptorium costs "Engineering" — pin the hub to a Location that
-    // produces it, and build Scriptorium on a new, unbuilt cell
-    // adjacent to it (every starting cell is already built). It's not
-    // guaranteed to be in the Emperor's randomly-dealt hand either, so
-    // force it in there directly.
-    $board['1,0'] = [...$board['1,0'], 'location_key' => 'builders-site'];
-    $state = $state->with(['board' => $board, 'locationHand' => [...$state->locationHand, 'scriptorium']]);
+    $state = $state->with(['board' => $board]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['cell' => [0, 1]])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
-    $poolBefore = $state->infrastructurePool['monolith_shard'];
+    $direction = Board::directionBetween([0, 1], [1, 0]);
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $direction]);
 
-    [$state, $events] = GameEngine::apply($state, 'emperor', [
-        'type' => 'play_location', 'location_key' => 'scriptorium', 'cell' => [1, -1],
-    ]);
-
-    $remainingShards = 0;
-    foreach ($state->board as $entry) {
-        $remainingShards += count(array_filter($entry['infrastructure'], fn ($i) => $i === 'monolith_shard'));
-    }
-
-    expect($remainingShards)->toBe(0)
-        ->and($state->infrastructurePool['monolith_shard'])->toBe($poolBefore + 6)
-        ->and(collect($events)->pluck('type'))->toContain('infrastructure_returned');
+    expect($state->wanderers['wanderer_a']['cell'])->toBe([1, 0]);
 });
 
 test('Defenders\' Guild tucks an attack Golem card that dealt 0 damage, and returns + gains Prophecy at 4', function () {
