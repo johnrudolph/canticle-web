@@ -36,21 +36,20 @@ test('Guilty by association and Guilty conscience both grant 1 Shame token', fun
     $state = startedGame();
 
     [$state] = resolveEventRelicForTest($state, 'wanderer_a', $key);
-    // A fresh mat has every slot empty, so the actual placement is
-    // queued for the Wanderer to pick a slot (see
-    // GameEngine::applyStatusToken) rather than auto-applied.
-    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_status_token_choice', 'slot' => 'body']);
 
-    expect($state->wanderers['wanderer_a']['equipped'])->toContain('shame_token');
+    expect($state->wanderers['wanderer_a']['shame'])->toBe(1);
 })->with(['guilty-by-association', 'guilty-conscience']);
 
-test('Sharp objects grants 1 Scar token', function () {
+test('Sharp objects grants 1 Burn token', function () {
     $state = startedGame();
 
     [$state] = resolveEventRelicForTest($state, 'wanderer_a', 'sharp-objects');
+    // A fresh mat has every slot empty, so the actual placement is
+    // queued for the Wanderer to pick a slot (see GameEngine::applyBurn)
+    // rather than auto-applied.
     [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_status_token_choice', 'slot' => 'body']);
 
-    expect($state->wanderers['wanderer_a']['equipped'])->toContain('scar_token');
+    expect($state->wanderers['wanderer_a']['equipped'])->toContain('burn_token');
 });
 
 test('Incarceration blocks movement for the rest of the turn, then clears on the Wanderer\'s next turn', function () {
@@ -230,7 +229,7 @@ test('Finding an Event Relic via search resolves it immediately instead of holdi
     [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_status_token_choice', 'slot' => 'body']);
 
     expect($state->wanderers['wanderer_a']['holding'])->toBe([])
-        ->and($state->wanderers['wanderer_a']['equipped'])->toContain('scar_token')
+        ->and($state->wanderers['wanderer_a']['equipped'])->toContain('burn_token')
         ->and(collect($events)->pluck('type'))->toContain('location_searched');
 });
 

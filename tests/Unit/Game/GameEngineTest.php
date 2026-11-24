@@ -105,7 +105,7 @@ function resolveAnyPendingGolemCardChoice(GameState $state): GameState
 
         if ($pending['type'] === 'trash_relic') {
             $relicKey = collect($state->wanderers[$role]['equipped'])->first(
-                fn ($v) => $v !== null && $v !== 'shame_token' && $v !== 'scar_token',
+                fn ($v) => $v !== null && $v !== 'burn_token',
             );
             [$state] = GameEngine::apply($state, $role, [
                 'type' => 'resolve_golem_card_choice', 'relic_key' => $relicKey,

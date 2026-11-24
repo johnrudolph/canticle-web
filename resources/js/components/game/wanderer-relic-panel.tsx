@@ -33,13 +33,14 @@ const RELIC_SLOT_TO_EQUIP_SLOTS: Record<string, EquipSlot[]> = {
     Hand: ['hand_left', 'hand_right'],
 };
 
-// Shame/Scar are status markers, not Relics — the engine just stores
-// them in an equip slot (there's no separate status area on the mat),
-// so every slot render has to special-case these two sentinel keys
-// rather than looking them up in the Relic catalog.
+// Burn is a status marker, not a Relic — the engine stores it in an
+// equip slot (rules.md: "They cannot equip a Relic there until the
+// Burn is healed"), so every slot render has to special-case this
+// sentinel key rather than looking it up in the Relic catalog. Shame
+// moved out of equip slots entirely (rules.md 2026-11-24 revision) —
+// it's a plain counter now, shown separately near the health bar.
 const STATUS_TOKEN_LABELS: Record<string, string> = {
-    shame_token: '😳 Shame token',
-    scar_token: '🩹 Scar token',
+    burn_token: '🔥 Burn token',
 };
 
 function isStatusToken(key: string): boolean {
@@ -270,6 +271,11 @@ export function WandererRelicPanel({
                         )}
                     </p>
                     <HealthBar hp={wanderer.hp} className="mt-1" />
+                    {wanderer.shame > 0 && (
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                            😳 Shame x{wanderer.shame}
+                        </p>
+                    )}
                 </div>
             </button>
 

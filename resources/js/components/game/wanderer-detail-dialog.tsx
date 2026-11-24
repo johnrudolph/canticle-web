@@ -18,13 +18,12 @@ const SLOT_LABELS: Record<EquipSlot, string> = {
     bag: '👝 Bag',
 };
 
-// Shame/Scar are status markers, not Relics — the engine just stores
-// them in an equip slot (there's no separate status area on the mat),
-// so this has to special-case these two sentinel keys rather than
-// looking them up in the Relic catalog.
+// Burn is a status marker, not a Relic — the engine stores it in an
+// equip slot, so this has to special-case this sentinel key rather
+// than looking it up in the Relic catalog. Shame is a plain counter
+// now (WandererState.shame), shown separately below.
 const STATUS_TOKEN_LABELS: Record<string, string> = {
-    shame_token: '😳 Shame token',
-    scar_token: '🩹 Scar token',
+    burn_token: '🔥 Burn token',
 };
 
 function RelicRow({
@@ -97,6 +96,11 @@ export function WandererDetailDialog({
 
                 <div className="min-w-0 space-y-4 text-sm">
                     <HealthBar hp={wanderer.hp} />
+                    {wanderer.shame > 0 && (
+                        <p className="text-muted-foreground">
+                            😳 Shame x{wanderer.shame}
+                        </p>
+                    )}
 
                     {canAct && (
                         <Button

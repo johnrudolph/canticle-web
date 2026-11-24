@@ -181,16 +181,16 @@ test('Cathedral\'s tuck requires actually being on the Cathedral', function () {
         ->toThrow(InvalidMoveException::class);
 });
 
-test('Purification pools clears Shame, Scar, and Bound Relics from the mat', function () {
+test('Purification pools removes exactly 1 Shame, 1 Burn, and 1 Bound Relic from the mat', function () {
     $state = startedGame();
     $board = $state->board;
     $board['1,0'] = [...$board['1,0'], 'location_key' => 'purification-pools'];
     $state = $state->with(['board' => $board]);
     $equipped = [
-        'body' => 'shame_token', 'mind' => 'scar_token',
+        'body' => 'burn_token', 'mind' => null,
         'hand_left' => 'burial-robes', 'hand_right' => 'golem-whistle', 'bag' => null,
     ];
-    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'shame' => 2])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
     [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'cleanse_at_purification_pools']);
@@ -198,9 +198,10 @@ test('Purification pools clears Shame, Scar, and Bound Relics from the mat', fun
     expect($state->wanderers['wanderer_a']['equipped'])->toBe([
         'body' => null, 'mind' => null, 'hand_left' => null, 'hand_right' => 'golem-whistle', 'bag' => null,
     ])
+        ->and($state->wanderers['wanderer_a']['shame'])->toBe(1) // only 1 removed, not all
         ->and($state->trashedRelics)->toBe(['burial-robes'])
         ->and(collect($events)->pluck('type'))->toContain('wanderer_shame_removed')
-        ->and(collect($events)->pluck('type'))->toContain('wanderer_scar_removed')
+        ->and(collect($events)->pluck('type'))->toContain('wanderer_burn_removed')
         ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
 });
 
@@ -306,8 +307,7 @@ test('Exile can only be entered by a Wanderer with 3 Shame tokens', function () 
     expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => 'NE']))
         ->toThrow(InvalidMoveException::class, 'Exile');
 
-    $equipped = ['body' => 'shame_token', 'mind' => 'shame_token', 'hand_left' => 'shame_token', 'hand_right' => null, 'bag' => null];
-    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['shame' => 3])]);
 
     [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => 'NE']);
 

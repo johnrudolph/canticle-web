@@ -46,8 +46,25 @@ final class GameStateRepository
                 'laborers_jacket_used_this_round' => $wanderer['laborers_jacket_used_this_round'] ?? false,
                 'pending_bonus_actions' => $wanderer['pending_bonus_actions'] ?? 0,
                 'holding' => $wanderer['holding'] ?? [],
+                // Shame Zone (rules.md 2026-11-24 revision) — before
+                // this, Shame lived in an equip slot as a 'shame_token'
+                // string, same as Burn still does today. A game that
+                // started before this shipped has no 'shame' key at
+                // all; back-fill it by counting however many
+                // 'shame_token' entries its persisted equipped array
+                // still has, so nobody's existing Shame silently
+                // vanishes on the next load — and free those slots back
+                // up below, since 'shame_token' is no longer a
+                // recognized value there at all.
+                'shame' => $wanderer['shame'] ?? count(array_filter(
+                    $wanderer['equipped'],
+                    fn (mixed $v) => $v === 'shame_token',
+                )),
                 'equipped' => [
-                    ...$wanderer['equipped'],
+                    ...array_map(
+                        fn (mixed $v) => $v === 'shame_token' ? null : $v,
+                        $wanderer['equipped'],
+                    ),
                     'mind_2' => $wanderer['equipped']['mind_2'] ?? null,
                     'mind_3' => $wanderer['equipped']['mind_3'] ?? null,
                 ],

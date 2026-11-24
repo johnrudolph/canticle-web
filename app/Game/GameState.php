@@ -30,10 +30,12 @@ namespace App\Game;
  *     'hp' => int,                     // 1-15, 0 = exhausted (not dead)
  *     'actions_remaining' => int,      // only meaningful on that Wanderer's own turn
  *     'equipped' => [
- *         // each slot: null, a Relic key, or a status token sentinel
- *         // ('shame_token'|'scar_token') — rules.md: a token occupies a
- *         // slot of the Wanderer's choice (the Golem-pilot's choice in
- *         // adversary mode) and no Relic can go there while it remains.
+ *         // each slot: null, a Relic key, or the 'burn_token' sentinel
+ *         // — rules.md (2026-11-24 revision): a Burn occupies a slot
+ *         // of the Wanderer's choice (the Golem-pilot's choice in
+ *         // adversary mode) and no Relic can go there until it's
+ *         // healed. Shame no longer lives here at all — see 'shame'
+ *         // below.
  *         'body' => ?string, 'mind' => ?string,
  *         'hand_left' => ?string, 'hand_right' => ?string,
  *         'bag' => ?string,
@@ -42,6 +44,7 @@ namespace App\Game;
  *         // this slot" (GameEngine::equipRelic enforces this gate).
  *         'mind_2' => ?string, 'mind_3' => ?string,
  *     ],
+ *     'shame' => int,                  // the Shame Zone — a plain counter, capped at 3, mirroring golem['shame']
  *     'holding' => list<string>,       // searched but not yet equipped or dropped
  *     'move_blocked_this_turn' => bool, // Incarceration — cleared when this Wanderer's next turn starts
  *     'has_moved_this_turn' => bool, // Road — "it always costs 1 action to move" for a Wanderer's FIRST move of their own turn, even if they're already standing on a Road; only moves after that first one can be free for stepping off a Road space. Cleared when this Wanderer's next turn starts.

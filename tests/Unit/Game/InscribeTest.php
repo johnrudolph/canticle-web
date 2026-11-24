@@ -82,8 +82,8 @@ test('inscribe-5 requires 0 Shame and the Golem\'s space, then adds a ⚖️ Gly
 
 test('inscribe-5 is rejected outright with any Shame, without spending the action', function () {
     $state = startedGame();
-    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'mind' => 'shame_token', 'hand_left' => 'inscribe-5'];
-    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'inscribe-5'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'shame' => 1])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
     expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'inscribe-5']))

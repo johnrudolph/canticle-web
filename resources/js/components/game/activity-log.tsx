@@ -128,12 +128,12 @@ export function describe(
             return `${role} is saved from exhaustion by Cabalist wraps.`;
         case 'wanderer_shamed':
             return `${role} gains a Shame token.`;
-        case 'wanderer_scarred':
-            return `${role} gains a Scar token.`;
+        case 'wanderer_burned':
+            return `${role} gains a Burn token.`;
         case 'wanderer_shame_removed':
             return `${role} loses a Shame token.`;
-        case 'wanderer_scar_removed':
-            return `${role} loses a Scar token.`;
+        case 'wanderer_burn_removed':
+            return `${role} loses a Burn token.`;
         case 'shame_moved':
             return `A Shame token moves from ${roleLabel(event.payload.from as RoleKey)} to ${roleLabel(event.payload.to as RoleKey)}.`;
         case 'wanderers_swapped':

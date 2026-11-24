@@ -148,9 +148,8 @@ test('Magistrate\'s robes moves Shame from a Wanderer to the Golem while on a âš
         ...$state->wanderers['wanderer_a']['equipped'],
         'hand_left' => 'magistrates-robes',
     ];
-    $bEquipped = [...$state->wanderers['wanderer_b']['equipped'], 'body' => 'shame_token', 'mind' => 'shame_token'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
-    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['equipped' => $bEquipped])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['shame' => 2])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
     [$state] = GameEngine::apply($state, 'wanderer_a', [
@@ -158,7 +157,7 @@ test('Magistrate\'s robes moves Shame from a Wanderer to the Golem while on a âš
     ]);
 
     expect($state->golem['shame'])->toBe(2)
-        ->and($state->wanderers['wanderer_b']['equipped'])->not->toContain('shame_token');
+        ->and($state->wanderers['wanderer_b']['shame'])->toBe(0);
 });
 
 test('Magistrate\'s robes caps the destination at 3 Shame tokens', function () {
@@ -168,8 +167,7 @@ test('Magistrate\'s robes caps the destination at 3 Shame tokens', function () {
     $state = $state->with(['board' => $board]);
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'magistrates-robes'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
-    $bEquipped = [...$state->wanderers['wanderer_b']['equipped'], 'body' => 'shame_token', 'mind' => 'shame_token'];
-    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['equipped' => $bEquipped])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['shame' => 2])]);
     $state = $state->with(['golem' => $state->golemWith(['shame' => 2])]);
 
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);

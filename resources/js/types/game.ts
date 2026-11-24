@@ -41,6 +41,8 @@ export interface WandererState {
     golem_insight_used_this_round: boolean;
     laborers_jacket_used_this_round: boolean;
     pending_bonus_actions: number;
+    /** Shame Zone counter (rules.md 2026-11-24 revision) — Burn still lives in `equipped` as 'burn_token'; Shame no longer occupies a slot at all. */
+    shame: number;
 }
 
 export interface GolemCardEntry {
@@ -92,9 +94,10 @@ export interface GameStateDto {
         card_key: string;
         awaiting: RoleKey[];
     } | null;
+    /** Always 'burn_token' now — Shame no longer needs a slot choice at all (see WandererState.shame). */
     pending_status_token_choices: {
         role: RoleKey;
-        token: 'shame_token' | 'scar_token';
+        token: 'burn_token';
     }[];
     location_just_built_cell: [number, number] | null;
     parallel_used_this_round: boolean;

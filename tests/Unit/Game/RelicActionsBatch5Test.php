@@ -44,7 +44,7 @@ test('Immolation rags grants 1 Prophecy only when it trashes 5 Relics', function
 test('Immolation rags does not touch status tokens, only Relics', function () {
     $state = startedGame();
     $equipped = [
-        'body' => 'immolation-rags', 'mind' => 'shame_token', 'hand_left' => null,
+        'body' => 'immolation-rags', 'mind' => 'burn_token', 'hand_left' => null,
         'hand_right' => null, 'bag' => null,
     ];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 15])]);
@@ -52,7 +52,7 @@ test('Immolation rags does not touch status tokens, only Relics', function () {
 
     [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'immolation-rags']);
 
-    expect($state->wanderers['wanderer_a']['equipped']['mind'])->toBe('shame_token')
+    expect($state->wanderers['wanderer_a']['equipped']['mind'])->toBe('burn_token')
         ->and($state->wanderers['wanderer_a']['hp'])->toBe(14); // only 1 real Relic (itself) trashed
 });
 

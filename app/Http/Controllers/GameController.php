@@ -156,7 +156,7 @@ class GameController extends Controller
             if ($activeRole !== null) {
                 $reasons = [];
                 foreach ($gameState->wanderers[$activeRole]['equipped'] as $slot => $relicKey) {
-                    if (is_string($relicKey) && $relicKey !== 'shame_token' && $relicKey !== 'scar_token') {
+                    if (is_string($relicKey) && $relicKey !== 'burn_token') {
                         $reasons[$slot] = GameEngine::relicUsabilityReason($gameState, $activeRole, $relicKey);
                     }
                 }

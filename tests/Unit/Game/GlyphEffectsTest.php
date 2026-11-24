@@ -42,8 +42,7 @@ test('Merciful subtracts 1 from every Golem attack, floored at 0', function () {
 test('Legalistic adds +1 Golem attack damage per Shame the target has', function () {
     $state = startedGame();
     $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['legalistic']])]);
-    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'mind' => 'shame_token', 'hand_left' => 'shame_token'];
-    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 10])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['shame' => 2, 'hp' => 10])]);
 
     [$state] = (applyDamageForTest('wanderer_a', 2, true))($state);
 
@@ -288,9 +287,8 @@ test('Accusing gives a Wanderer 1 Shame when a Golem attack actually costs them 
     $reflection = new ReflectionMethod(GameEngine::class, 'applyDamage');
     $reflection->setAccessible(true);
     [$state] = $reflection->invoke(null, $state, 'wanderer_a', 3, true);
-    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_status_token_choice', 'slot' => 'body']);
 
-    expect($state->wanderers['wanderer_a']['equipped'])->toContain('shame_token');
+    expect($state->wanderers['wanderer_a']['shame'])->toBe(1);
 });
 
 test('Accusing does not trigger if the attack dealt 0 Health loss', function () {
@@ -302,7 +300,7 @@ test('Accusing does not trigger if the attack dealt 0 Health loss', function () 
     $reflection->setAccessible(true);
     [$state] = $reflection->invoke(null, $state, 'wanderer_a', 1, true); // Merciful reduces this to 0
 
-    expect($state->wanderers['wanderer_a']['equipped'])->not->toContain('shame_token');
+    expect($state->wanderers['wanderer_a']['shame'])->toBe(0);
 });
 
 test('Vindictive makes the Golem attack everyone on its space for 5 when a 🌿 Relic is played', function () {

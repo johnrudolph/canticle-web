@@ -6,9 +6,9 @@ use App\Game\InvalidMoveException;
 
 // startedGame() is declared in GameEngineTest.php, loaded in the same run.
 
-test('a slot holding a status token cannot be equipped into', function () {
+test('a slot holding a Burn token cannot be equipped into', function () {
     $state = startedGame();
-    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'scar_token'];
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'burn_token'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', [
         'equipped' => $equipped,
         'holding' => ['burial-robes'],
@@ -17,34 +17,35 @@ test('a slot holding a status token cannot be equipped into', function () {
     GameEngine::apply($state, 'wanderer_a', ['type' => 'equip_relic', 'relic_key' => 'burial-robes', 'slot' => 'body']);
 })->throws(InvalidMoveException::class, 'That slot is blocked by a status token.');
 
-test('a status token cannot be dropped or used like a Relic', function () {
+test('a Burn token cannot be dropped or used like a Relic', function () {
     $state = startedGame();
-    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'shame_token'];
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'burn_token'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
 
-    GameEngine::apply($state, 'wanderer_a', ['type' => 'drop_relic', 'relic_key' => 'shame_token']);
+    GameEngine::apply($state, 'wanderer_a', ['type' => 'drop_relic', 'relic_key' => 'burn_token']);
 })->throws(InvalidMoveException::class, 'Status tokens are not dropped this way.');
 
-test('Holy water removes Shame if present, otherwise Scar', function () {
+test('Holy water removes Shame if present, otherwise Burn', function () {
     $state = startedGame();
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
-    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'scar_token', 'mind' => 'holy-water'];
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'burn_token', 'mind' => 'holy-water'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
 
     [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'holy-water']);
 
     expect($state->wanderers['wanderer_a']['equipped']['body'])->toBeNull()
-        ->and(collect($events)->pluck('type'))->toContain('wanderer_scar_removed');
+        ->and(collect($events)->pluck('type'))->toContain('wanderer_burn_removed');
 });
 
-test('Hands of forgiveness removes every Shame and Scar token from the chosen Wanderer', function () {
+test('Hands of forgiveness removes every Shame and Burn token from the chosen Wanderer', function () {
     $state = startedGame();
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
     $wanderers = $state->wanderers;
     $wanderers['wanderer_a']['equipped'] = [...$wanderers['wanderer_a']['equipped'], 'hand_left' => 'hands-of-forgiveness'];
-    $wanderers['wanderer_b']['equipped'] = [...$wanderers['wanderer_b']['equipped'], 'body' => 'shame_token', 'mind' => 'scar_token'];
+    $wanderers['wanderer_b']['equipped'] = [...$wanderers['wanderer_b']['equipped'], 'mind' => 'burn_token'];
+    $wanderers['wanderer_b']['shame'] = 2;
     $wanderers['wanderer_b']['cell'] = $wanderers['wanderer_a']['cell'];
     $state = $state->with(['wanderers' => $wanderers]);
 
@@ -52,8 +53,8 @@ test('Hands of forgiveness removes every Shame and Scar token from the chosen Wa
         'type' => 'use_relic', 'relic_key' => 'hands-of-forgiveness', 'target_role' => 'wanderer_b',
     ]);
 
-    expect($state->wanderers['wanderer_b']['equipped']['body'])->toBeNull()
-        ->and($state->wanderers['wanderer_b']['equipped']['mind'])->toBeNull();
+    expect($state->wanderers['wanderer_b']['equipped']['mind'])->toBeNull()
+        ->and($state->wanderers['wanderer_b']['shame'])->toBe(0);
 });
 
 test('Hands of forgiveness defaults to the caster themselves when no target_role is given', function () {
@@ -65,88 +66,133 @@ test('Hands of forgiveness defaults to the caster themselves when no target_role
 
     $equipped = [
         ...$state->wanderers['wanderer_a']['equipped'],
-        'hand_left' => 'hands-of-forgiveness', 'body' => 'shame_token', 'mind' => 'scar_token',
+        'hand_left' => 'hands-of-forgiveness', 'mind' => 'burn_token',
     ];
-    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'shame' => 2])]);
 
     [$state] = GameEngine::apply($state, 'wanderer_a', [
         'type' => 'use_relic', 'relic_key' => 'hands-of-forgiveness',
     ]);
 
-    expect($state->wanderers['wanderer_a']['equipped']['body'])->toBeNull()
-        ->and($state->wanderers['wanderer_a']['equipped']['mind'])->toBeNull();
+    expect($state->wanderers['wanderer_a']['equipped']['mind'])->toBeNull()
+        ->and($state->wanderers['wanderer_a']['shame'])->toBe(0);
 });
 
-test('Shame is capped at 3 tokens; further gains are a no-op', function () {
+test('Shame is capped at 3; further gains are a no-op', function () {
     $state = startedGame();
-    $equipped = $state->wanderers['wanderer_a']['equipped'];
-    $equipped['body'] = 'shame_token';
-    $equipped['mind'] = 'shame_token';
-    $equipped['hand_left'] = 'shame_token';
-    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['shame' => 3])]);
 
-    $reflection = new ReflectionMethod(GameEngine::class, 'applyStatusToken');
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyShame');
     $reflection->setAccessible(true);
-    [$newState, $events] = $reflection->invoke(null, $state, 'wanderer_a', 'shame_token');
+    [$newState, $events] = $reflection->invoke(null, $state, 'wanderer_a');
 
     expect($events)->toBe([])
-        ->and($newState->wanderers['wanderer_a']['equipped']['hand_right'])->toBeNull();
+        ->and($newState->wanderers['wanderer_a']['shame'])->toBe(3);
 });
 
-test('with 2+ empty slots, gaining a status token queues a slot choice instead of auto-picking one', function () {
+test('Shame never touches an equip slot — it is a plain counter', function () {
     $state = startedGame();
 
-    $reflection = new ReflectionMethod(GameEngine::class, 'applyStatusToken');
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyShame');
     $reflection->setAccessible(true);
-    [$state, $events] = $reflection->invoke(null, $state, 'wanderer_a', 'scar_token');
+    [$state, $events] = $reflection->invoke(null, $state, 'wanderer_a');
 
-    expect($state->wanderers['wanderer_a']['equipped'])->not->toContain('scar_token')
-        ->and($state->pendingStatusTokenChoices)->toBe([['role' => 'wanderer_a', 'token' => 'scar_token']])
+    expect($state->wanderers['wanderer_a']['shame'])->toBe(1)
+        ->and($state->wanderers['wanderer_a']['equipped'])->toBe(['body' => null, 'mind' => null, 'hand_left' => null, 'hand_right' => null, 'bag' => null, 'mind_2' => null, 'mind_3' => null])
+        ->and(collect($events)->pluck('type'))->toContain('wanderer_shamed');
+});
+
+test('with 2+ legal slots, gaining a Burn queues a slot choice instead of auto-picking one', function () {
+    $state = startedGame();
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyBurn');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state, 'wanderer_a');
+
+    expect($state->wanderers['wanderer_a']['equipped'])->not->toContain('burn_token')
+        ->and($state->pendingStatusTokenChoices)->toBe([['role' => 'wanderer_a', 'token' => 'burn_token']])
         ->and(collect($events)->pluck('type'))->toContain('status_token_choice_offered');
 });
 
-test('resolve_status_token_choice places the token in the exact slot chosen, and blocks other moves until then', function () {
+test('resolve_status_token_choice places the Burn in the exact slot chosen, and blocks other moves until then', function () {
     $state = startedGame();
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
-    $reflection = new ReflectionMethod(GameEngine::class, 'applyStatusToken');
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyBurn');
     $reflection->setAccessible(true);
-    [$state] = $reflection->invoke(null, $state, 'wanderer_a', 'scar_token');
+    [$state] = $reflection->invoke(null, $state, 'wanderer_a');
 
     expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'rest']))
-        ->toThrow(InvalidMoveException::class, 'A Shame/Scar token slot choice is waiting before anything else can happen.');
+        ->toThrow(InvalidMoveException::class, 'A Burn token slot choice is waiting before anything else can happen.');
 
     [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_status_token_choice', 'slot' => 'mind']);
 
-    expect($state->wanderers['wanderer_a']['equipped']['mind'])->toBe('scar_token')
+    expect($state->wanderers['wanderer_a']['equipped']['mind'])->toBe('burn_token')
         ->and($state->wanderers['wanderer_a']['equipped']['body'])->toBeNull()
         ->and($state->pendingStatusTokenChoices)->toBe([]);
+});
+
+test('choosing a slot that already holds a Relic drops it and burns the slot anyway', function () {
+    $state = startedGame();
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'burial-robes'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'cell' => [1, 0]])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyBurn');
+    $reflection->setAccessible(true);
+    [$state] = $reflection->invoke(null, $state, 'wanderer_a');
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_status_token_choice', 'slot' => 'hand_left']);
+
+    expect($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBe('burn_token')
+        ->and($state->board['1,0']['relics_face_up'])->toContain('burial-robes')
+        ->and(collect($events)->pluck('type'))->toContain('relic_dropped');
+});
+
+test('a slot already holding a Burn is not offered as a choice again', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'burn_token'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyBurn');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state, 'wanderer_a');
+
+    // 4 remaining legal slots (every slot except the already-burned
+    // 'body') is still 2+, so this queues rather than auto-applying.
+    expect($state->pendingStatusTokenChoices)->toHaveCount(1);
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_status_token_choice', 'slot' => 'body']);
+
+    // Choosing the already-burned slot is an invalid choice — a no-op,
+    // not a second Burn stacked there.
+    expect($state->wanderers['wanderer_a']['equipped']['body'])->toBe('burn_token');
 });
 
 test('an invalid slot choice is a no-op but still clears the pending queue', function () {
     $state = startedGame();
 
-    $reflection = new ReflectionMethod(GameEngine::class, 'applyStatusToken');
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyBurn');
     $reflection->setAccessible(true);
-    [$state] = $reflection->invoke(null, $state, 'wanderer_a', 'scar_token');
+    [$state] = $reflection->invoke(null, $state, 'wanderer_a');
 
     [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_status_token_choice', 'slot' => 'not-a-real-slot']);
 
-    expect($state->wanderers['wanderer_a']['equipped'])->not->toContain('scar_token')
+    expect($state->wanderers['wanderer_a']['equipped'])->not->toContain('burn_token')
         ->and($state->pendingStatusTokenChoices)->toBe([]);
 });
 
-test('a status token only ever occupies an empty slot, never displacing a Relic', function () {
+test('a Burn is a no-op once every slot is already burned', function () {
     $state = startedGame();
-    $allFull = ['body' => 'r1', 'mind' => 'r2', 'hand_left' => 'r3', 'hand_right' => 'r4', 'bag' => 'r5'];
-    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $allFull])]);
+    $allBurned = array_fill_keys(array_keys($state->wanderers['wanderer_a']['equipped']), 'burn_token');
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $allBurned])]);
 
-    $reflection = new ReflectionMethod(GameEngine::class, 'applyStatusToken');
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyBurn');
     $reflection->setAccessible(true);
-    [$newState, $events] = $reflection->invoke(null, $state, 'wanderer_a', 'scar_token');
+    [$newState, $events] = $reflection->invoke(null, $state, 'wanderer_a');
 
     expect($events)->toBe([])
-        ->and($newState->wanderers['wanderer_a']['equipped'])->toBe($allFull);
+        ->and($newState->wanderers['wanderer_a']['equipped'])->toBe($allBurned);
 });
 
 function resolveGolemCardForTest(GameState $state, string $cardKey, bool $allowPause = false): array
@@ -157,7 +203,7 @@ function resolveGolemCardForTest(GameState $state, string $cardKey, bool $allowP
     return $reflection->invoke(null, $state, $cardKey, $allowPause);
 }
 
-test('the Scar Golem card scars the nearest Wanderer', function () {
+test('the Scar (now "Char") Golem card Burns the nearest Wanderer', function () {
     $state = startedGame();
     [$newState] = resolveGolemCardForTest($state, 'scar');
 
@@ -167,19 +213,17 @@ test('the Scar Golem card scars the nearest Wanderer', function () {
     $queuedRole = $newState->pendingStatusTokenChoices[0]['role'];
     [$newState] = GameEngine::apply($newState, $queuedRole, ['type' => 'resolve_status_token_choice', 'slot' => 'body']);
 
-    $scarredRoles = array_filter(
+    $burnedRoles = array_filter(
         $newState->wanderers,
-        fn ($w) => in_array('scar_token', $w['equipped'], true)
+        fn ($w) => in_array('burn_token', $w['equipped'], true)
     );
 
-    expect($scarredRoles)->toHaveCount(1);
+    expect($burnedRoles)->toHaveCount(1);
 });
 
 test('Public Shaming damages every Wanderer by 2x their own Shame count', function () {
     $state = startedGame();
-    $wanderers = $state->wanderers;
-    $wanderers['wanderer_a']['equipped'] = [...$wanderers['wanderer_a']['equipped'], 'body' => 'shame_token', 'mind' => 'shame_token'];
-    $state = $state->with(['wanderers' => $wanderers]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['shame' => 2])]);
 
     [$newState, $events] = resolveGolemCardForTest($state, 'public-shaming');
 
@@ -190,11 +234,11 @@ test('Public Shaming damages every Wanderer by 2x their own Shame count', functi
 
 test('Public Lashings only damages its target if the Golem actually reaches them', function () {
     $state = startedGame();
-    $wanderers = $state->wanderers;
-    $wanderers['wanderer_a']['equipped'] = [...$wanderers['wanderer_a']['equipped'], 'body' => 'shame_token'];
-    // Golem starts right on wanderer_a's own cell, so "reaches them" is trivially true.
-    $wanderers['wanderer_a']['cell'] = $state->golem['cell'];
-    $state = $state->with(['wanderers' => $wanderers]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', [
+        'shame' => 1,
+        // Golem starts right on wanderer_a's own cell, so "reaches them" is trivially true.
+        'cell' => $state->golem['cell'],
+    ])]);
 
     [$newState] = resolveGolemCardForTest($state, 'public-lashings');
 

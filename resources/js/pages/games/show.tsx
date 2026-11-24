@@ -494,16 +494,16 @@ export default function GameShow({ game }: { game: GameSummary }) {
                 const targetEquipped = Object.values(
                     state.wanderers[targetRole].equipped,
                 );
-                const hasShame = targetEquipped.includes('shame_token');
-                const hasScar = targetEquipped.includes('scar_token');
+                const hasShame = state.wanderers[targetRole].shame > 0;
+                const hasBurn = targetEquipped.includes('burn_token');
 
-                if (hasShame && hasScar) {
+                if (hasShame && hasBurn) {
                     setRelicPrompt({
                         title: 'Holy water',
                         description: `Remove which token from ${wandererLabelFor(targetRole)}?`,
                         candidates: [
                             { key: 'shame_token', label: 'Shame token' },
-                            { key: 'scar_token', label: 'Scar token' },
+                            { key: 'scar_token', label: 'Burn token' },
                         ],
                         onConfirm: (keys) => {
                             setRelicPrompt(null);
@@ -522,7 +522,7 @@ export default function GameShow({ game }: { game: GameSummary }) {
                         target_role: allyRole,
                         remove_type: hasShame
                             ? 'shame_token'
-                            : hasScar
+                            : hasBurn
                               ? 'scar_token'
                               : undefined,
                     });
@@ -710,8 +710,7 @@ export default function GameShow({ game }: { game: GameSummary }) {
                     const myRelics = Object.values(wanderer.equipped).filter(
                         (k): k is string =>
                             !!k &&
-                            k !== 'shame_token' &&
-                            k !== 'scar_token' &&
+                            k !== 'burn_token' &&
                             k.replace(/-\d+$/, '') !== 'warlocks-robes',
                     );
                     const theirRelics = Object.values(
@@ -2656,12 +2655,8 @@ export default function GameShow({ game }: { game: GameSummary }) {
                     !!statusTokenChoice &&
                     myRoles.includes(statusTokenChoice.role)
                 }
-                title={
-                    statusTokenChoice?.token === 'shame_token'
-                        ? 'Shame token'
-                        : 'Scar token'
-                }
-                description="Which slot should it go into?"
+                title="Burn token"
+                description="Which slot should it go into? Choosing a slot with a Relic in it drops that Relic."
                 candidates={
                     statusTokenChoice
                         ? (
@@ -2672,12 +2667,20 @@ export default function GameShow({ game }: { game: GameSummary }) {
                               .filter(
                                   (slot) =>
                                       state.wanderers[statusTokenChoice.role]
-                                          .equipped[slot] === null,
+                                          .equipped[slot] !== 'burn_token',
                               )
-                              .map((slot) => ({
-                                  key: slot,
-                                  label: SLOT_LABELS[slot],
-                              }))
+                              .map((slot) => {
+                                  const occupant =
+                                      state.wanderers[statusTokenChoice.role]
+                                          .equipped[slot];
+                                  const occupantLabel = occupant
+                                      ? ` (drops ${game.relic_catalog[occupant]?.name ?? occupant})`
+                                      : '';
+                                  return {
+                                      key: slot,
+                                      label: `${SLOT_LABELS[slot]}${occupantLabel}`,
+                                  };
+                              })
                         : []
                 }
                 relicCatalog={{}}

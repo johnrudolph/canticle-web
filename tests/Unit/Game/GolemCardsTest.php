@@ -46,7 +46,7 @@ test('Fire storm damages everyone on/adjacent to the Golem and trashes a Relic f
         ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
 });
 
-test('Great Sweeping Scythe damages everyone on/adjacent to the Golem and Scars anyone who was hurt', function () {
+test('Great Sweeping Scythe damages everyone on/adjacent to the Golem and Burns anyone who was hurt', function () {
     $state = startedGame();
 
     [$state, $events] = resolveGolemCardForTest($state, 'great-sweeping-scythe');
@@ -54,8 +54,8 @@ test('Great Sweeping Scythe damages everyone on/adjacent to the Golem and Scars 
     [$state] = GameEngine::apply($state, 'wanderer_b', ['type' => 'resolve_status_token_choice', 'slot' => 'body']);
 
     expect($state->wanderers['wanderer_a']['hp'])->toBe(10)
-        ->and($state->wanderers['wanderer_a']['equipped'])->toContain('scar_token')
-        ->and($state->wanderers['wanderer_b']['equipped'])->toContain('scar_token')
+        ->and($state->wanderers['wanderer_a']['equipped'])->toContain('burn_token')
+        ->and($state->wanderers['wanderer_b']['equipped'])->toContain('burn_token')
         ->and(collect($events)->pluck('type'))->toContain('wanderer_damaged');
 });
 

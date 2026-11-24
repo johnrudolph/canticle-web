@@ -24,10 +24,8 @@ const RELIC_SLOT_TO_EQUIP_SLOTS: Record<string, EquipSlot[]> = {
     Hand: ['hand_left', 'hand_right'],
 };
 
-function isStatusToken(
-    value: string | null,
-): value is 'shame_token' | 'scar_token' {
-    return value === 'shame_token' || value === 'scar_token';
+function isStatusToken(value: string | null): value is 'burn_token' {
+    return value === 'burn_token';
 }
 
 export function NewRelicDialog({
@@ -77,7 +75,7 @@ export function NewRelicDialog({
                     </DialogTitle>
                     <DialogDescription className="break-words">
                         {entry?.is_bound
-                            ? 'Bound — you must equip this (unless every eligible slot is blocked by a Shame/Scar token or another Bound Relic). It can never be dropped, tucked, trashed, or traded once equipped.'
+                            ? 'Bound — you must equip this (unless every eligible slot is blocked by a Burn token or another Bound Relic). It can never be dropped, tucked, trashed, or traded once equipped.'
                             : 'Equip it now (this drops whatever is in that slot), or drop it face-up here instead.'}
                     </DialogDescription>
                 </DialogHeader>
@@ -111,7 +109,7 @@ export function NewRelicDialog({
                                     <p className="min-w-0 text-xs break-words text-muted-foreground">
                                         {current === null && 'Currently empty.'}
                                         {isStatusToken(current) &&
-                                            `Blocked by a ${current === 'shame_token' ? 'Shame' : 'Scar'} token.`}
+                                            'Blocked by a Burn token.'}
                                         {blockedByBound &&
                                             `Blocked by a Bound Relic (${currentEntry?.name ?? current}).`}
                                         {current !== null &&

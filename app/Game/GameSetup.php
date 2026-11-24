@@ -102,6 +102,11 @@ final class GameSetup
                 'actions_remaining' => 0,
                 'equipped' => array_fill_keys(self::EQUIP_SLOTS, null),
                 'holding' => [],
+                // Shame Zone — a plain counter, mirroring golem['shame'].
+                // Burn still lives in an equip slot (see 'equipped'
+                // above); only Shame moved out of it (rules.md
+                // 2026-11-24 revision).
+                'shame' => 0,
                 'move_blocked_this_turn' => false,
                 'has_moved_this_turn' => false,
                 'tucked_cards' => [],

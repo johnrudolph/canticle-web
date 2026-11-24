@@ -165,11 +165,11 @@ test('Shamlessness ignores any attempt to gain a Shame token', function () {
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'mind' => 'shamlessness'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
 
-    $reflection = new ReflectionMethod(GameEngine::class, 'applyStatusToken');
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyShame');
     $reflection->setAccessible(true);
-    [$state] = $reflection->invoke(null, $state, 'wanderer_a', 'shame_token');
+    [$state] = $reflection->invoke(null, $state, 'wanderer_a');
 
-    expect($state->wanderers['wanderer_a']['equipped'])->not->toContain('shame_token');
+    expect($state->wanderers['wanderer_a']['shame'])->toBe(0);
 });
 
 test('Creative alterations lets a Relic equip into any slot', function () {
@@ -795,10 +795,9 @@ test('Prohibition of inscribing gives the actor who added a Glyph 1 Shame token,
     $reflection->setAccessible(true);
     $type = GlyphCatalog::find($state->glyphDeck[0])?->type;
     [$state, $events] = $reflection->invoke(null, $state, $type, 'wanderer_a');
-    [$state, $resolveEvents] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_status_token_choice', 'slot' => 'body']);
 
-    expect(collect($resolveEvents)->pluck('type'))->toContain('wanderer_shamed')
-        ->and($state->wanderers['wanderer_a']['equipped'])->toContain('shame_token');
+    expect(collect($events)->pluck('type'))->toContain('wanderer_shamed')
+        ->and($state->wanderers['wanderer_a']['shame'])->toBe(1);
 });
 
 test('Prohibition of inscribing gives the Golem 1 Shame instead, for a Golem-attributed Glyph add (no actorRole)', function () {

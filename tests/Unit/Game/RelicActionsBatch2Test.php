@@ -75,10 +75,9 @@ test('Pointed finger adds Shame to the Golem and the caster, then trashes itself
     $shameBefore = $state->golem['shame'];
 
     [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'pointed-finger']);
-    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_status_token_choice', 'slot' => 'body']);
 
     expect($state->golem['shame'])->toBe($shameBefore + 1)
-        ->and($state->wanderers['wanderer_a']['equipped'])->toContain('shame_token')
+        ->and($state->wanderers['wanderer_a']['shame'])->toBe(1)
         ->and($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBeNull()
         ->and(collect($events)->pluck('type'))->toContain('relic_trashed')
         ->and($state->prophecy)->toBe(1);
@@ -156,11 +155,9 @@ test('Ban of dangerous ideas Shames every Wanderer and Golem on a matching-branc
     $golemShameBefore = $state->golem['shame'];
 
     [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'ban-of-dangerous-ideas']);
-    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_status_token_choice', 'slot' => 'body']);
-    [$state] = GameEngine::apply($state, 'wanderer_b', ['type' => 'resolve_status_token_choice', 'slot' => 'body']);
 
-    expect($state->wanderers['wanderer_a']['equipped'])->toContain('shame_token')
-        ->and($state->wanderers['wanderer_b']['equipped'])->toContain('shame_token')
+    expect($state->wanderers['wanderer_a']['shame'])->toBe(1)
+        ->and($state->wanderers['wanderer_b']['shame'])->toBe(1)
         ->and($state->golem['shame'])->toBe($golemShameBefore + 1)
         ->and($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBeNull()
         ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
@@ -175,11 +172,9 @@ test('Writ of solitude Shames every Wanderer sharing a space with another Wander
     $golemShameBefore = $state->golem['shame'];
 
     [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'writ-of-solitude']);
-    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_status_token_choice', 'slot' => 'body']);
-    [$state] = GameEngine::apply($state, 'wanderer_b', ['type' => 'resolve_status_token_choice', 'slot' => 'body']);
 
-    expect($state->wanderers['wanderer_a']['equipped'])->toContain('shame_token')
-        ->and($state->wanderers['wanderer_b']['equipped'])->toContain('shame_token')
+    expect($state->wanderers['wanderer_a']['shame'])->toBe(1)
+        ->and($state->wanderers['wanderer_b']['shame'])->toBe(1)
         ->and($state->golem['shame'])->toBe($golemShameBefore + 1)
         ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
 });
