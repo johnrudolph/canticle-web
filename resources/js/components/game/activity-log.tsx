@@ -154,6 +154,8 @@ export function describe(
             return `${card(event.payload.card_key)} is removed from the Golem's discard pile.`;
         case 'golem_card_resolved':
             return `Golem plays ${(event.payload.name as string) ?? card(event.payload.card_key)}.`;
+        case 'golem_card_doubled':
+            return `Double Down repeats ${card(event.payload.card_key)} early, before it's played for real next.`;
         case 'golem_card_tapped':
             return `A tapped Golem card (${(event.payload.name as string) ?? card(event.payload.card_key)}) does nothing.`;
         case 'golem_card_skipped':

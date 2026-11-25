@@ -281,6 +281,29 @@ test('Adaptive sends a card that dealt damage to the bottom of the draw pile ins
         ->and(collect($state->golem['draw_pile'])->pluck('key'))->toContain('pound');
 });
 
+test('Double Down resolves the next Golem card twice and emits golem_card_doubled for the bonus play', function () {
+    // array_pop() reads the END of 'revealed' — put Double Down last
+    // so it's the one golemPlayCards() pops first at i=0; Pound is then
+    // whatever's left at the new end, i.e. the "next" card it doubles.
+    $state = startedGame(); // both wanderers + Golem share the hub by default
+    $state = $state->with(['golem' => $state->golemWith(['revealed' => [
+        ['key' => 'pound', 'tapped' => false],
+        ['key' => 'double-down', 'tapped' => false],
+    ]])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 15])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'golemPlayCards');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state, 2);
+
+    $doubled = collect($events)->firstWhere('type', 'golem_card_doubled');
+
+    expect($doubled)->not->toBeNull()
+        ->and($doubled['payload']['card_key'])->toBe('pound')
+        ->and($state->wanderers['wanderer_a']['hp'])->toBe(5) // Pound's 5 damage, twice
+        ->and($state->golem['discard_pile'])->toBe(['double-down', 'pound']); // only popped/discarded once each, not twice
+});
+
 test('Accusing gives a Wanderer 1 Shame when a Golem attack actually costs them Health', function () {
     $state = startedGame();
     $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['accusing']])]);

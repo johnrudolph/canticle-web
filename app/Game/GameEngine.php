@@ -5742,16 +5742,40 @@ final class GameEngine
             if ($effects['double_next'] && $i + 1 < $count) {
                 // "Perform the next Golem card twice" — doubles the next
                 // physical card's effect without consuming an extra one of
-                // this round's N plays; the loop's own i++ still advances
-                // onto it normally afterward.
+                // this round's N plays: both performances happen right here,
+                // and $i is bumped an extra step so the loop's own i++
+                // skips past the slot that would otherwise re-pop it.
+                //
+                // This card is popped and discarded immediately rather than
+                // left in `revealed` for the loop's NEXT iteration to find
+                // naturally — refillGolemRevealed() below appends freshly
+                // drawn cards to the END of `revealed`, so leaving it in
+                // place let a brand new card jump the queue ahead of it on
+                // the next pop, and the doubled card itself sat stranded in
+                // `revealed` instead of ever being discarded (confirmed via
+                // playtest confusion in game 2j3gwq, then reproduced: with
+                // revealed = [pound, double-down] and count = 2, the second
+                // iteration popped a freshly-drawn third card instead of
+                // Pound, and Pound never left `revealed` at all).
                 $golem = $state->golem;
                 if ($golem['revealed'] !== []) {
-                    $nextEntry = $golem['revealed'][array_key_last($golem['revealed'])];
+                    $nextEntry = array_pop($golem['revealed']);
+                    $golem['discard_pile'][] = $nextEntry['key'];
+                    $state = $state->with(['golem' => $golem]);
+
+                    $events[] = ['type' => 'golem_card_doubled', 'role_key' => null, 'payload' => ['card_key' => $nextEntry['key']]];
+
                     [$state, $extraEvents] = self::resolveOrSkipTappedCard($state, $nextEntry);
                     $events = [...$events, ...$extraEvents];
-
                     [$state, $forgivingEvents] = self::applyForgivingHeal($state);
                     $events = [...$events, ...$forgivingEvents];
+
+                    [$state, $extraEvents] = self::resolveOrSkipTappedCard($state, $nextEntry);
+                    $events = [...$events, ...$extraEvents];
+                    [$state, $forgivingEvents] = self::applyForgivingHeal($state);
+                    $events = [...$events, ...$forgivingEvents];
+
+                    $i++;
                 }
             }
 
