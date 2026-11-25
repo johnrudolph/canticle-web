@@ -74,7 +74,6 @@ const PROMPTED_RELICS = new Set([
     'cabalist-brew',
     'golem-log',
     'merchants-gloves',
-    'artists-insight',
     'golem-prod',
 ]);
 
@@ -105,10 +104,10 @@ const ALLY_TARGETABLE_RELICS = new Set([
  * has no dispatch entry for any of them, so clicking it would hit the
  * no-op default arm and waste the action for nothing. Two different
  * reasons land a Relic here:
- *   - Rejuvenation gown/Guide rope/Rally/The ties that bind: the bonus
- *     is baked directly into moveWanderer() itself and fires
- *     automatically on the Wanderer's own next normal move — there's
- *     no separate "Use" at all.
+ *   - Rejuvenation gown/Guide rope/Rally/The ties that bind/Artist's
+ *     smock: the bonus is baked directly into moveWanderer() itself
+ *     and fires automatically on the Wanderer's own next normal move —
+ *     there's no separate "Use" at all.
  *   - Telekinesis/Laborer's Jacket: real Action Relics, but each needs
  *     its own dedicated move type (telekinesis_move,
  *     laborers_jacket_move_allies — see the `freeActions` entries in
@@ -121,6 +120,7 @@ const NO_GENERIC_USE_RELICS = new Set([
     'the-ties-that-bind',
     'telekenesis',
     'laborers-jacket',
+    'artists-insight',
 ]);
 
 const TUCK_LABELS: Record<'bazaar' | 'cathedral', string> = {

@@ -578,38 +578,6 @@ export default function GameShow({ game }: { game: GameSummary }) {
                 return;
             }
 
-            case 'artists-insight': {
-                if (!casterCell) return;
-                const directions: string[] = [];
-                const stepPick = (fromCell: Cell) => {
-                    setBoardPick({
-                        description: `Artist's insight: move (step ${directions.length + 1} of 2) — or cancel to finish with ${directions.length}.`,
-                        eligible: new Set(
-                            occupiedNeighbors(fromCell, state.board).map(
-                                cellKey,
-                            ),
-                        ),
-                        onPick: (cell) => {
-                            const direction = directionBetween(fromCell, cell);
-                            if (!direction) return;
-                            directions.push(direction);
-                            if (directions.length >= 2) {
-                                setBoardPick(null);
-                                submitMove(role, {
-                                    type: 'use_relic',
-                                    relic_key: relicKey,
-                                    directions,
-                                });
-                            } else {
-                                stepPick(cell);
-                            }
-                        },
-                    });
-                };
-                stepPick(casterCell);
-                return;
-            }
-
             case 'teleportation-stone': {
                 const allyCandidates = (
                     allyRole ? [allyRole] : otherWanderers

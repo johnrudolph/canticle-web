@@ -8,6 +8,20 @@ use App\Game\InvalidMoveException;
 // loaded in the same run. It puts both Wanderers and the Golem on the
 // hub cell [1, 0], adjacent to all 5 other starting cells.
 
+test('Artist\'s smock grants its holder +1 action refund on every move, automatically', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'bag' => 'artists-insight'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+    $actionsBefore = $state->wanderers['wanderer_a']['actions_remaining'];
+
+    $direction = Board::directionBetween([1, 0], [0, 1]);
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $direction]);
+
+    // -1 to move, +1 from Artist's smock.
+    expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe($actionsBefore);
+});
+
 test('Divine robes heals everyone, regardless of distance, while on a 📖 space', function () {
     $state = startedGame();
     $board = $state->board;
@@ -75,43 +89,50 @@ test('Divine solidarity is rejected outright alone', function () {
 
 // Warlock's robes requires the chosen Ally to share the caster's
 // space (same "Ally" definition used everywhere else, via
-// resolveAllyTarget). Artist's insight (🦶2, purely self-directed —
-// moves whoever's actorRole the move resolves with) cleanly reveals
-// which of the two actually performed the borrowed action, since it
-// doesn't care about $move['target_role'] at all.
+// resolveAllyTarget). A keen eye (search the shared space's Relic
+// pile into the performer's own 'holding', purely self-directed)
+// cleanly reveals which of the two actually performed the borrowed
+// action, since it doesn't care about $move['target_role'] at all —
+// only whichever actorRole it resolves with gains the found Relics.
 
 test('Warlock\'s robes lets an Ally perform the action from one of the caster\'s other Relics', function () {
     $state = startedGame();
-    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'warlocks-robes', 'bag' => 'artists-insight'];
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'relics' => ['filler-relic-1', 'filler-relic-2']];
+    $state = $state->with(['board' => $board]);
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'warlocks-robes', 'bag' => 'a-keen-eye'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
     [$state] = GameEngine::apply($state, 'wanderer_a', [
         'type' => 'use_relic', 'relic_key' => 'warlocks-robes', 'target_role' => 'wanderer_b',
-        'mode' => 'ally_uses_mine', 'other_relic_key' => 'artists-insight', 'directions' => ['NE'],
+        'mode' => 'ally_uses_mine', 'other_relic_key' => 'a-keen-eye',
     ]);
 
-    expect($state->wanderers['wanderer_b']['cell'])->toBe([2, 0]) // the Ally performed it, moving themselves
-        ->and($state->wanderers['wanderer_a']['cell'])->toBe([1, 0])
-        ->and($state->wanderers['wanderer_a']['equipped']['bag'])->toBe('artists-insight'); // borrowed, not trashed
+    expect($state->wanderers['wanderer_b']['holding'])->toEqualCanonicalizing(['filler-relic-1', 'filler-relic-2']) // the Ally performed it, finding the Relics themselves
+        ->and($state->wanderers['wanderer_a']['holding'])->toBe([])
+        ->and($state->wanderers['wanderer_a']['equipped']['bag'])->toBe('a-keen-eye'); // borrowed, not trashed
 });
 
 test('Warlock\'s robes lets the caster perform the action from an Ally\'s Relic', function () {
     $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'relics' => ['filler-relic-1', 'filler-relic-2']];
+    $state = $state->with(['board' => $board]);
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'warlocks-robes'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
-    $bEquipped = [...$state->wanderers['wanderer_b']['equipped'], 'bag' => 'artists-insight'];
+    $bEquipped = [...$state->wanderers['wanderer_b']['equipped'], 'bag' => 'a-keen-eye'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['equipped' => $bEquipped])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
     [$state] = GameEngine::apply($state, 'wanderer_a', [
         'type' => 'use_relic', 'relic_key' => 'warlocks-robes', 'target_role' => 'wanderer_b',
-        'mode' => 'i_use_theirs', 'other_relic_key' => 'artists-insight', 'directions' => ['NE'],
+        'mode' => 'i_use_theirs', 'other_relic_key' => 'a-keen-eye',
     ]);
 
-    expect($state->wanderers['wanderer_a']['cell'])->toBe([2, 0]) // the caster performed it, moving themselves
-        ->and($state->wanderers['wanderer_b']['cell'])->toBe([1, 0])
-        ->and($state->wanderers['wanderer_b']['equipped']['bag'])->toBe('artists-insight'); // borrowed, not trashed
+    expect($state->wanderers['wanderer_a']['holding'])->toEqualCanonicalizing(['filler-relic-1', 'filler-relic-2']) // the caster performed it, finding the Relics themselves
+        ->and($state->wanderers['wanderer_b']['holding'])->toBe([])
+        ->and($state->wanderers['wanderer_b']['equipped']['bag'])->toBe('a-keen-eye'); // borrowed, not trashed
 });
 
 test('Emperor\'s Knowledge\'s move bonus requires Emperor\'s Knowledge itself equipped', function () {

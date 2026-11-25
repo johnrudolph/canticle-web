@@ -1407,7 +1407,6 @@ final class GameEngine
         }
 
         return match ($baseKey) {
-            'artists-insight' => [...self::relicMove($state, $actorRole, $move, 2), false],
             'a-keen-eye' => [...self::relicSearchN($state, $actorRole, 2), false],
             'alms-for-the-poor' => [...self::relicHealBelowThreshold($state, 6), false],
             'burial-robes' => [...self::relicHealSharedCell($state, $actorRole, 15), false],
@@ -1795,38 +1794,6 @@ final class GameEngine
             ['type' => 'emperor_timepiece_swap', 'role_key' => $actorRole, 'payload' => ['new_emperor_role' => $actorRole, 'new_wanderer_role' => RoleKeys::EMPEROR]],
             ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => 1]],
         ], true];
-    }
-
-    /**
-     * @param  array<string, mixed>  $move
-     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
-     */
-    private static function relicMove(GameState $state, string $actorRole, array $move, int $maxSteps): array
-    {
-        $directions = array_slice((array) ($move['directions'] ?? []), 0, $maxSteps);
-        $events = [];
-
-        foreach ($directions as $direction) {
-            $wanderer = $state->wanderers[$actorRole];
-            $to = Board::neighbor($wanderer['cell'], (string) $direction);
-
-            if (! array_key_exists(Board::key($to), $state->board)) {
-                break;
-            }
-
-            if (self::entryBlocked($state, $actorRole, $to)) {
-                break;
-            }
-
-            $fromCell = $wanderer['cell'];
-            $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['cell' => $to])]);
-            $events[] = ['type' => 'wanderer_moved', 'role_key' => $actorRole, 'payload' => ['to' => $to, 'free' => true]];
-
-            [$state, $e] = self::moveDarkShacklesGolem($state, $actorRole, $fromCell, $to);
-            $events = [...$events, ...$e];
-        }
-
-        return [$state, $events];
     }
 
     /**
@@ -4884,6 +4851,16 @@ final class GameEngine
         // on the move itself rather than literally chaining steps.
         if (in_array('buoyant', $state->golem['glyphs'], true)) {
             $actionsRemaining += 2;
+        }
+
+        // Artist's smock: "Move as usual, but move +1 space" — a
+        // standing bonus on top of whatever Roads already grant, not a
+        // separate Action (rules.md 2026-11-?: previously a 2-step
+        // teleport Action relic under its old name, Artist's insight).
+        // Modeled the same way as Buoyant/Emperor's Knowledge above:
+        // refund 1 action on every move its holder makes.
+        if (in_array('artists-insight', $wanderer['equipped'], true)) {
+            $actionsRemaining += 1;
         }
 
         // Revelatory Glyph: "When moving, Wanderers may choose to lose

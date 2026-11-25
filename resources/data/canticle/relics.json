@@ -98,20 +98,6 @@
         "is_event": "Hide"
     },
     {
-        "key": "inscribe-3",
-        "print": false,
-        "name": "Inscribe",
-        "location": "",
-        "slot": "Mind",
-        "type": "Action",
-        "symbol": "⏳",
-        "effect": "If on the Golem's space, add a ⏳ Glyph to its mat. Then, gain 📜 and trash this.",
-        "slot_emoji": "🧠",
-        "is_action": "Show",
-        "is_passive": "Hide",
-        "is_event": "Hide"
-    },
-    {
         "key": "past-troubles",
         "print": true,
         "name": "Past troubles",
