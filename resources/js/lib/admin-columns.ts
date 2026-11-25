@@ -1,25 +1,5 @@
 import type { ColumnDef } from '@/types/admin';
 
-/** Branches a Location can produce / a Relic can belong to (by symbol). */
-export const BRANCHES = [
-    'Agriculture',
-    'Art',
-    'Commerce',
-    'Dark',
-    'Engineering',
-    'Fire',
-    'Golem',
-    'Law',
-    'Magic',
-    'Music',
-    'Religion',
-    'Solidarity',
-    'Time',
-];
-
-/** Relic `symbol` only ever takes one of these (no Relics in Agriculture/Commerce/Engineering). */
-export const RELIC_SYMBOLS = ['⏳', '⚖️', '✨', '🌑', '🎨', '🐾', '📖', '🤝', '🔥', '🎶'];
-
 export const RELIC_SLOTS = ['Body', 'Mind', 'Hand', 'Bag'];
 
 export const RELIC_TYPES = ['Action', 'Passive', 'Event'];
@@ -28,8 +8,13 @@ export const RELIC_TYPES = ['Action', 'Passive', 'Event'];
  * slot_emoji/is_action/is_passive/is_event are server-computed from
  * slot/type (see RelicController::beforeSave) — deliberately absent
  * here, never rendered as editable fields.
+ *
+ * `symbols` comes from the backend (RelicController::extraProps'
+ * `relicSymbols`, sourced from App\Models\Cards\Branch) rather than a
+ * hardcoded list here — this file used to keep its own copy of the
+ * branch taxonomy and it drifted out of sync with the backend's.
  */
-export function relicColumns(locationNames: string[]): ColumnDef[] {
+export function relicColumns(locationNames: string[], symbols: string[]): ColumnDef[] {
     return [
         {
             key: 'location',
@@ -56,7 +41,7 @@ export function relicColumns(locationNames: string[]): ColumnDef[] {
             label: 'Symbol',
             type: 'select',
             filterable: true,
-            options: RELIC_SYMBOLS,
+            options: symbols,
         },
         { key: 'effect', label: 'Effect', type: 'textarea', showInTable: true },
     ];
@@ -71,26 +56,39 @@ export function relicColumns(locationNames: string[]): ColumnDef[] {
  * Relics table, never something to type in directly.
  * has_shard/has_tree stay real editable fields — nothing else implies
  * them.
+ *
+ * `branches` comes from the backend (LocationController::extraProps'
+ * `branches`, sourced from App\Models\Cards\Branch) rather than a
+ * hardcoded list here — this file used to keep its own copy of the
+ * branch taxonomy and it drifted out of sync with the backend's.
  */
-export const LOCATION_COLUMNS: ColumnDef[] = [
-    { key: 'lore', label: 'Lore', type: 'textarea' },
-    { key: 'rule', label: 'Rule', type: 'textarea', showInTable: true },
-    { key: 'costs', label: 'Costs', type: 'multiselect', options: BRANCHES },
-    { key: 'produces', label: 'Produces', type: 'select', filterable: true, options: BRANCHES },
-    { key: 'relics', label: 'Relics', type: 'text', showInTable: true },
-    { key: 'is_starter', label: 'Is starter', type: 'boolean' },
-    { key: 'is_advanced', label: 'Is advanced', type: 'boolean' },
-    { key: 'has_shard', label: 'Has shard', type: 'boolean' },
-    { key: 'has_tree', label: 'Has tree', type: 'boolean' },
-];
+export function locationColumns(branches: string[]): ColumnDef[] {
+    return [
+        { key: 'lore', label: 'Lore', type: 'textarea' },
+        { key: 'rule', label: 'Rule', type: 'textarea', showInTable: true },
+        { key: 'costs', label: 'Costs', type: 'multiselect', options: branches },
+        { key: 'produces', label: 'Produces', type: 'select', filterable: true, options: branches },
+        { key: 'relics', label: 'Relics', type: 'text', showInTable: true },
+        { key: 'is_starter', label: 'Is starter', type: 'boolean' },
+        { key: 'is_advanced', label: 'Is advanced', type: 'boolean' },
+        { key: 'has_shard', label: 'Has shard', type: 'boolean' },
+        { key: 'has_tree', label: 'Has tree', type: 'boolean' },
+    ];
+}
 
-/** Same branch universe as RELIC_SYMBOLS, plus 👺 — the malevolent/self-inscription marker with no Relic-branch equivalent. */
-export const GLYPH_TYPES = [...RELIC_SYMBOLS, '👺'];
-
-export const GLYPH_COLUMNS: ColumnDef[] = [
-    { key: 'type', label: 'Type', type: 'select', filterable: true, options: GLYPH_TYPES },
-    { key: 'description', label: 'Description', type: 'textarea', showInTable: true },
-];
+/**
+ * `types` comes from the backend (GlyphController::extraProps'
+ * `glyphTypes`, sourced from App\Models\Cards\Branch plus the 👺
+ * malevolent marker) rather than a hardcoded list here — this file used
+ * to keep its own copy of the branch taxonomy and it drifted out of
+ * sync with the backend's.
+ */
+export function glyphColumns(types: string[]): ColumnDef[] {
+    return [
+        { key: 'type', label: 'Type', type: 'select', filterable: true, options: types },
+        { key: 'description', label: 'Description', type: 'textarea', showInTable: true },
+    ];
+}
 
 export const GOLEM_CARD_COLUMNS: ColumnDef[] = [
     { key: 'action', label: 'Action', type: 'textarea', showInTable: true },

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Models\Cards\Branch;
 use App\Models\Cards\Location;
 use App\Models\Cards\Relic;
 
@@ -15,9 +16,6 @@ class RelicController extends CardController
         'Bag' => '👝',
         '' => '',
     ];
-
-    /** The branch emojis a Relic's `symbol` ever takes (no Relics in Agriculture/Commerce/Engineering). */
-    private const RELIC_SYMBOLS = ['⏳', '⚖️', '✨', '🌑', '🎨', '🐾', '📖', '🤝', '🔥', '🎶'];
 
     protected function modelClass(): string
     {
@@ -44,6 +42,10 @@ class RelicController extends CardController
         return [
             'locationNames' => Location::query()->orderBy('name')->pluck('name'),
             'relicSummary' => $this->buildRelicSummary(),
+            // Single source of truth for the frontend's symbol picker —
+            // see Branch's own docblock for why this exists instead of
+            // a second hardcoded copy in admin-columns.ts.
+            'relicSymbols' => Branch::relicSymbols(),
         ];
     }
 
@@ -67,7 +69,7 @@ class RelicController extends CardController
     private function buildRelicSummary(): array
     {
         $slots = array_keys(self::SLOT_EMOJI);
-        $symbols = self::RELIC_SYMBOLS;
+        $symbols = Branch::relicSymbols();
 
         $matrix = [];
         foreach ($slots as $slot) {
@@ -89,7 +91,7 @@ class RelicController extends CardController
 
     protected function rules(): array
     {
-        $symbols = implode(',', self::RELIC_SYMBOLS);
+        $symbols = implode(',', Branch::relicSymbols());
 
         return [
             'print' => ['boolean'],

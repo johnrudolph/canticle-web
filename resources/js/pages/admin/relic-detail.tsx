@@ -11,10 +11,12 @@ export default function AdminRelicDetail({
     card,
     locationNames,
     relicSummary,
+    relicSymbols,
 }: {
     card: CardRecord;
     locationNames: string[];
     relicSummary: RelicSummary;
+    relicSymbols: string[];
 }) {
     return (
         <>
@@ -25,7 +27,7 @@ export default function AdminRelicDetail({
                 <RelicSlotTypeMatrix summary={relicSummary} />
                 <CardFields
                     card={card}
-                    columns={relicColumns(locationNames)}
+                    columns={relicColumns(locationNames, relicSymbols)}
                     morphType="relic"
                     updateUrl={(id) => relics.update(id).url}
                     destroyUrl={(id) => relics.destroy(id).url}

@@ -13,13 +13,15 @@ export default function AdminRelics({
     cards,
     locationNames,
     relicSummary,
+    relicSymbols,
 }: {
     cards: CardRecord[];
     locationNames: string[];
     relicSummary: RelicSummary;
+    relicSymbols: string[];
 }) {
     const [editing, setEditing] = useState<CardRecord | null | 'new'>(null);
-    const columns = relicColumns(locationNames);
+    const columns = relicColumns(locationNames, relicSymbols);
 
     return (
         <>

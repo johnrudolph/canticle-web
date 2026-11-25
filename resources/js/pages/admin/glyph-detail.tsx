@@ -1,12 +1,18 @@
 import { Head, router } from '@inertiajs/react';
 import { AdminNav } from '@/components/admin/admin-nav';
 import { CardFields } from '@/components/admin/card-fields';
-import { GLYPH_COLUMNS } from '@/lib/admin-columns';
+import { glyphColumns } from '@/lib/admin-columns';
 import comments from '@/routes/admin/comments';
 import glyphs from '@/routes/admin/glyphs';
 import type { CardRecord } from '@/types/admin';
 
-export default function AdminGlyphDetail({ card }: { card: CardRecord }) {
+export default function AdminGlyphDetail({
+    card,
+    glyphTypes,
+}: {
+    card: CardRecord;
+    glyphTypes: string[];
+}) {
     return (
         <>
             <Head title={card.name} />
@@ -15,7 +21,7 @@ export default function AdminGlyphDetail({ card }: { card: CardRecord }) {
                 <h1 className="text-2xl font-semibold">{card.name}</h1>
                 <CardFields
                     card={card}
-                    columns={GLYPH_COLUMNS}
+                    columns={glyphColumns(glyphTypes)}
                     morphType="glyph"
                     updateUrl={(id) => glyphs.update(id).url}
                     destroyUrl={(id) => glyphs.destroy(id).url}

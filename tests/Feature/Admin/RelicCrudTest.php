@@ -1,9 +1,23 @@
 <?php
 
+use App\Models\Cards\Branch;
 use App\Models\Cards\Relic;
 
 // adminUser() is declared in the sibling LocationCrudTest.php, loaded in
 // the same run.
+
+test('every relic-eligible Branch is accepted as a symbol — regression test for drift between this validator and the enum', function () {
+    $admin = adminUser();
+
+    foreach (Branch::relicSymbols() as $symbol) {
+        $this->actingAs($admin)->post('/admin/relics', [
+            'name' => "Every Symbol Test ({$symbol})",
+            'slot' => 'Hand',
+            'type' => 'Passive',
+            'symbol' => $symbol,
+        ])->assertSessionDoesntHaveErrors('symbol');
+    }
+});
 
 test('creating a relic computes slot_emoji from slot and is_action/is_passive/is_event from type', function () {
     $admin = adminUser();

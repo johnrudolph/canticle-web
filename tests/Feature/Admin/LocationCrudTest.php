@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Cards\Branch;
 use App\Models\Cards\Location;
 use App\Models\User;
 
@@ -124,6 +125,17 @@ test('relic_names is derived from Relics whose location points at this Location,
 
     expect($location->relic_names)->toBe('Specific Relic A, Specific Relic B')
         ->and($location->has_specific_relics)->toBeTrue();
+});
+
+test('every Branch case is accepted as a produces value — regression test for drift between this validator and the enum', function () {
+    $admin = adminUser();
+
+    foreach (Branch::cases() as $branch) {
+        $this->actingAs($admin)->post('/admin/locations', [
+            'name' => "Every Branch Test ({$branch->value})",
+            'produces' => $branch->value,
+        ])->assertSessionDoesntHaveErrors('produces');
+    }
 });
 
 test('an invalid location produces/cost branch is rejected', function () {

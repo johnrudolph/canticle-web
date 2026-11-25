@@ -2,17 +2,13 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Models\Cards\Branch;
 use App\Models\Cards\Glyph;
 
 class GlyphController extends CardController
 {
-    /**
-     * The branch emojis a Glyph's `type` ever takes — same universe as
-     * RelicController::RELIC_SYMBOLS (no Glyphs in Agriculture/Commerce/
-     * Engineering either), plus 👺, the malevolent/self-inscription
-     * marker that has no Relic-branch equivalent.
-     */
-    private const GLYPH_TYPES = ['⏳', '⚖️', '✨', '🌑', '🎨', '🐾', '📖', '🤝', '🔥', '🎶', '👺'];
+    /** The malevolent/self-inscription marker — not a branch, so it's not in Branch, but a Glyph's `type` can still take it. */
+    private const MALEVOLENT_MARKER = '👺';
 
     protected function modelClass(): string
     {
@@ -34,9 +30,19 @@ class GlyphController extends CardController
         return 'admin/glyph-detail';
     }
 
+    protected function extraProps(): array
+    {
+        return [
+            // Single source of truth for the frontend's type picker —
+            // see Branch's own docblock for why this exists instead of
+            // a second hardcoded copy in admin-columns.ts.
+            'glyphTypes' => [...Branch::relicSymbols(), self::MALEVOLENT_MARKER],
+        ];
+    }
+
     protected function rules(): array
     {
-        $types = implode(',', self::GLYPH_TYPES);
+        $types = implode(',', [...Branch::relicSymbols(), self::MALEVOLENT_MARKER]);
 
         return [
             'print' => ['boolean'],

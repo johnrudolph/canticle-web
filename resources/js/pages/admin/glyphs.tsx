@@ -3,15 +3,20 @@ import { useState } from 'react';
 import { AdminNav } from '@/components/admin/admin-nav';
 import { CardEditModal } from '@/components/admin/card-edit-modal';
 import { CardTable } from '@/components/admin/card-table';
-import { GLYPH_COLUMNS } from '@/lib/admin-columns';
+import { glyphColumns } from '@/lib/admin-columns';
 import comments from '@/routes/admin/comments';
 import glyphs from '@/routes/admin/glyphs';
 import type { CardRecord } from '@/types/admin';
 
-const COLUMNS = GLYPH_COLUMNS;
-
-export default function AdminGlyphs({ cards }: { cards: CardRecord[] }) {
+export default function AdminGlyphs({
+    cards,
+    glyphTypes,
+}: {
+    cards: CardRecord[];
+    glyphTypes: string[];
+}) {
     const [editing, setEditing] = useState<CardRecord | null | 'new'>(null);
+    const COLUMNS = glyphColumns(glyphTypes);
 
     return (
         <>

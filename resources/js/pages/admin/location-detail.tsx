@@ -2,7 +2,7 @@ import { Head, Link, router } from '@inertiajs/react';
 import { AdminNav } from '@/components/admin/admin-nav';
 import { BranchSummaryTable } from '@/components/admin/branch-summary-table';
 import { CardFields } from '@/components/admin/card-fields';
-import { LOCATION_COLUMNS } from '@/lib/admin-columns';
+import { locationColumns } from '@/lib/admin-columns';
 import comments from '@/routes/admin/comments';
 import locations from '@/routes/admin/locations';
 import relics from '@/routes/admin/relics';
@@ -12,10 +12,12 @@ export default function AdminLocationDetail({
     card,
     branchSummary,
     linkedRelics,
+    branches,
 }: {
     card: CardRecord;
     branchSummary: BranchSummary;
     linkedRelics: LinkedRelic[];
+    branches: string[];
 }) {
     return (
         <>
@@ -45,7 +47,7 @@ export default function AdminLocationDetail({
                 )}
                 <CardFields
                     card={card}
-                    columns={LOCATION_COLUMNS}
+                    columns={locationColumns(branches)}
                     morphType="location"
                     updateUrl={(id) => locations.update(id).url}
                     destroyUrl={(id) => locations.destroy(id).url}

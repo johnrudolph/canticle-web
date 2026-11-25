@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Models\Cards\Branch;
 use App\Models\Cards\Location;
 use App\Models\Cards\Relic;
 use Inertia\Inertia;
@@ -9,23 +10,6 @@ use Inertia\Response;
 
 class LocationController extends CardController
 {
-    /** Branch name -> its emoji — same mapping Location rows already carry as produces/produces_emoji pairs. */
-    private const BRANCH_EMOJI = [
-        'Agriculture' => '🌾',
-        'Art' => '🎨',
-        'Commerce' => '🪙',
-        'Dark' => '🌑',
-        'Engineering' => '⚙️',
-        'Fire' => '🔥',
-        'Golem' => '🐾',
-        'Law' => '⚖️',
-        'Magic' => '✨',
-        'Music' => '🎶',
-        'Religion' => '📖',
-        'Solidarity' => '🤝',
-        'Time' => '⏳',
-    ];
-
     protected function modelClass(): string
     {
         return Location::class;
@@ -50,6 +34,10 @@ class LocationController extends CardController
     {
         return [
             'branchSummary' => $this->buildBranchSummary(),
+            // Single source of truth for the frontend's produces/costs
+            // pickers — see Branch's own docblock for why this exists
+            // instead of a second hardcoded copy in admin-columns.ts.
+            'branches' => array_keys(Branch::emojiMap()),
         ];
     }
 
@@ -119,7 +107,8 @@ class LocationController extends CardController
      */
     private function buildBranchSummary(): array
     {
-        $branches = array_keys(self::BRANCH_EMOJI);
+        $emojiMap = Branch::emojiMap();
+        $branches = array_keys($emojiMap);
 
         $locationCounts = array_fill_keys($branches, 0);
         foreach (Location::query()->pluck('produces') as $produces) {
@@ -128,7 +117,7 @@ class LocationController extends CardController
             }
         }
 
-        $branchBySymbol = array_flip(self::BRANCH_EMOJI);
+        $branchBySymbol = array_flip($emojiMap);
         $relicCounts = array_fill_keys($branches, 0);
         foreach (Relic::query()->pluck('symbol') as $symbol) {
             $branch = $branchBySymbol[$symbol] ?? null;
@@ -139,7 +128,7 @@ class LocationController extends CardController
 
         return [
             'branches' => $branches,
-            'emoji' => self::BRANCH_EMOJI,
+            'emoji' => $emojiMap,
             'relicCounts' => $relicCounts,
             'locationCounts' => $locationCounts,
         ];
@@ -147,7 +136,7 @@ class LocationController extends CardController
 
     protected function rules(): array
     {
-        $branches = implode(',', array_keys(self::BRANCH_EMOJI));
+        $branches = implode(',', array_keys(Branch::emojiMap()));
 
         return [
             'print' => ['boolean'],
@@ -167,6 +156,7 @@ class LocationController extends CardController
 
     protected function beforeSave(array $data): array
     {
+        $emojiMap = Branch::emojiMap();
         $costs = array_values($data['costs'] ?? []);
         unset($data['costs']);
 
@@ -175,11 +165,11 @@ class LocationController extends CardController
         }
 
         $data['cost_emoji'] = implode('', array_map(
-            fn (string $branch) => self::BRANCH_EMOJI[$branch] ?? '',
+            fn (string $branch) => $emojiMap[$branch] ?? '',
             $costs,
         ));
 
-        $data['produces_emoji'] = self::BRANCH_EMOJI[$data['produces'] ?? ''] ?? '';
+        $data['produces_emoji'] = $emojiMap[$data['produces'] ?? ''] ?? '';
         $data['has_cost'] = $costs !== [];
         $data['produces_anything'] = ($data['produces'] ?? '') !== '';
         $data['has_back_text'] = trim((string) ($data['rule'] ?? '')) !== '';
