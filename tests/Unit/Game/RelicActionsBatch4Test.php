@@ -121,6 +121,43 @@ test('Divine Chant requires the Cathedral, the Golem 2+ away, and all 3 instrume
         ->and($state->prophecy)->toBe(1);
 });
 
+test('Divine Chant works on any space that produces 📖, not just literally the Cathedral', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['3,0'] = ['location_key' => 'purification-pools', 'placed_round' => 2, 'relics' => [], 'infrastructure' => []]; // also produces 📖
+    $state = $state->with(['board' => $board]);
+    $equipped = [
+        ...$state->wanderers['wanderer_a']['equipped'],
+        'hand_left' => 'lute', 'hand_right' => 'pipe', 'bag' => 'tabor-drum', 'mind' => 'divine-chant',
+    ];
+    $wanderers = $state->wanderersWith('wanderer_a', ['cell' => [3, 0], 'equipped' => $equipped, 'hp' => 5]);
+    $state = $state->with(['wanderers' => $wanderers]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'divine-chant']);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(15)
+        ->and(collect($events)->pluck('type'))->toContain('relic_trashed');
+});
+
+test('Divine Chant is rejected outright on a space that does not produce 📖', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['3,0'] = ['location_key' => 'artists-hovel', 'placed_round' => 2, 'relics' => [], 'infrastructure' => []]; // produces 🎨, not 📖
+    $state = $state->with(['board' => $board]);
+    $equipped = [
+        ...$state->wanderers['wanderer_a']['equipped'],
+        'hand_left' => 'lute', 'hand_right' => 'pipe', 'bag' => 'tabor-drum', 'mind' => 'divine-chant',
+    ];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['cell' => [3, 0], 'equipped' => $equipped, 'hp' => 5])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'divine-chant']))
+        ->toThrow(InvalidMoveException::class);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(5);
+});
+
 test('Divine Chant is rejected outright if the Golem is less than 2 spaces away', function () {
     $state = startedGame();
     $board = $state->board;
@@ -178,6 +215,53 @@ test('Magistrate\'s robes caps the destination at 3 Shame tokens', function () {
 
     // Only 1 of the 2 could move before hitting the cap of 3.
     expect($state->golem['shame'])->toBe(3);
+});
+
+test('Funeral dirge halves everyone\'s HP, removes a Glyph, and trashes, once all 3 instruments are each on a 🌑 space', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'cursed-tomb']; // produces 🌑
+    $state = $state->with(['board' => $board]);
+    $equipped = [
+        ...$state->wanderers['wanderer_a']['equipped'],
+        'hand_left' => 'lute', 'hand_right' => 'pipe', 'mind' => 'funeral-dirge',
+    ];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 10])]);
+    $equippedB = [...$state->wanderers['wanderer_b']['equipped'], 'bag' => 'tabor-drum'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['equipped' => $equippedB, 'hp' => 7])]);
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['cruel']])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', [
+        'type' => 'use_relic', 'relic_key' => 'funeral-dirge', 'glyph_key' => 'cruel',
+    ]);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(5) // 10 - 5
+        ->and($state->wanderers['wanderer_b']['hp'])->toBe(4) // 7 - 3 (rounded down)
+        ->and($state->wanderers['wanderer_a']['equipped']['mind'])->toBeNull()
+        ->and($state->golem['glyphs'])->toBe([])
+        ->and(collect($events)->pluck('type'))->toContain('glyph_discarded');
+});
+
+test('Funeral dirge is rejected outright unless every instrument holder is on their own 🌑 space', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'artists-hovel']; // produces 🎨, not 🌑
+    $state = $state->with(['board' => $board]);
+    $equipped = [
+        ...$state->wanderers['wanderer_a']['equipped'],
+        'hand_left' => 'lute', 'hand_right' => 'pipe', 'mind' => 'funeral-dirge',
+    ];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 10])]);
+    $equippedB = [...$state->wanderers['wanderer_b']['equipped'], 'bag' => 'tabor-drum'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['equipped' => $equippedB, 'hp' => 7])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'funeral-dirge']))
+        ->toThrow(InvalidMoveException::class);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(10)
+        ->and($state->wanderers['wanderer_b']['hp'])->toBe(7);
 });
 
 test('Magistrate\'s robes is rejected outright off a ⚖️ space', function () {

@@ -114,6 +114,8 @@ export interface LocationCatalogEntry {
     produces_emoji: string | null;
     costs: string[];
     relic_count: number;
+    is_starter: boolean;
+    is_advanced: boolean;
 }
 
 export interface RelicCatalogEntry {
@@ -153,6 +155,9 @@ export interface GameSummary {
     status: 'lobby' | 'active' | 'finished' | 'abandoned';
     wanderer_count: number;
     golem_enabled: boolean;
+    exclude_advanced_locations: boolean;
+    emperor_picks_starting_locations: boolean;
+    starting_location_keys: string[] | null;
     is_host: boolean;
     my_roles: RoleKey[];
     roles: RoleSummary[];
@@ -168,6 +173,9 @@ export interface GamePollResponse {
     status: 'lobby' | 'active' | 'finished' | 'abandoned';
     wanderer_count: number;
     golem_enabled: boolean;
+    exclude_advanced_locations: boolean;
+    emperor_picks_starting_locations: boolean;
+    starting_location_keys: string[] | null;
     is_host: boolean;
     my_roles: RoleKey[];
     roles: RoleSummary[];

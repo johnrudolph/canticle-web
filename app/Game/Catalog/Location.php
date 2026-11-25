@@ -25,12 +25,13 @@ final class Location
         public readonly int $relicCount,
         public readonly ?string $dealsFromBranch, // which Relic deck this Location's pile is dealt from — usually the same symbol as $producesEmoji, but not always (Beds of poison deals 🌑 Relics despite producing nothing adjacency-wise); null for the few Locations with dynamic, city-wide dealing (Bazaar, Library) instead of a fixed branch
         public readonly bool $isStarter,
+        public readonly bool $isAdvanced,
         public readonly bool $hasShard,
         public readonly bool $hasTree,
     ) {}
 
     /**
-     * @return array{key: string, name: string, lore: string, back_text: ?string, produces: ?string, produces_emoji: ?string, costs: list<string>, relic_count: int}
+     * @return array{key: string, name: string, lore: string, back_text: ?string, produces: ?string, produces_emoji: ?string, costs: list<string>, relic_count: int, is_starter: bool, is_advanced: bool}
      */
     public function toArray(): array
     {
@@ -43,6 +44,8 @@ final class Location
             'produces_emoji' => $this->producesEmoji,
             'costs' => $this->costs,
             'relic_count' => $this->relicCount,
+            'is_starter' => $this->isStarter,
+            'is_advanced' => $this->isAdvanced,
         ];
     }
 }

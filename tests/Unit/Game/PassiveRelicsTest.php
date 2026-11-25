@@ -157,6 +157,7 @@ test('Builder\'s gloves raises the Infrastructure cap to 3 while a holder is on 
         relicCount: 0,
         dealsFromBranch: null,
         isStarter: false,
+        isAdvanced: false,
         hasShard: false,
         hasTree: false,
     );
@@ -1022,6 +1023,73 @@ test('Pen does not score if Pen was never built', function () {
     }
     $state = $state->with(['board' => $board]);
     $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['inverted', 'paradoxical', 'perplexing', 'parallel']])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyEndOfGameScoring');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state);
+
+    expect($state->prophecy)->toBe(0)
+        ->and($events)->toBe([]);
+});
+
+test('Builder\'s site grants 2 Prophecy at end of game if every Road is placed and one space has all 4 infrastructure types', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'builders-site-2', 'infrastructure' => ['monolith_shard', 'road', 'walls', 'fruit_tree']];
+    $state = $state->with(['board' => $board]);
+    $state = $state->with(['infrastructurePool' => [...$state->infrastructurePool, 'road' => 0]]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyEndOfGameScoring');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state);
+
+    expect($state->prophecy)->toBe(2)
+        ->and(collect($events)->pluck('type'))->toContain('prophecy_gained');
+});
+
+test('Builder\'s site does not score if any Road remains in the pool', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'builders-site-2', 'infrastructure' => ['monolith_shard', 'road', 'walls', 'fruit_tree']];
+    $state = $state->with(['board' => $board]);
+    $state = $state->with(['infrastructurePool' => [...$state->infrastructurePool, 'road' => 1]]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyEndOfGameScoring');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state);
+
+    expect($state->prophecy)->toBe(0)
+        ->and($events)->toBe([]);
+});
+
+test('Builder\'s site does not score if no single space has all 4 infrastructure types', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'builders-site-2', 'infrastructure' => ['monolith_shard', 'road']];
+    $state = $state->with(['board' => $board]);
+    $state = $state->with(['infrastructurePool' => [...$state->infrastructurePool, 'road' => 0]]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyEndOfGameScoring');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state);
+
+    expect($state->prophecy)->toBe(0)
+        ->and($events)->toBe([]);
+});
+
+test('Builder\'s site does not score if it was never built', function () {
+    $state = startedGame();
+    $board = $state->board;
+    // builders-site-2 is a starter Location — scrub any instance the
+    // random starting 6 happened to include first.
+    foreach ($board as $key => $entry) {
+        if ($entry['location_key'] === 'builders-site-2') {
+            $board[$key] = [...$entry, 'location_key' => 'artists-hovel'];
+        }
+    }
+    $board['1,0'] = [...$board['1,0'], 'infrastructure' => ['monolith_shard', 'road', 'walls', 'fruit_tree']];
+    $state = $state->with(['board' => $board]);
+    $state = $state->with(['infrastructurePool' => [...$state->infrastructurePool, 'road' => 0]]);
 
     $reflection = new ReflectionMethod(GameEngine::class, 'applyEndOfGameScoring');
     $reflection->setAccessible(true);

@@ -21,7 +21,8 @@
         "produces_emoji": "🌾",
         "has_cost": "Hide",
         "cost_emoji": "",
-        "is_starter": "Show"
+        "is_starter": "Show",
+        "is_advanced": "Hide"
     },
     {
         "key": "medicinal-herb-garden",
@@ -45,7 +46,8 @@
         "produces_emoji": "🌾",
         "has_cost": "Hide",
         "cost_emoji": "",
-        "is_starter": "Show"
+        "is_starter": "Show",
+        "is_advanced": "Hide"
     },
     {
         "key": "artists-hovel",
@@ -69,7 +71,8 @@
         "produces_emoji": "🎨",
         "has_cost": "Hide",
         "cost_emoji": "",
-        "is_starter": "Show"
+        "is_starter": "Show",
+        "is_advanced": "Hide"
     },
     {
         "key": "apprentices-bottega",
@@ -93,7 +96,8 @@
         "produces_emoji": "🎨",
         "has_cost": "Show",
         "cost_emoji": "🎨",
-        "is_starter": "Hide"
+        "is_starter": "Hide",
+        "is_advanced": "Hide"
     },
     {
         "key": "music-academy",
@@ -117,7 +121,8 @@
         "produces_emoji": "🎶",
         "has_cost": "Hide",
         "cost_emoji": "",
-        "is_starter": "Show"
+        "is_starter": "Show",
+        "is_advanced": "Show"
     },
     {
         "key": "bazaar",
@@ -141,7 +146,8 @@
         "produces_emoji": "🪙",
         "has_cost": "Hide",
         "cost_emoji": "",
-        "is_starter": "Show"
+        "is_starter": "Show",
+        "is_advanced": "Hide"
     },
     {
         "key": "cabalist-inferno",
@@ -165,7 +171,8 @@
         "produces_emoji": "🔥",
         "has_cost": "Hide",
         "cost_emoji": "",
-        "is_starter": "Show"
+        "is_starter": "Show",
+        "is_advanced": "Hide"
     },
     {
         "key": "cursed-tomb",
@@ -189,7 +196,8 @@
         "produces_emoji": "🌑",
         "has_cost": "Show",
         "cost_emoji": "📖🌑",
-        "is_starter": "Hide"
+        "is_starter": "Hide",
+        "is_advanced": "Hide"
     },
     {
         "key": "defenders-guild",
@@ -213,7 +221,8 @@
         "produces_emoji": "",
         "has_cost": "Hide",
         "cost_emoji": "",
-        "is_starter": "Show"
+        "is_starter": "Show",
+        "is_advanced": "Hide"
     },
     {
         "key": "pen",
@@ -237,7 +246,8 @@
         "produces_emoji": "🐾",
         "has_cost": "Hide",
         "cost_emoji": "",
-        "is_starter": "Show"
+        "is_starter": "Show",
+        "is_advanced": "Hide"
     },
     {
         "key": "house-of-cryptids",
@@ -261,7 +271,8 @@
         "produces_emoji": "🐾",
         "has_cost": "Show",
         "cost_emoji": "🐾✨",
-        "is_starter": "Hide"
+        "is_starter": "Hide",
+        "is_advanced": "Hide"
     },
     {
         "key": "school-of-law",
@@ -285,7 +296,8 @@
         "produces_emoji": "⚖️",
         "has_cost": "Hide",
         "cost_emoji": "",
-        "is_starter": "Show"
+        "is_starter": "Show",
+        "is_advanced": "Show"
     },
     {
         "key": "prison",
@@ -309,7 +321,8 @@
         "produces_emoji": "⚖️",
         "has_cost": "Show",
         "cost_emoji": "⚖️",
-        "is_starter": "Hide"
+        "is_starter": "Hide",
+        "is_advanced": "Show"
     },
     {
         "key": "monolith",
@@ -333,7 +346,8 @@
         "produces_emoji": "✨",
         "has_cost": "Hide",
         "cost_emoji": "",
-        "is_starter": "Show"
+        "is_starter": "Show",
+        "is_advanced": "Hide"
     },
     {
         "key": "scriptorium",
@@ -357,7 +371,8 @@
         "produces_emoji": "✨",
         "has_cost": "Show",
         "cost_emoji": "✨",
-        "is_starter": "Hide"
+        "is_starter": "Hide",
+        "is_advanced": "Hide"
     },
     {
         "key": "cathedral",
@@ -381,7 +396,8 @@
         "produces_emoji": "📖",
         "has_cost": "Hide",
         "cost_emoji": "",
-        "is_starter": "Show"
+        "is_starter": "Show",
+        "is_advanced": "Hide"
     },
     {
         "key": "catacombs",
@@ -405,7 +421,8 @@
         "produces_emoji": "📖",
         "has_cost": "Show",
         "cost_emoji": "📖",
-        "is_starter": "Hide"
+        "is_starter": "Hide",
+        "is_advanced": "Hide"
     },
     {
         "key": "purification-pools",
@@ -429,7 +446,8 @@
         "produces_emoji": "📖",
         "has_cost": "Hide",
         "cost_emoji": "",
-        "is_starter": "Show"
+        "is_starter": "Show",
+        "is_advanced": "Hide"
     },
     {
         "key": "exile",
@@ -453,7 +471,8 @@
         "produces_emoji": "",
         "has_cost": "Show",
         "cost_emoji": "📖⚖️",
-        "is_starter": "Hide"
+        "is_starter": "Hide",
+        "is_advanced": "Show"
     },
     {
         "key": "town-square",
@@ -477,7 +496,8 @@
         "produces_emoji": "🤝",
         "has_cost": "Hide",
         "cost_emoji": "",
-        "is_starter": "Show"
+        "is_starter": "Show",
+        "is_advanced": "Hide"
     },
     {
         "key": "golem-sanctuary",
@@ -501,7 +521,8 @@
         "produces_emoji": "🤝",
         "has_cost": "Show",
         "cost_emoji": "🤝🐾",
-        "is_starter": "Hide"
+        "is_starter": "Hide",
+        "is_advanced": "Hide"
     },
     {
         "key": "sundial",
@@ -525,7 +546,8 @@
         "produces_emoji": "⏳",
         "has_cost": "Hide",
         "cost_emoji": "",
-        "is_starter": "Show"
+        "is_starter": "Show",
+        "is_advanced": "Hide"
     },
     {
         "key": "enchanted-clocktower",
@@ -549,7 +571,8 @@
         "produces_emoji": "⏳",
         "has_cost": "Show",
         "cost_emoji": "⏳✨",
-        "is_starter": "Hide"
+        "is_starter": "Hide",
+        "is_advanced": "Hide"
     },
     {
         "key": "beds-of-poison",
@@ -573,7 +596,8 @@
         "produces_emoji": "🌑",
         "has_cost": "Show",
         "cost_emoji": "🌑🌾",
-        "is_starter": "Hide"
+        "is_starter": "Hide",
+        "is_advanced": "Hide"
     },
     {
         "key": "library",
@@ -597,7 +621,8 @@
         "produces_emoji": "",
         "has_cost": "Hide",
         "cost_emoji": "",
-        "is_starter": "Show"
+        "is_starter": "Show",
+        "is_advanced": "Hide"
     },
     {
         "key": "garbage-barricade",
@@ -621,7 +646,8 @@
         "produces_emoji": "",
         "has_cost": "Hide",
         "cost_emoji": "",
-        "is_starter": "Show"
+        "is_starter": "Show",
+        "is_advanced": "Hide"
     },
     {
         "key": "fragile-chapel",
@@ -645,6 +671,32 @@
         "produces_emoji": "📖",
         "has_cost": "Show",
         "cost_emoji": "📖",
-        "is_starter": "Hide"
+        "is_starter": "Hide",
+        "is_advanced": "Hide"
+    },
+    {
+        "key": "builders-site-2",
+        "print": true,
+        "name": "Builder's site",
+        "Relics": "",
+        "lore": "To construct a functional, efficient city.",
+        "rule": "End of game: If every Road is in play, and there is a space that contains every type of infrastructure, gain 📜📜.",
+        "cost_1": "",
+        "cost_2": "",
+        "cost_3": "",
+        "cost_4": "",
+        "produces": "Engineering",
+        "has_shard": "Hide",
+        "has_tree": "Hide",
+        "has_back_text": "Show",
+        "Relic_names": "",
+        "has_relics": "Hide",
+        "has_specific_relics": "Hide",
+        "produces_anything": "Show",
+        "produces_emoji": "⚙️",
+        "has_cost": "Hide",
+        "cost_emoji": "",
+        "is_starter": "Show",
+        "is_advanced": "Hide"
     }
 ]

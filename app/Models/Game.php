@@ -22,6 +22,9 @@ class Game extends Model
         'status',
         'wanderer_count',
         'golem_enabled',
+        'exclude_advanced_locations',
+        'emperor_picks_starting_locations',
+        'starting_location_keys',
         'round',
         'phase',
         'state',
@@ -32,6 +35,9 @@ class Game extends Model
     {
         return [
             'golem_enabled' => 'boolean',
+            'exclude_advanced_locations' => 'boolean',
+            'emperor_picks_starting_locations' => 'boolean',
+            'starting_location_keys' => 'array',
             'state' => 'array',
         ];
     }

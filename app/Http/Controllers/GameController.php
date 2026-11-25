@@ -177,6 +177,9 @@ class GameController extends Controller
             'status' => $game->status,
             'wanderer_count' => $game->wanderer_count,
             'golem_enabled' => $game->golem_enabled,
+            'exclude_advanced_locations' => $game->exclude_advanced_locations,
+            'emperor_picks_starting_locations' => $game->emperor_picks_starting_locations,
+            'starting_location_keys' => $game->starting_location_keys,
             'is_host' => $game->created_by_user_id === Auth::id(),
             'my_roles' => $myRoles,
             'roles' => $game->roles->map(fn ($role) => [

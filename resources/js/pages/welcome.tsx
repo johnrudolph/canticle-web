@@ -15,7 +15,12 @@ interface OpenGame {
 }
 
 export default function Welcome({ games: openGames }: { games: OpenGame[] }) {
-    const createForm = useForm({ wanderer_count: 2, golem_enabled: false });
+    const createForm = useForm({
+        wanderer_count: 2,
+        golem_enabled: false,
+        exclude_advanced_locations: false,
+        emperor_picks_starting_locations: false,
+    });
     const joinForm = useForm({ code: '' });
 
     return (
@@ -83,6 +88,51 @@ export default function Welcome({ games: openGames }: { games: OpenGame[] }) {
                                     className="font-normal"
                                 >
                                     Human-controlled Golem
+                                </Label>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <Checkbox
+                                    id="exclude_advanced_locations"
+                                    checked={
+                                        createForm.data
+                                            .exclude_advanced_locations
+                                    }
+                                    onCheckedChange={(checked) =>
+                                        createForm.setData(
+                                            'exclude_advanced_locations',
+                                            checked === true,
+                                        )
+                                    }
+                                />
+                                <Label
+                                    htmlFor="exclude_advanced_locations"
+                                    className="font-normal"
+                                >
+                                    Exclude Advanced Locations (recommended
+                                    for your first game)
+                                </Label>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <Checkbox
+                                    id="emperor_picks_starting_locations"
+                                    checked={
+                                        createForm.data
+                                            .emperor_picks_starting_locations
+                                    }
+                                    onCheckedChange={(checked) =>
+                                        createForm.setData(
+                                            'emperor_picks_starting_locations',
+                                            checked === true,
+                                        )
+                                    }
+                                />
+                                <Label
+                                    htmlFor="emperor_picks_starting_locations"
+                                    className="font-normal"
+                                >
+                                    Emperor picks their 6 starting Locations
                                 </Label>
                             </div>
                             <p className="text-xs text-muted-foreground">

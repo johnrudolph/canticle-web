@@ -94,6 +94,35 @@ test('Bazaar as a starting Location sees every other starting Location\'s branch
     expect($sawBazaar)->toBeTrue();
 });
 
+test('excludeAdvanced keeps every is_advanced Location out of both the board and the deck', function () {
+    for ($i = 0; $i < 25; $i++) {
+        $state = GameSetup::create(2, excludeAdvanced: true);
+
+        foreach ($state->board as $cell) {
+            expect(LocationCatalog::find($cell['location_key'])?->isAdvanced)->toBeFalse();
+        }
+
+        foreach ([...$state->locationDeck, ...$state->locationHand] as $key) {
+            expect(LocationCatalog::find($key)?->isAdvanced)->toBeFalse();
+        }
+    }
+});
+
+test('chosenStarterKeys places exactly those 6 Locations on the board instead of a random deal', function () {
+    $chosen = ['field', 'medicinal-herb-garden', 'artists-hovel', 'bazaar', 'cabalist-inferno', 'defenders-guild'];
+
+    $state = GameSetup::create(2, chosenStarterKeys: $chosen);
+
+    $boardKeys = array_values(array_map(fn ($cell) => $cell['location_key'], $state->board));
+
+    expect($boardKeys)->toEqualCanonicalizing($chosen);
+
+    foreach ($chosen as $key) {
+        expect($state->locationDeck)->not->toContain($key);
+        expect($state->locationHand)->not->toContain($key);
+    }
+});
+
 test('the Emperor draw deck never contains a duplicate of a starting Location', function () {
     $state = GameSetup::create(2);
 

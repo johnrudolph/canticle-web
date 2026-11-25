@@ -1210,11 +1210,11 @@ final class GameEngine
                 ? null
                 : 'Soothing Lullaby requires sharing the Golem\'s space with all 3 🎶 Relics equipped there.',
 
-            'divine-chant' => $state->board[$casterCellKey]['location_key'] === 'cathedral'
+            'divine-chant' => $location?->producesEmoji === '📖'
                 && $golemCell !== null && Board::distance($casterCell, $golemCell, $state->board) >= 2
                 && count(array_intersect($instruments, self::equippedAt($state, $casterCellKey))) === count($instruments)
                 ? null
-                : 'Divine Chant requires the Cathedral, the Golem 2+ spaces away, and all 3 🎶 Relics equipped on your space.',
+                : 'Divine Chant requires a space that produces 📖, the Golem 2+ spaces away, and all 3 🎶 Relics equipped on your space.',
 
             'poof' => self::monolithShardsWithin($state, $casterCell, 2) >= 12
                 ? null
@@ -1238,6 +1238,10 @@ final class GameEngine
             'aural-inscription' => self::auralInscriptionReady($state)
                 ? null
                 : 'Aural inscription requires every Wanderer exactly 1 space from the Golem, each on their own space, with all 3 🎶 Relics equipped somewhere among them.',
+
+            'funeral-dirge' => self::funeralDirgeReady($state)
+                ? null
+                : 'Funeral dirge requires all 3 🎶 Relics equipped by Wanderers, each on a space that produces 🌑.',
 
             default => null,
         };
@@ -1353,6 +1357,39 @@ final class GameEngine
     }
 
     /**
+     * Funeral dirge: unlike Divine Chant/Soothing Lullaby/Aural
+     * inscription's shared-space conditions, each instrument holder
+     * here just needs to be on their OWN space that produces 🌑 —
+     * they don't need to share a space with each other at all.
+     */
+    private static function funeralDirgeReady(GameState $state): bool
+    {
+        foreach (['lute', 'pipe', 'tabor-drum'] as $instrumentKey) {
+            $holderRole = null;
+
+            foreach (self::activeWanderers($state) as $role => $cell) {
+                if (in_array($instrumentKey, $state->wanderers[$role]['equipped'], true)) {
+                    $holderRole = $role;
+                    break;
+                }
+            }
+
+            if ($holderRole === null) {
+                return false;
+            }
+
+            $holderCell = $state->wanderers[$holderRole]['cell'];
+            $holderLocation = LocationCatalog::find($state->board[Board::key($holderCell)]['location_key']);
+
+            if ($holderLocation?->producesEmoji !== '🌑') {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * $baseKey has any "-N" disambiguating suffix stripped — safe for
      * every Relic name except "Inscribe," whose dozen reprints are
      * mechanically distinct cards despite the shared title (different
@@ -1404,6 +1441,7 @@ final class GameEngine
             'an-insight-from-the-future' => self::relicInsightFromTheFuture($state, $move),
             'aural-inscription' => self::relicAuralInscription($state, $actorRole),
             'divine-chant' => self::relicDivineChant($state, $actorRole),
+            'funeral-dirge' => self::relicFuneralDirge($state, $move),
             'magistrates-robes' => [...self::relicMagistratesRobes($state, $actorRole, $move), false],
             'immolation-rags' => self::relicImmolationRags($state, $actorRole),
             'divine-cabalist-pyre' => self::relicDivineCabalistPyre($state, $actorRole, $move),
@@ -3382,9 +3420,9 @@ final class GameEngine
     }
 
     /**
-     * Divine Chant: "If you are on the Cathedral, the Golem 2+ spaces
-     * away, and all 3 🎶 Relics are equipped by Wanderers in your
-     * space: 🌿 all Wanderers to full health, then trash this and
+     * Divine Chant: "If you are on a space that produces 📖, the Golem
+     * 2+ spaces away, and all 3 🎶 Relics are equipped by Wanderers in
+     * your space: 🌿 all Wanderers to full health, then trash this and
      * gain 📜."
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
@@ -3393,8 +3431,9 @@ final class GameEngine
     {
         $casterCell = $state->wanderers[$actorRole]['cell'];
         $golemCell = $state->golem['cell'];
+        $casterLocation = LocationCatalog::find($state->board[Board::key($casterCell)]['location_key']);
 
-        if ($state->board[Board::key($casterCell)]['location_key'] !== 'cathedral') {
+        if ($casterLocation?->producesEmoji !== '📖') {
             return [$state, [], false];
         }
 
@@ -3423,6 +3462,61 @@ final class GameEngine
 
         $state = $state->with(['prophecy' => $state->prophecy + 1]);
         $events[] = ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => 1]];
+
+        return [$state, $events, true];
+    }
+
+    /**
+     * Funeral dirge: "If all 3 🎶 Relics are equipped by Wanderers on
+     * spaces that produce 🌑: all Wanderers lose X HP where X = (half
+     * of their HP, rounded down). Trash this, and remove 1 Glyph from
+     * the Golem mat." Unlike Divine Chant/Soothing Lullaby's "all 3 in
+     * the SAME space," each instrument holder here just needs to be on
+     * their OWN 🌑-producing space — they don't need to share one.
+     * $move['glyph_key'] picks which active Glyph to remove (same
+     * pattern as Rod); a missing/invalid key just skips that part, the
+     * rest of the effect (and the trash) still happens.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
+     */
+    private static function relicFuneralDirge(GameState $state, array $move): array
+    {
+        if (! self::funeralDirgeReady($state)) {
+            return [$state, [], false];
+        }
+
+        $events = [];
+
+        foreach ($state->wanderers as $role => $wanderer) {
+            if ($wanderer['cell'] === null) {
+                continue;
+            }
+
+            $loss = intdiv($wanderer['hp'], 2);
+
+            if ($loss <= 0) {
+                continue;
+            }
+
+            $hp = $wanderer['hp'] - $loss;
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
+            $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => $loss]];
+
+            if ($hp === 0) {
+                $state = $state->with(['wanderers' => $state->wanderersWith($role, ['was_ever_exhausted' => true])]);
+            }
+        }
+
+        $glyphKey = (string) ($move['glyph_key'] ?? '');
+        $glyphs = $state->golem['glyphs'];
+        $index = array_search($glyphKey, $glyphs, true);
+
+        if ($index !== false) {
+            unset($glyphs[$index]);
+            $state = $state->with(['golem' => $state->golemWith(['glyphs' => array_values($glyphs)])]);
+            $events[] = ['type' => 'glyph_discarded', 'role_key' => null, 'payload' => ['glyph_key' => $glyphKey]];
+        }
 
         return [$state, $events, true];
     }
@@ -5410,6 +5504,36 @@ final class GameEngine
             if ($nonSelfInscriptionCount >= 3) {
                 $state = $state->with(['prophecy' => $state->prophecy + 3]);
                 $events[] = ['type' => 'prophecy_gained', 'role_key' => null, 'payload' => ['amount' => 3, 'reason' => 'pen']];
+            }
+        }
+
+        // Builder's site: "End of game: If every Road is in play, and
+        // there is a space that contains every type of infrastructure,
+        // gain 📜📜." "Every Road is in play" means none left in the
+        // fixed pool; "every type" means all 4 — Monolith Shard, Road,
+        // Walls, Fruit tree — on one single space.
+        $buildersSiteBuilt = false;
+        foreach ($state->board as $entry) {
+            if ($entry['location_key'] === 'builders-site-2') {
+                $buildersSiteBuilt = true;
+                break;
+            }
+        }
+
+        if ($buildersSiteBuilt && ($state->infrastructurePool['road'] ?? 0) === 0) {
+            $infrastructureTypes = ['monolith_shard', 'road', 'walls', 'fruit_tree'];
+            $hasFullSpace = false;
+
+            foreach ($state->board as $entry) {
+                if (count(array_intersect($infrastructureTypes, $entry['infrastructure'])) === count($infrastructureTypes)) {
+                    $hasFullSpace = true;
+                    break;
+                }
+            }
+
+            if ($hasFullSpace) {
+                $state = $state->with(['prophecy' => $state->prophecy + 2]);
+                $events[] = ['type' => 'prophecy_gained', 'role_key' => null, 'payload' => ['amount' => 2, 'reason' => 'builders-site']];
             }
         }
 

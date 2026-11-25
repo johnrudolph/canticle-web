@@ -44,6 +44,7 @@ final class LocationCatalog
                 relicCount: self::leadingInt($row->relics),
                 dealsFromBranch: self::dealsFromBranch($row->relics),
                 isStarter: $row->is_starter,
+                isAdvanced: $row->is_advanced,
                 hasShard: $row->has_shard,
                 hasTree: $row->has_tree,
             );

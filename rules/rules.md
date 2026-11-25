@@ -54,10 +54,13 @@ Canticle is an asymmetrical game with an Emperor and Wanderers. The minimum numb
 1. Set the Golem Mat near the gameplay area. Shuffle all golem cards and form a face-up deck. draw the first 3 golem cards and lay them to the right of the deck. shuffle the glyph deck and set it nearby.
 2. Give each Wanderer a Wanderer Mat. Place a Health Tracker at the highest number of your health tracker.
 3. Set all relic decks, separated by type, facedown near the Emperor. Shuffle each.
-4. The Emperor shuffles all locations, finds the first 6 starter locations, and places them in the configuration shown below. Shuffle the rest of the location cards to form the location deck near the emperor. The emperor draws 5 locations. For each location, draw the number of relics from the corresponding pile and place those relics facedown on the locations.
+4. The Emperor shuffles all locations, finds the first 6 starter locations, and places them in the configuration shown below. Shuffle the rest of the location cards to form the location deck near the emperor. The emperor draws 5 locations. For each location, draw the number of relics from the corresponding pile and place those relics facedown on the locations. 
 5. Place the Emperor's mat in front of the emperor and place all infrastructure tokens on their mat. 
+6. The Emperor places the Golem on any space. Each Wanderer places their wanderer token on any space. 
 
-4. The Emperor places the Golem on any space. Each Wanderer places their wanderer token on any space. 
+*Designer notes*
+- Several Locations say "Advanced" on the back. Remove these for your first game. Add them back in once you are comfortable with the basic rules.
+- Once you know the game better, the Emperor may choose their 6 starting locations. There might be unexplored places they want to see. 
 
 # Gameplay
 The game takes place over 8 rounds. Each round, the emperor, then the wanderers, then the golem will play. arrange your seats in a way where that will naturally happen in clockwise order.

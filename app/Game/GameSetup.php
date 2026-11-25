@@ -21,9 +21,28 @@ final class GameSetup
 
     private const GOLEM_REVEALED_SIZE = 3;
 
-    public static function create(int $wandererCount): GameState
+    /**
+     * @param  ?list<string>  $chosenStarterKeys  When set (the Emperor
+     *                                             hand-picked their 6 starting Locations instead of a random
+     *                                             deal — rules.md: "the Emperor may choose their 6 starting
+     *                                             locations"), used verbatim as the 6 starting keys instead of
+     *                                             the random draw below. Caller is responsible for validating
+     *                                             these are exactly 6 distinct is_starter keys.
+     */
+    public static function create(int $wandererCount, bool $excludeAdvanced = false, ?array $chosenStarterKeys = null): GameState
     {
         $deck = array_keys(LocationCatalog::all());
+
+        // "Several Locations say 'Advanced' on the back. Remove these
+        // for your first game." — filtered out of the whole deck
+        // (starters and buildable alike), not just the starting 6.
+        if ($excludeAdvanced) {
+            $deck = array_values(array_filter(
+                $deck,
+                fn (string $key) => LocationCatalog::find($key)?->isAdvanced !== true,
+            ));
+        }
+
         shuffle($deck);
 
         // The 6 starting Locations are placed on the board, not built —
@@ -32,11 +51,15 @@ final class GameSetup
         // exactly the cost-free ones, since a build cost is meaningless
         // for a space that's simply there from the start). Locations
         // not marked as starters stay in the deck to be built normally.
-        $freeKeys = array_values(array_filter(
-            $deck,
-            fn (string $key) => LocationCatalog::find($key)?->isStarter === true,
-        ));
-        $startingKeys = array_splice($freeKeys, 0, 6);
+        if ($chosenStarterKeys !== null) {
+            $startingKeys = $chosenStarterKeys;
+        } else {
+            $freeKeys = array_values(array_filter(
+                $deck,
+                fn (string $key) => LocationCatalog::find($key)?->isStarter === true,
+            ));
+            $startingKeys = array_splice($freeKeys, 0, 6);
+        }
         $deck = array_values(array_diff($deck, $startingKeys));
         $startingCells = Board::startingCells();
 

@@ -37,6 +37,8 @@ class LobbyController extends Controller
         $validated = $request->validate([
             'wanderer_count' => ['required', 'integer', 'in:2,3'],
             'golem_enabled' => ['sometimes', 'boolean'],
+            'exclude_advanced_locations' => ['sometimes', 'boolean'],
+            'emperor_picks_starting_locations' => ['sometimes', 'boolean'],
         ]);
 
         $game = Game::create([
@@ -44,6 +46,8 @@ class LobbyController extends Controller
             'status' => 'lobby',
             'wanderer_count' => $validated['wanderer_count'],
             'golem_enabled' => $validated['golem_enabled'] ?? false,
+            'exclude_advanced_locations' => $validated['exclude_advanced_locations'] ?? false,
+            'emperor_picks_starting_locations' => $validated['emperor_picks_starting_locations'] ?? false,
             'created_by_user_id' => Auth::id(),
         ]);
 

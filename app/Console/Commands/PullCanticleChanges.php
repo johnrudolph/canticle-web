@@ -185,6 +185,7 @@ class PullCanticleChanges extends Command
                 'has_cost' => $row['has_cost'] ? 'Show' : 'Hide',
                 'cost_emoji' => $row['cost_emoji'] ?? '',
                 'is_starter' => $row['is_starter'] ? 'Show' : 'Hide',
+                'is_advanced' => $row['is_advanced'] ? 'Show' : 'Hide',
             ],
             'relics' => fn (array $row) => [
                 'key' => $row['key'],

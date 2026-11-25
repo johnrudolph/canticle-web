@@ -1,3 +1,4 @@
+import type { FormDataConvertible } from '@inertiajs/core';
 import { Head, Link, router } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -55,6 +56,7 @@ import {
 import { home } from '@/routes';
 import games from '@/routes/games';
 import roles from '@/routes/games/roles';
+import startingLocations from '@/routes/games/startingLocations';
 import type {
     BoardCell,
     GamePollResponse,
@@ -195,6 +197,12 @@ export default function GameShow({ game }: { game: GameSummary }) {
     const [status, setStatus] = useState(game.status);
     const [roleList, setRoleList] = useState<RoleSummary[]>(game.roles);
     const [myRoles, setMyRoles] = useState<RoleKey[]>(game.my_roles);
+    const [startingLocationKeys, setStartingLocationKeys] = useState<
+        string[] | null
+    >(game.starting_location_keys);
+    const [pickedStarterKeys, setPickedStarterKeys] = useState<string[]>(
+        game.starting_location_keys ?? [],
+    );
     const [state, setState] = useState(game.state);
     const [events, setEvents] = useState(game.events);
     const [processing, setProcessing] = useState(false);
@@ -402,21 +410,21 @@ export default function GameShow({ game }: { game: GameSummary }) {
         setStatus(payload.status);
         setRoleList(payload.roles);
         setMyRoles(payload.my_roles);
+        setStartingLocationKeys(payload.starting_location_keys);
         setState(payload.state);
         setEvents(payload.events);
     }
 
     useGamePolling(game.code, applyPoll);
 
-    function post(url: string) {
-        router.post(
-            url,
-            {},
-            {
-                onStart: () => setProcessing(true),
-                onFinish: () => setProcessing(false),
-            },
-        );
+    function post(
+        url: string,
+        data: Record<string, FormDataConvertible> = {},
+    ) {
+        router.post(url, data, {
+            onStart: () => setProcessing(true),
+            onFinish: () => setProcessing(false),
+        });
     }
 
     async function submitMove(
@@ -1122,11 +1130,115 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                 ))}
                             </div>
 
+                            {game.emperor_picks_starting_locations && (
+                                <div className="space-y-2 rounded-md border p-3">
+                                    <p className="text-sm font-medium">
+                                        Starting Locations{' '}
+                                        <span className="text-muted-foreground">
+                                            ({pickedStarterKeys.length}/6
+                                            selected)
+                                        </span>
+                                    </p>
+                                    {myRoles.includes('emperor') ? (
+                                        <>
+                                            <div className="flex flex-wrap gap-2">
+                                                {Object.entries(
+                                                    game.location_catalog,
+                                                )
+                                                    .filter(
+                                                        ([, loc]) =>
+                                                            loc.is_starter &&
+                                                            (!game.exclude_advanced_locations ||
+                                                                !loc.is_advanced),
+                                                    )
+                                                    .map(([key, loc]) => {
+                                                        const selected =
+                                                            pickedStarterKeys.includes(
+                                                                key,
+                                                            );
+
+                                                        return (
+                                                            <button
+                                                                key={key}
+                                                                type="button"
+                                                                onClick={() =>
+                                                                    setPickedStarterKeys(
+                                                                        (
+                                                                            prev,
+                                                                        ) =>
+                                                                            selected
+                                                                                ? prev.filter(
+                                                                                      (
+                                                                                          k,
+                                                                                      ) =>
+                                                                                          k !==
+                                                                                          key,
+                                                                                  )
+                                                                                : prev.length <
+                                                                                    6
+                                                                                  ? [
+                                                                                        ...prev,
+                                                                                        key,
+                                                                                    ]
+                                                                                  : prev,
+                                                                    )
+                                                                }
+                                                                className={`rounded-md border px-2 py-1 text-xs ${
+                                                                    selected
+                                                                        ? 'border-primary bg-primary/10'
+                                                                        : ''
+                                                                }`}
+                                                            >
+                                                                {loc.name}
+                                                            </button>
+                                                        );
+                                                    })}
+                                            </div>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                disabled={
+                                                    processing ||
+                                                    pickedStarterKeys.length !==
+                                                        6
+                                                }
+                                                onClick={() =>
+                                                    post(
+                                                        startingLocations.store(
+                                                            {
+                                                                game: game.code,
+                                                            },
+                                                        ).url,
+                                                        {
+                                                            location_keys:
+                                                                pickedStarterKeys,
+                                                        },
+                                                    )
+                                                }
+                                            >
+                                                Save starting Locations
+                                            </Button>
+                                        </>
+                                    ) : (
+                                        <p className="text-xs text-muted-foreground">
+                                            {startingLocationKeys
+                                                ? 'The Emperor has chosen their starting Locations.'
+                                                : 'Waiting on the Emperor to choose their 6 starting Locations.'}
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
                             <div className="flex flex-wrap gap-2">
                                 {game.is_host && (
                                     <Button
                                         size="sm"
-                                        disabled={processing}
+                                        disabled={
+                                            processing ||
+                                            (game.emperor_picks_starting_locations &&
+                                                startingLocationKeys ===
+                                                    null)
+                                        }
                                         onClick={() =>
                                             post(games.start(game.code).url)
                                         }

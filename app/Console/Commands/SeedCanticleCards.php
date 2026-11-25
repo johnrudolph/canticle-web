@@ -77,6 +77,7 @@ class SeedCanticleCards extends Command
                 'relics' => trim((string) ($row['Relics'] ?? '')),
                 'relic_names' => trim((string) ($row['Relic_names'] ?? '')),
                 'is_starter' => $this->isShow($row['is_starter'] ?? null),
+                'is_advanced' => $this->isShow($row['is_advanced'] ?? null),
                 'has_shard' => $this->isShow($row['has_shard'] ?? null),
                 'has_tree' => $this->isShow($row['has_tree'] ?? null),
                 'has_back_text' => $this->isShow($row['has_back_text'] ?? null),
