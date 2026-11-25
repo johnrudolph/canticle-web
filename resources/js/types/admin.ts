@@ -26,7 +26,12 @@ export interface ColumnDef {
     type: 'text' | 'textarea' | 'boolean' | 'select' | 'multiselect';
     /** Show a filter dropdown over this column's distinct values (list/table view only). */
     filterable?: boolean;
-    /** Show this column in the list table too (not just the edit form) — meant for the one "main text" field per card type, rendered wide. */
+    /**
+     * Show this column in the list table too (not just the edit form).
+     * The first such column per card type also drives the quick-filter
+     * text match and the "Has 📜" filter (CardTable's `textColumn`) and
+     * renders wide; any additional ones still render as plain columns.
+     */
     showInTable?: boolean;
     /** Required for 'select'/'multiselect' — the fixed set of valid values. */
     options?: string[];
@@ -34,6 +39,8 @@ export interface ColumnDef {
     defaultValue?: string | boolean;
     /** 'select' only — set false for fields where blank/null is never a valid choice (e.g. Relic type). Default true. */
     allowNone?: boolean;
+    /** Custom cell renderer for the list table (e.g. links) — bypasses the default boolean-badge/plain-text rendering. Only consulted when showInTable is set. */
+    render?: (card: CardRecord) => import('react').ReactNode;
 }
 
 export type CardType = 'location' | 'relic' | 'glyph' | 'golem_card';

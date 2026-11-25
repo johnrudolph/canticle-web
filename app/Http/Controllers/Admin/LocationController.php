@@ -54,6 +54,36 @@ class LocationController extends CardController
     }
 
     /**
+     * Same {id, name} location-locked Relic list show() attaches for
+     * the detail page's link list — also attached per row here so the
+     * list table's "Required relics" column can link straight to each
+     * one without an extra round trip per card.
+     */
+    public function index(): Response
+    {
+        $cards = Location::query()->withTrashed()->with('comments')->orderBy('name')->get();
+
+        $relicsByLocation = Relic::query()
+            ->whereNotNull('location')
+            ->where('location', '!=', '')
+            ->orderBy('name')
+            ->get(['id', 'name', 'location'])
+            ->groupBy('location');
+
+        foreach ($cards as $card) {
+            $card->setAttribute(
+                'linked_relics',
+                ($relicsByLocation->get($card->name) ?? collect())->map(fn (Relic $r) => ['id' => $r->id, 'name' => $r->name])->values(),
+            );
+        }
+
+        return Inertia::render($this->pageComponent(), [
+            'cards' => $cards,
+            ...$this->extraProps(),
+        ]);
+    }
+
+    /**
      * The rare ⭐ location-locked Relics (Relic.location, matched by
      * name) that point at this specific Location — same relation
      * relic_names already summarizes as plain text, just also handed

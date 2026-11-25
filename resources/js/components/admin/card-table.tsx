@@ -18,6 +18,8 @@ interface CardTableProps {
     columns: ColumnDef[];
     onEdit: (card: CardRecord) => void;
     onNew: () => void;
+    /** Hide the Print column from the list table for card types where it's not useful. Default false (shown). */
+    hidePrint?: boolean;
 }
 
 function cellValue(card: CardRecord, key: string): string {
@@ -27,7 +29,13 @@ function cellValue(card: CardRecord, key: string): string {
     return String(value);
 }
 
-export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
+export function CardTable({
+    cards,
+    columns,
+    onEdit,
+    onNew,
+    hidePrint = false,
+}: CardTableProps) {
     const [sortKey, setSortKey] = useState('name');
     const [sortDesc, setSortDesc] = useState(false);
     const [showDeleted, setShowDeleted] = useState(false);
@@ -55,7 +63,11 @@ export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
         return options;
     }, [cards, filterableColumns]);
 
-    const textColumn = columns.find((c) => c.showInTable);
+    const showInTableColumns = columns.filter((c) => c.showInTable);
+    // The first showInTable column is the one quick-filter text match
+    // and the "Has 📜" filter key off, and the one rendered wide — any
+    // further showInTable columns still render, just as plain columns.
+    const textColumn = showInTableColumns[0];
 
     const baseCount = useMemo(
         () =>
@@ -132,9 +144,9 @@ export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
 
     const headerColumns: ColumnDef[] = [
         { key: 'name', label: 'Name', type: 'text' },
-        ...(textColumn ? [textColumn] : []),
-        { key: 'print', label: 'Print', type: 'boolean' },
-        ...columns.filter((c) => c.filterable),
+        ...showInTableColumns,
+        ...(hidePrint ? [] : [{ key: 'print', label: 'Print', type: 'boolean' as const }]),
+        ...columns.filter((c) => c.filterable && !c.showInTable),
     ];
 
     return (
@@ -230,7 +242,9 @@ export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
                                 <th
                                     key={col.key}
                                     className={`cursor-pointer px-3 py-2 text-left font-medium select-none ${
-                                        col.showInTable ? 'w-full min-w-xs' : 'whitespace-nowrap'
+                                        col.key === textColumn?.key
+                                            ? 'w-full min-w-xs'
+                                            : 'whitespace-nowrap'
                                     }`}
                                     onClick={() => toggleSort(col.key)}
                                 >
@@ -259,8 +273,15 @@ export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
                                                 ? 'whitespace-normal'
                                                 : 'whitespace-nowrap'
                                         }`}
+                                        onClick={
+                                            col.render
+                                                ? (e) => e.stopPropagation()
+                                                : undefined
+                                        }
                                     >
-                                        {col.type === 'boolean' ? (
+                                        {col.render ? (
+                                            col.render(card)
+                                        ) : col.type === 'boolean' ? (
                                             cellValue(card, col.key) ===
                                             'Yes' ? (
                                                 <Badge variant="secondary">

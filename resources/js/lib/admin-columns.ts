@@ -77,9 +77,9 @@ export const LOCATION_COLUMNS: ColumnDef[] = [
     { key: 'rule', label: 'Rule', type: 'textarea', showInTable: true },
     { key: 'costs', label: 'Costs', type: 'multiselect', options: BRANCHES },
     { key: 'produces', label: 'Produces', type: 'select', filterable: true, options: BRANCHES },
-    { key: 'relics', label: 'Relics', type: 'text' },
-    { key: 'is_starter', label: 'Is starter', type: 'boolean', filterable: true },
-    { key: 'is_advanced', label: 'Is advanced', type: 'boolean', filterable: true },
+    { key: 'relics', label: 'Relics', type: 'text', showInTable: true },
+    { key: 'is_starter', label: 'Is starter', type: 'boolean' },
+    { key: 'is_advanced', label: 'Is advanced', type: 'boolean' },
     { key: 'has_shard', label: 'Has shard', type: 'boolean' },
     { key: 'has_tree', label: 'Has tree', type: 'boolean' },
 ];
