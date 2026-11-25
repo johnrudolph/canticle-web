@@ -83,8 +83,11 @@ export const LOCATION_COLUMNS: ColumnDef[] = [
     { key: 'has_tree', label: 'Has tree', type: 'boolean' },
 ];
 
+/** Same branch universe as RELIC_SYMBOLS, plus 👺 — the malevolent/self-inscription marker with no Relic-branch equivalent. */
+export const GLYPH_TYPES = [...RELIC_SYMBOLS, '👺'];
+
 export const GLYPH_COLUMNS: ColumnDef[] = [
-    { key: 'type', label: 'Type', type: 'text', filterable: true },
+    { key: 'type', label: 'Type', type: 'select', filterable: true, options: GLYPH_TYPES },
     { key: 'description', label: 'Description', type: 'textarea', showInTable: true },
 ];
 
