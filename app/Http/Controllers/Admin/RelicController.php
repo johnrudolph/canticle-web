@@ -17,7 +17,7 @@ class RelicController extends CardController
     ];
 
     /** The branch emojis a Relic's `symbol` ever takes (no Relics in Agriculture/Commerce/Engineering). */
-    private const RELIC_SYMBOLS = ['⏳', '⚖️', '✨', '🌑', '🎨', '🐾', '📖', '🤝', '🔥'];
+    private const RELIC_SYMBOLS = ['⏳', '⚖️', '✨', '🌑', '🎨', '🐾', '📖', '🤝', '🔥', '🎶'];
 
     protected function modelClass(): string
     {

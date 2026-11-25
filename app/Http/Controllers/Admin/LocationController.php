@@ -20,6 +20,7 @@ class LocationController extends CardController
         'Golem' => '🐾',
         'Law' => '⚖️',
         'Magic' => '✨',
+        'Music' => '🎶',
         'Religion' => '📖',
         'Solidarity' => '🤝',
         'Time' => '⏳',

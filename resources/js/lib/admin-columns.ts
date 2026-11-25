@@ -11,13 +11,14 @@ export const BRANCHES = [
     'Golem',
     'Law',
     'Magic',
+    'Music',
     'Religion',
     'Solidarity',
     'Time',
 ];
 
 /** Relic `symbol` only ever takes one of these (no Relics in Agriculture/Commerce/Engineering). */
-export const RELIC_SYMBOLS = ['⏳', '⚖️', '✨', '🌑', '🎨', '🐾', '📖', '🤝', '🔥'];
+export const RELIC_SYMBOLS = ['⏳', '⚖️', '✨', '🌑', '🎨', '🐾', '📖', '🤝', '🔥', '🎶'];
 
 export const RELIC_SLOTS = ['Body', 'Mind', 'Hand', 'Bag'];
 
