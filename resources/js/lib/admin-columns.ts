@@ -79,6 +79,7 @@ export const LOCATION_COLUMNS: ColumnDef[] = [
     { key: 'produces', label: 'Produces', type: 'select', filterable: true, options: BRANCHES },
     { key: 'relics', label: 'Relics', type: 'text' },
     { key: 'is_starter', label: 'Is starter', type: 'boolean', filterable: true },
+    { key: 'is_advanced', label: 'Is advanced', type: 'boolean', filterable: true },
     { key: 'has_shard', label: 'Has shard', type: 'boolean' },
     { key: 'has_tree', label: 'Has tree', type: 'boolean' },
 ];

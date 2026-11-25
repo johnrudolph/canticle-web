@@ -25,6 +25,7 @@ class Location extends Model
         'relics',
         'relic_names',
         'is_starter',
+        'is_advanced',
         'has_shard',
         'has_tree',
         'has_back_text',
@@ -40,6 +41,7 @@ class Location extends Model
         return [
             'print' => 'boolean',
             'is_starter' => 'boolean',
+            'is_advanced' => 'boolean',
             'has_shard' => 'boolean',
             'has_tree' => 'boolean',
             'has_back_text' => 'boolean',

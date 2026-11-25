@@ -129,6 +129,7 @@ class LocationController extends CardController
             'produces' => ['nullable', 'string', "in:{$branches},"],
             'relics' => ['nullable', 'string', 'max:255'],
             'is_starter' => ['boolean'],
+            'is_advanced' => ['boolean'],
             'has_shard' => ['boolean'],
             'has_tree' => ['boolean'],
         ];
