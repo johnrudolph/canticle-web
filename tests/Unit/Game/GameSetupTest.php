@@ -69,14 +69,11 @@ test('Bazaar as a starting Location sees every other starting Location\'s branch
 
         $sawBazaar = true;
 
-        // Agriculture (🌾) and Commerce (🪙) have no Relic deck at all
-        // (see RelicDealer's docblock) — Bazaar can't deal from a
-        // branch that has nothing to deal, so those don't count toward
-        // the expected total even if a starter produces them.
-        // Engineering (⚙️) used to be in this list too — retired once
-        // no Location produces/costs it anymore (App\Models\Cards\
-        // Branch no longer has a case for it).
-        $branchesWithNoDeck = ['🌾', '🪙'];
+        // Agriculture (🌾), Commerce (🪙), and Engineering (⚙️) have no
+        // Relic deck at all (see RelicDealer's docblock) — Bazaar can't
+        // deal from a branch that has nothing to deal, so those don't
+        // count toward the expected total even if a starter produces them.
+        $branchesWithNoDeck = ['🌾', '🪙', '⚙️'];
 
         $producedEmojis = [];
         foreach ($state->board as $cell) {

@@ -8,20 +8,15 @@ test('every Branch case has an emoji', function () {
     }
 });
 
-test('relicSymbols excludes Agriculture/Commerce, nothing else', function () {
+test('relicSymbols excludes Agriculture/Commerce/Engineering, nothing else', function () {
     $withRelicNames = array_map(fn (Branch $b) => $b->name, Branch::withRelics());
     $excludedNames = array_values(array_diff(
         array_map(fn (Branch $b) => $b->name, Branch::cases()),
         $withRelicNames,
     ));
 
-    expect($excludedNames)->toEqualCanonicalizing(['Agriculture', 'Commerce'])
-        ->and(count(Branch::relicSymbols()))->toBe(count(Branch::cases()) - 2);
-});
-
-test('Engineering is no longer a valid branch — removed once nothing produced/cost it on prod', function () {
-    expect(array_keys(Branch::emojiMap()))->not->toContain('Engineering')
-        ->and(Branch::relicSymbols())->not->toContain('⚙️');
+    expect($excludedNames)->toEqualCanonicalizing(['Agriculture', 'Commerce', 'Engineering'])
+        ->and(count(Branch::relicSymbols()))->toBe(count(Branch::cases()) - 3);
 });
 
 test('emojiMap and relicSymbols stay in sync with each other for every shared branch', function () {

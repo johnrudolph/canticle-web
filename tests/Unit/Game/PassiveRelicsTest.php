@@ -130,6 +130,57 @@ test('Union Garb grants +1 action if the turn starts on a shared space', functio
     expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe(4); // 3 + 1
 });
 
+test('Builder\'s gloves raises the Infrastructure cap to 3 while a holder is on a ⚙️ space', function () {
+    // No printed Location currently produces Engineering (Builder's
+    // site, the one that did, was deleted on prod). LocationCatalog
+    // caches its DB read for the whole test process (see its own
+    // docblock/$cache), so creating a fresh row wouldn't be seen by it
+    // either — inject a fabricated entry straight into that cache
+    // instead, scoped to this test only (restored in `finally`).
+    // Done AFTER startedGame() so the real shuffled starting board/deck
+    // never sees this fake entry, only this test's own board tweak does.
+    $state = startedGame();
+
+    $catalogClass = new ReflectionClass(\App\Game\Catalog\LocationCatalog::class);
+    $cacheProperty = $catalogClass->getProperty('cache');
+    $cacheProperty->setAccessible(true);
+    $originalCache = $cacheProperty->getValue();
+    $cache = $originalCache ?? [];
+    $cache['test-engineering-place'] = new \App\Game\Catalog\Location(
+        key: 'test-engineering-place',
+        name: 'Test Engineering Place',
+        lore: '',
+        backText: null,
+        produces: 'Engineering',
+        producesEmoji: '⚙️',
+        costs: [],
+        relicCount: 0,
+        dealsFromBranch: null,
+        isStarter: false,
+        hasShard: false,
+        hasTree: false,
+    );
+    $cacheProperty->setValue(null, $cache);
+
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'test-engineering-place'];
+    $state = $state->with(['board' => $board]);
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'builders-gloves'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+
+    try {
+        foreach (['monolith_shard', 'road', 'fruit_tree'] as $type) {
+            [$state] = GameEngine::apply($state, 'emperor', [
+                'type' => 'place_infrastructure', 'infrastructure_type' => $type, 'cell' => [0, 1],
+            ]);
+        }
+
+        expect($state->infrastructurePlacedThisTurn)->toBe(3);
+    } finally {
+        $cacheProperty->setValue(null, $originalCache);
+    }
+});
+
 test('Dark shackles pulls its holder along when the Golem moves', function () {
     $state = startedGame();
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'dark-shackles'];
