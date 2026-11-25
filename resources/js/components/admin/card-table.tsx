@@ -27,10 +27,6 @@ function cellValue(card: CardRecord, key: string): string {
     return String(value);
 }
 
-function unresolvedCount(card: CardRecord): number {
-    return card.comments.filter((c) => c.resolved_at === null).length;
-}
-
 export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
     const [sortKey, setSortKey] = useState('name');
     const [sortDesc, setSortDesc] = useState(false);
@@ -246,9 +242,6 @@ export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
                                         : ''}
                                 </th>
                             ))}
-                            <th className="px-3 py-2 text-left font-medium">
-                                Comments
-                            </th>
                         </tr>
                     </thead>
                     <tbody>
@@ -279,23 +272,17 @@ export function CardTable({ cards, columns, onEdit, onNew }: CardTableProps) {
                                         ) : (
                                             cellValue(card, col.key)
                                         )}
+                                        {col.key === 'name' &&
+                                            card.deleted_at !== null && (
+                                                <Badge
+                                                    variant="outline"
+                                                    className="ml-1"
+                                                >
+                                                    deleted
+                                                </Badge>
+                                            )}
                                     </td>
                                 ))}
-                                <td className="px-3 py-2">
-                                    {unresolvedCount(card) > 0 && (
-                                        <Badge variant="destructive">
-                                            {unresolvedCount(card)} open
-                                        </Badge>
-                                    )}
-                                    {card.deleted_at !== null && (
-                                        <Badge
-                                            variant="outline"
-                                            className="ml-1"
-                                        >
-                                            deleted
-                                        </Badge>
-                                    )}
-                                </td>
                             </tr>
                         ))}
                     </tbody>
