@@ -861,7 +861,7 @@ test('resolve_rift_in_time discards a chosen face-up Glyph and replaces it with 
         ->and(collect($events)->pluck('type'))->toContain('glyph_discarded', 'glyph_added');
 });
 
-test('Rift in time does nothing immediately if there are no face-up Glyphs', function () {
+test('Rift in time fizzles with its own explicit event if there are no face-up Glyphs', function () {
     $state = startedGame();
     $state = $state->with(['golem' => $state->golemWith(['glyphs' => []])]);
 
@@ -870,7 +870,7 @@ test('Rift in time does nothing immediately if there are no face-up Glyphs', fun
     [$state, $events] = $reflection->invoke(null, $state, 'wanderer_a', 'rift-in-time', []);
 
     expect($state->pendingRiftInTime)->toBeNull()
-        ->and($events)->toBe([]);
+        ->and(collect($events)->pluck('type')->all())->toBe(['rift_in_time_fizzled']);
 });
 
 test('resolve_rift_in_time does nothing for a glyph_key that is not actually active', function () {

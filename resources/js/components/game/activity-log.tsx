@@ -41,6 +41,8 @@ export function describe(
             return `${role} declines Invigoration.`;
         case 'rift_in_time_offered':
             return `${role} found Rift in time — choosing a Glyph to replace.`;
+        case 'rift_in_time_fizzled':
+            return `${role} found Rift in time — no Golem Glyphs to swap, nothing happened.`;
         case 'epiphany_offered':
             return `${role} found Epiphany — choosing a Location to search.`;
         case 'emperor_hand_mulliganed': {

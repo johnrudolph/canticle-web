@@ -152,8 +152,12 @@ test('Scriptorium blocks entry unless it has 4 adjacent Locations with Monolith 
 
     $direction = Board::directionBetween([0, 1], [1, 0]);
 
+    // Confirmed in playtest: this used to throw the Catacombs message
+    // verbatim regardless of which entry restriction actually fired —
+    // entryBlocked() was a shared boolean for 2 unrelated rules, but
+    // moveWanderer() only ever threw the Catacombs copy.
     expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $direction]))
-        ->toThrow(InvalidMoveException::class);
+        ->toThrow(InvalidMoveException::class, 'Scriptorium');
 });
 
 test('Scriptorium allows entry once it has 4 adjacent Locations with Monolith Shards', function () {

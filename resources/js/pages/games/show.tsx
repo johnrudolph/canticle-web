@@ -82,37 +82,59 @@ function occupiedNeighbors(cell: Cell, board: Record<string, unknown>): Cell[] {
 /**
  * Every cell a Wanderer could reach for their next 1 action, following
  * Road's "it always costs 1 action to move, but moving into a Road
- * space lets you continue to an adjacent space for free — chainable
- * through contiguous Road spaces" rule. The step off `start` is always
- * allowed (that's the 1 action being spent); every step after that is
- * only allowed if the cell being left has a Road, which is exactly what
- * the server itself checks once has_moved_this_turn is true. Returns a
- * map of reachable cellKey -> the sequence of directions to replay as
- * individual move_wanderer calls to actually get there.
+ * space lets you continue to an adjacent space that ALSO contains a
+ * Road, for free — chainable through contiguous Road spaces" rule. The
+ * step off `start` is always allowed (that's the 1 action being
+ * spent); every step after that is only allowed if BOTH the cell being
+ * left AND the cell being entered have a Road, which is exactly what
+ * the server itself checks (moveWanderer's $freeMove) once
+ * has_moved_this_turn is true. Returns a map of reachable cellKey ->
+ * the sequence of directions to replay as individual move_wanderer
+ * calls to actually get there.
  */
 /**
- * Catacombs: "A Wanderer may not enter this space unless they have
- * ever been exhausted (0 HP) — rules.md" — GameEngine::catacombsBlocks.
- * Mirrored here so the highlight matches what the server will actually
- * accept; without this, Catacombs still showed as a reachable/
- * clickable space even for a Wanderer who'd be rejected for trying
- * (confirmed in prod: correctly bounced server-side, but still
- * highlighted).
+ * Mirrors GameEngine::entryBlocked() plus the Exile check moveWanderer()
+ * runs right alongside it, so the board's move-highlighting matches
+ * what the server will actually accept:
+ *   - Catacombs: only enterable by a Wanderer who has ever been
+ *     exhausted (0 HP).
+ *   - Scriptorium: only enterable once it has 4 adjacent spaces with a
+ *     Monolith Shard.
+ *   - Exile: only enterable by a Wanderer with 3 Shame tokens.
+ * Without this, all three still showed as reachable/clickable even for
+ * a Wanderer who'd be rejected for trying (confirmed in prod — Catacombs
+ * was fixed once already; Scriptorium/Exile had the same gap).
  */
-function catacombsBlocks(
+function entryBlockedOnFrontend(
     cell: Cell,
     board: Record<string, BoardCell>,
-    wasEverExhausted: boolean,
+    wanderer: { was_ever_exhausted: boolean; shame: number },
 ): boolean {
-    return (
-        board[cellKey(cell)]?.location_key === 'catacombs' && !wasEverExhausted
-    );
+    const locationKey = board[cellKey(cell)]?.location_key;
+
+    if (locationKey === 'catacombs') {
+        return !wanderer.was_ever_exhausted;
+    }
+
+    if (locationKey === 'scriptorium') {
+        const shardNeighbors = occupiedNeighbors(cell, board).filter((n) =>
+            board[cellKey(n)]?.infrastructure.includes('monolith_shard'),
+        ).length;
+
+        return shardNeighbors < 4;
+    }
+
+    if (locationKey === 'exile') {
+        return wanderer.shame < 3;
+    }
+
+    return false;
 }
 
 function reachableByRoad(
     start: Cell,
     board: Record<string, BoardCell>,
-    wasEverExhausted: boolean,
+    wanderer: { was_ever_exhausted: boolean; shame: number },
 ): Map<string, Direction[]> {
     const startKey = cellKey(start);
     const paths = new Map<string, Direction[]>();
@@ -136,7 +158,17 @@ function reachableByRoad(
         for (const next of occupiedNeighbors(cell, board)) {
             const nextKey = cellKey(next);
             if (visited.has(nextKey)) continue;
-            if (catacombsBlocks(next, board, wasEverExhausted)) continue;
+            if (entryBlockedOnFrontend(next, board, wanderer)) continue;
+
+            // Beyond the first (paid) hop, every further hop must be
+            // free — which requires the space being entered to also
+            // have a Road, not just the space being left.
+            if (
+                key !== startKey &&
+                !(board[nextKey]?.infrastructure.includes('road') ?? false)
+            ) {
+                continue;
+            }
 
             const direction = directionBetween(cell, next);
             if (!direction) continue;
@@ -1427,11 +1459,7 @@ export default function GameShow({ game }: { game: GameSummary }) {
             // Beyond the immediate neighbors, everything else here is
             // only reachable by chaining through Road spaces — see
             // reachableByRoad's own comment for the exact rule.
-            const paths = reachableByRoad(
-                mine.cell,
-                state.board,
-                mine.was_ever_exhausted,
-            );
+            const paths = reachableByRoad(mine.cell, state.board, mine);
             highlightedCells = new Set(paths.keys());
             onCellClick = async (cell) => {
                 const path = paths.get(cellKey(cell));

@@ -1893,7 +1893,14 @@ final class GameEngine
     private static function offerRiftInTime(GameState $state, string $actorRole): array
     {
         if ($state->golem['glyphs'] === []) {
-            return [$state, []];
+            // "If there are any" — with nothing on the Golem's mat to
+            // swap, this fires an explicit event instead of silently
+            // returning zero events, so the activity log doesn't just
+            // show the generic "found Rift in time, resolved and
+            // trashed" line with nothing to show for it (confirmed
+            // confusing in practice — the log line alone reads as if
+            // something happened).
+            return [$state, [['type' => 'rift_in_time_fizzled', 'role_key' => $actorRole, 'payload' => []]]];
         }
 
         $state = $state->with(['pendingRiftInTime' => $actorRole]);
@@ -4749,6 +4756,29 @@ final class GameEngine
     }
 
     /**
+     * Same gate as entryBlocked(), but with the specific reason a
+     * Wanderer's own move_wanderer attempt should show — entryBlocked()
+     * itself stays a plain boolean since most of its ~15 call sites
+     * just silently skip a Wanderer rather than surface an error
+     * (Guide rope, the Golem forcing someone in, etc.), so only the one
+     * call site that actually throws (moveWanderer) needs this.
+     *
+     * @param  array{0: int, 1: int}  $cell
+     */
+    private static function entryBlockedReason(GameState $state, string $role, array $cell): ?string
+    {
+        if (! self::entryBlocked($state, $role, $cell)) {
+            return null;
+        }
+
+        return match ($state->board[Board::key($cell)]['location_key']) {
+            'catacombs' => 'Catacombs: only a Wanderer who has been exhausted before may enter.',
+            'scriptorium' => 'Scriptorium: only enterable once it has 4 adjacent spaces with a Monolith Shard.',
+            default => 'That space cannot be entered right now.',
+        };
+    }
+
+    /**
      * Road: "It always costs 1 action to move. But when a Wanderer
      * moves into a space containing a Road, they may continue to an
      * adjacent space for free. If multiple contiguous spaces contain
@@ -4811,8 +4841,8 @@ final class GameEngine
             throw new InvalidMoveException('Incarceration: you cannot move for the rest of this turn.');
         }
 
-        if (self::entryBlocked($state, $actorRole, $to)) {
-            throw new InvalidMoveException('Catacombs: only a Wanderer who has been exhausted before may enter.');
+        if (($reason = self::entryBlockedReason($state, $actorRole, $to)) !== null) {
+            throw new InvalidMoveException($reason);
         }
 
         // Exile: "Wanderers may only enter this space if they have 3
@@ -8171,8 +8201,8 @@ final class GameEngine
             throw new InvalidMoveException('That is not one of your own 🌿 Relics.');
         }
 
-        if (self::entryBlocked($state, $actorRole, $ally['cell'])) {
-            throw new InvalidMoveException('Catacombs: only a Wanderer who has been exhausted before may enter.');
+        if (($reason = self::entryBlockedReason($state, $actorRole, $ally['cell'])) !== null) {
+            throw new InvalidMoveException($reason);
         }
 
         $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['cell' => $ally['cell']])]);
@@ -8226,8 +8256,8 @@ final class GameEngine
             throw new InvalidMoveException('You are already there.');
         }
 
-        if (self::entryBlocked($state, $actorRole, $target)) {
-            throw new InvalidMoveException('Catacombs: only a Wanderer who has been exhausted before may enter.');
+        if (($reason = self::entryBlockedReason($state, $actorRole, $target)) !== null) {
+            throw new InvalidMoveException($reason);
         }
 
         $fromCell = $state->wanderers[$actorRole]['cell'];
@@ -8524,8 +8554,8 @@ final class GameEngine
             throw new InvalidMoveException('That Ally\'s space has no Monolith Shard.');
         }
 
-        if (self::entryBlocked($state, $actorRole, $ally['cell'])) {
-            throw new InvalidMoveException('Catacombs: only a Wanderer who has been exhausted before may enter.');
+        if (($reason = self::entryBlockedReason($state, $actorRole, $ally['cell'])) !== null) {
+            throw new InvalidMoveException($reason);
         }
 
         $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['cell' => $ally['cell']])]);
@@ -8596,8 +8626,8 @@ final class GameEngine
             throw new InvalidMoveException('Incarceration: you cannot move for the rest of this turn.');
         }
 
-        if (self::entryBlocked($state, $actorRole, $toCell)) {
-            throw new InvalidMoveException('Catacombs: only a Wanderer who has been exhausted before may enter.');
+        if (($reason = self::entryBlockedReason($state, $actorRole, $toCell)) !== null) {
+            throw new InvalidMoveException($reason);
         }
 
         if ($destinationLocationKey === 'exile' && $wanderer['shame'] < 3) {
