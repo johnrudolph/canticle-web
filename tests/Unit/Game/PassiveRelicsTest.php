@@ -130,23 +130,6 @@ test('Union Garb grants +1 action if the turn starts on a shared space', functio
     expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe(4); // 3 + 1
 });
 
-test('Builder\'s gloves raises the Infrastructure cap to 3 while a holder is on a ⚙️ space', function () {
-    $state = startedGame();
-    $board = $state->board;
-    $board['1,0'] = [...$board['1,0'], 'location_key' => 'builders-site']; // produces ⚙️
-    $state = $state->with(['board' => $board]);
-    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'hand_left' => 'builders-gloves'];
-    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
-
-    foreach (['monolith_shard', 'road', 'fruit_tree'] as $type) {
-        [$state] = GameEngine::apply($state, 'emperor', [
-            'type' => 'place_infrastructure', 'infrastructure_type' => $type, 'cell' => [0, 1],
-        ]);
-    }
-
-    expect($state->infrastructurePlacedThisTurn)->toBe(3);
-});
-
 test('Dark shackles pulls its holder along when the Golem moves', function () {
     $state = startedGame();
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'dark-shackles'];

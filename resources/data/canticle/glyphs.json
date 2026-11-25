@@ -108,7 +108,7 @@
         "key": "lilted",
         "Print": false,
         "Name": "Lilted",
-        "Type": "🎨",
+        "Type": "🎶",
         "Description": "Play 1 fewer Golem card for each 🎶 equipped by Wanderers."
     },
     {
@@ -271,5 +271,12 @@
         "Name": "Earthquake",
         "Type": "👺",
         "Description": "Roads and walls have no effect."
+    },
+    {
+        "key": "charmed",
+        "Print": true,
+        "Name": "Charmed",
+        "Type": "🎶",
+        "Description": "Reduce damage by 1 for each 🎶 Relic  equipped by Wanderers."
     }
 ]
