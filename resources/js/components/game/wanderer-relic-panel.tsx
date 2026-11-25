@@ -341,16 +341,22 @@ export function WandererRelicPanel({
             <div className="grid grid-cols-2 gap-1">
                 {(Object.keys(SLOT_LABELS) as EquipSlot[]).map((slot) => {
                     const relicKey = wanderer.equipped[slot];
+                    // Burn is tracked independently of `equipped` now —
+                    // Calloused/Inflamed will lets a slot be Burned AND
+                    // hold a Relic at once, so these two facts render
+                    // side by side instead of one replacing the other.
+                    const isBurned = wanderer.burned_slots.includes(slot);
                     return (
                         <div key={slot} className="rounded border px-1.5 py-1">
                             <p className="text-muted-foreground">
                                 {SLOT_LABELS[slot]}
+                                {isBurned && (
+                                    <span className="ml-1">
+                                        {STATUS_TOKEN_LABELS.burn_token}
+                                    </span>
+                                )}
                             </p>
-                            {relicKey && isStatusToken(relicKey) ? (
-                                <span className="truncate">
-                                    {relicLabel(relicKey, relicCatalog)}
-                                </span>
-                            ) : relicKey ? (
+                            {relicKey ? (
                                 <div className="flex flex-col gap-1">
                                     <div className="flex items-center justify-between gap-1">
                                         <span className="truncate">

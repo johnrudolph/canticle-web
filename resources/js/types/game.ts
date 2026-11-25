@@ -41,8 +41,10 @@ export interface WandererState {
     golem_insight_used_this_round: boolean;
     laborers_jacket_used_this_round: boolean;
     pending_bonus_actions: number;
-    /** Shame Zone counter (rules.md 2026-11-24 revision) — Burn still lives in `equipped` as 'burn_token'; Shame no longer occupies a slot at all. */
+    /** Shame Zone counter (rules.md 2026-11-24 revision) — Shame no longer occupies a slot at all. */
     shame: number;
+    /** Which slots are Burned, tracked independently of `equipped` — Calloused/Inflamed will lets a slot be Burned AND hold a Relic at once, so `equipped[slot]` alone can no longer say "is this slot burned." */
+    burned_slots: string[];
 }
 
 export interface GolemCardEntry {

@@ -265,11 +265,11 @@ test('Dark swell damages and Burns every Wanderer on a 🌑 or 🔥 space, leave
     $board['1,0'] = [...$board['1,0'], 'location_key' => 'cabalist-inferno']; // produces 🔥
     $board['0,1'] = [...$board['0,1'], 'location_key' => 'artists-hovel']; // produces 🎨
     $state = $state->with(['board' => $board]);
-    // 4 of 5 slots already Burned — exactly 1 legal slot left, so the
+    // Every slot but 'bag' already Burned (including mind_2/mind_3,
+    // always present on the mat) — exactly 1 legal slot left, so the
     // new Burn lands immediately instead of queuing a
     // pendingStatusTokenChoices pick (2+ legal slots would do that).
-    $equippedA = ['body' => 'burn_token', 'mind' => 'burn_token', 'hand_left' => 'burn_token', 'hand_right' => 'burn_token', 'bag' => null];
-    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 15, 'cell' => [1, 0], 'equipped' => $equippedA])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 15, 'cell' => [1, 0], 'burned_slots' => ['body', 'mind', 'hand_left', 'hand_right', 'mind_2', 'mind_3']])]);
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['hp' => 15, 'cell' => [0, 1]])]);
 
     $reflection = new ReflectionMethod(GameEngine::class, 'resolveGolemCard');
@@ -277,9 +277,9 @@ test('Dark swell damages and Burns every Wanderer on a 🌑 or 🔥 space, leave
     [$state] = $reflection->invoke(null, $state, 'dark-swell', false);
 
     expect($state->wanderers['wanderer_a']['hp'])->toBe(10)
-        ->and($state->wanderers['wanderer_a']['equipped']['bag'])->toBe('burn_token')
+        ->and($state->wanderers['wanderer_a']['burned_slots'])->toContain('bag')
         ->and($state->wanderers['wanderer_b']['hp'])->toBe(15)
-        ->and(in_array('burn_token', $state->wanderers['wanderer_b']['equipped'], true))->toBeFalse();
+        ->and($state->wanderers['wanderer_b']['burned_slots'])->toBe([]);
 });
 
 test('Health inversion sets HP to (15 - current) only for Wanderers on a ⏳ space', function () {

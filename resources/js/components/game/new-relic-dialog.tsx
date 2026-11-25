@@ -24,15 +24,13 @@ const RELIC_SLOT_TO_EQUIP_SLOTS: Record<string, EquipSlot[]> = {
     Hand: ['hand_left', 'hand_right'],
 };
 
-function isStatusToken(value: string | null): value is 'burn_token' {
-    return value === 'burn_token';
-}
-
 export function NewRelicDialog({
     open,
     relicKey,
     entry,
     equipped,
+    burnedSlots = [],
+    hasCalloused = false,
     relicCatalog = {},
     processing,
     onSubmit,
@@ -41,6 +39,10 @@ export function NewRelicDialog({
     relicKey: string | null;
     entry: RelicCatalogEntry | undefined;
     equipped?: Record<EquipSlot, string | null> | null;
+    /** Which slots are Burned — tracked independently of `equipped` now, since Calloused/Inflamed will lets a slot be Burned AND hold a Relic at once. */
+    burnedSlots?: string[];
+    /** Calloused/Inflamed will: "You may equip relics in slots where you have Scars" — lifts the Burn block for its own holder. */
+    hasCalloused?: boolean;
     relicCatalog?: Record<string, RelicCatalogEntry>;
     processing: boolean;
     onSubmit: (move: Record<string, unknown>) => void;
@@ -92,10 +94,10 @@ export function NewRelicDialog({
                         const currentEntry = current
                             ? relicCatalog[current]
                             : undefined;
+                        const isBurned = burnedSlots.includes(slot);
+                        const blockedByBurn = isBurned && !hasCalloused;
                         const blockedByBound =
-                            current !== null &&
-                            !isStatusToken(current) &&
-                            currentEntry?.is_bound === true;
+                            current !== null && currentEntry?.is_bound === true;
 
                         return (
                             <div
@@ -107,26 +109,33 @@ export function NewRelicDialog({
                                         {SLOT_LABELS[slot]}
                                     </p>
                                     <p className="min-w-0 text-xs break-words text-muted-foreground">
-                                        {current === null && 'Currently empty.'}
-                                        {isStatusToken(current) &&
+                                        {blockedByBurn &&
                                             'Blocked by a Burn token.'}
-                                        {blockedByBound &&
+                                        {!blockedByBurn &&
+                                            blockedByBound &&
                                             `Blocked by a Bound Relic (${currentEntry?.name ?? current}).`}
-                                        {current !== null &&
-                                            !isStatusToken(current) &&
+                                        {!blockedByBurn &&
                                             !blockedByBound &&
+                                            current === null &&
+                                            'Currently empty.'}
+                                        {!blockedByBurn &&
+                                            !blockedByBound &&
+                                            current !== null &&
                                             `Currently: ${currentEntry?.name ?? current}${
                                                 currentEntry?.effect
                                                     ? ` — ${currentEntry.effect}`
                                                     : ''
                                             }`}
+                                        {isBurned &&
+                                            hasCalloused &&
+                                            ' (Burned, but Inflamed will lets you equip anyway.)'}
                                     </p>
                                 </div>
                                 <Button
                                     size="sm"
                                     disabled={
                                         processing ||
-                                        isStatusToken(current) ||
+                                        blockedByBurn ||
                                         blockedByBound
                                     }
                                     onClick={() =>

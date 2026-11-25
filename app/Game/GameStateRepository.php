@@ -60,9 +60,25 @@ final class GameStateRepository
                     $wanderer['equipped'],
                     fn (mixed $v) => $v === 'shame_token',
                 )),
+                // Burn used to live entirely inside 'equipped' as a
+                // 'burn_token' sentinel value, occupying (and blocking)
+                // the slot outright. Calloused/Inflamed will ("you may
+                // equip relics in slots where you have Scars") needs a
+                // slot to be burned AND hold a Relic at once, which
+                // that single-value representation can't express — so
+                // burned slots are now tracked independently here. A
+                // game persisted before this shipped has no
+                // 'burned_slots' key at all; back-fill it from whichever
+                // slots still say 'burn_token', then free those slots in
+                // 'equipped' below (nothing was ever equippable there
+                // anyway, so this loses no information).
+                'burned_slots' => $wanderer['burned_slots'] ?? array_keys(array_filter(
+                    $wanderer['equipped'],
+                    fn (mixed $v) => $v === 'burn_token',
+                )),
                 'equipped' => [
                     ...array_map(
-                        fn (mixed $v) => $v === 'shame_token' ? null : $v,
+                        fn (mixed $v) => in_array($v, ['shame_token', 'burn_token'], true) ? null : $v,
                         $wanderer['equipped'],
                     ),
                     'mind_2' => $wanderer['equipped']['mind_2'] ?? null,
@@ -115,6 +131,7 @@ final class GameStateRepository
             pendingGolemLog: $data['pending_golem_log'] ?? null,
             pendingGolemCardChoice: $data['pending_golem_card_choice_full'] ?? null,
             pendingStatusTokenChoices: $data['pending_status_token_choices'] ?? [],
+            formerEmperorRoles: $data['former_emperor_roles'] ?? [],
         );
     }
 
@@ -154,6 +171,7 @@ final class GameStateRepository
                 'pending_golem_log' => $state->pendingGolemLog,
                 'pending_golem_card_choice_full' => $state->pendingGolemCardChoice,
                 'pending_status_token_choices' => $state->pendingStatusTokenChoices,
+                'former_emperor_roles' => $state->formerEmperorRoles,
             ],
         ]);
     }

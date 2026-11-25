@@ -54,8 +54,8 @@ test('Great Sweeping Scythe damages everyone on/adjacent to the Golem and Burns 
     [$state] = GameEngine::apply($state, 'wanderer_b', ['type' => 'resolve_status_token_choice', 'slot' => 'body']);
 
     expect($state->wanderers['wanderer_a']['hp'])->toBe(10)
-        ->and($state->wanderers['wanderer_a']['equipped'])->toContain('burn_token')
-        ->and($state->wanderers['wanderer_b']['equipped'])->toContain('burn_token')
+        ->and($state->wanderers['wanderer_a']['burned_slots'])->toBe(['body'])
+        ->and($state->wanderers['wanderer_b']['burned_slots'])->toBe(['body'])
         ->and(collect($events)->pluck('type'))->toContain('wanderer_damaged');
 });
 

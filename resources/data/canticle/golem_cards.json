@@ -196,5 +196,11 @@
         "print": true,
         "name": "Health inversion",
         "action": "All Wanderers on spaces that produce ⏳ change their HP to X, where X = (15 - their current HP)."
+    },
+    {
+        "key": "torrential-rains",
+        "print": true,
+        "name": "Torrential rains",
+        "action": "Trash all 🔥 Relics equipped by Wanderers."
     }
 ]

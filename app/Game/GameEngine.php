@@ -681,17 +681,27 @@ final class GameEngine
             throw new InvalidMoveException('Tyrannical: Relics with 🌿 cannot be equipped right now.');
         }
 
+        // Paradox rift: "You can only equip this if you are the former
+        // Emperor." See GameState::$formerEmperorRoles.
+        if ($relicKey === 'paradox-rift' && ! in_array($actorRole, $state->formerEmperorRoles, true)) {
+            throw new InvalidMoveException('Paradox rift: only the former Emperor may equip this.');
+        }
+
         // An expansive mind: "You can add two more Mind cards to this
         // slot." mind_2/mind_3 only exist while it occupies 'mind' itself.
         if (($slot === 'mind_2' || $slot === 'mind_3') && $wanderer['equipped']['mind'] !== 'an-expansive-mind') {
             throw new InvalidMoveException('That slot requires An expansive mind to be equipped first.');
         }
 
-        $displaced = $wanderer['equipped'][$slot];
-
-        if (self::isStatusToken($displaced)) {
-            throw new InvalidMoveException('That slot is blocked by a status token.');
+        // Burn: "They cannot equip a Relic there until the Burn is
+        // healed" — unless Calloused/Inflamed will is equipped
+        // ("you may equip relics in slots where you have Scars"),
+        // which lifts this specific restriction for its own holder.
+        if (in_array($slot, $wanderer['burned_slots'], true) && ! in_array('calloused', $wanderer['equipped'], true)) {
+            throw new InvalidMoveException('That slot is blocked by a Burn.');
         }
+
+        $displaced = $wanderer['equipped'][$slot];
 
         // rules.md: Bound Relics "cannot drop" — equipping over one
         // would displace it face-up exactly like a drop, so it's
@@ -774,15 +784,33 @@ final class GameEngine
             throw new InvalidMoveException('You do not have that Relic.');
         }
 
+        // Calloused/Inflamed will: "If you drop this, you must also
+        // drop Relics from scarred slots" — anything it was propping up
+        // in a Burned slot can no longer stay there once it's gone.
+        $alsoDropped = [];
+        if ($relicKey === 'calloused') {
+            foreach ($wanderer['burned_slots'] as $burnedSlot) {
+                $propped = $equipped[$burnedSlot] ?? null;
+
+                if (is_string($propped)) {
+                    $alsoDropped[] = $propped;
+                    $equipped[$burnedSlot] = null;
+                }
+            }
+        }
+
         $cellKey = Board::key($wanderer['cell']);
         $board = $state->board;
         // rules.md: "Dropping a relic leaves it face-up on your current
         // space."
-        $board[$cellKey] = [...$board[$cellKey], 'relics_face_up' => [...$board[$cellKey]['relics_face_up'], $relicKey]];
+        $board[$cellKey] = [...$board[$cellKey], 'relics_face_up' => [...$board[$cellKey]['relics_face_up'], $relicKey, ...$alsoDropped]];
 
         $tuckedCards = $wanderer['tucked_cards'];
         $lostCards = $tuckedCards[$relicKey] ?? [];
         unset($tuckedCards[$relicKey]);
+        foreach ($alsoDropped as $droppedKey) {
+            unset($tuckedCards[$droppedKey]);
+        }
 
         $wanderers = $state->wanderersWith($actorRole, [
             'equipped' => $equipped,
@@ -794,6 +822,10 @@ final class GameEngine
 
         $events = [
             ['type' => 'relic_dropped', 'role_key' => $actorRole, 'payload' => ['relic_key' => $relicKey]],
+            ...array_map(
+                fn (string $droppedKey) => ['type' => 'relic_dropped', 'role_key' => $actorRole, 'payload' => ['relic_key' => $droppedKey, 'reason' => 'calloused']],
+                $alsoDropped,
+            ),
         ];
 
         if ($lostCards !== [] && $relicKey === 'golem-log') {
@@ -1712,6 +1744,15 @@ final class GameEngine
 
         $state = $state->with(['prophecy' => $state->prophecy + 1]);
 
+        // $actorRole's own role_key is the seat the old Emperor is
+        // moving into — so, from here on, $actorRole IS "the former
+        // Emperor" at the role level, regardless of who's actually
+        // sitting there (see GameState::$formerEmperorRoles). Paradox
+        // rift reads this.
+        if (! in_array($actorRole, $state->formerEmperorRoles, true)) {
+            $state = $state->with(['formerEmperorRoles' => [...$state->formerEmperorRoles, $actorRole]]);
+        }
+
         return [$state, [
             ['type' => 'emperor_timepiece_swap', 'role_key' => $actorRole, 'payload' => ['new_emperor_role' => $actorRole, 'new_wanderer_role' => RoleKeys::EMPEROR]],
             ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => 1]],
@@ -1818,7 +1859,7 @@ final class GameEngine
         return match ($relicKey) {
             'time-jump' => self::golemPlayCards($state, 1),
             'guilty-by-association', 'guilty-conscience' => self::applyShame($state, $actorRole),
-            'sharp-objects' => self::applyBurn($state, $actorRole),
+            'sharp-objects', 'roaring-flame' => self::applyBurn($state, $actorRole),
             'incarceration' => self::relicIncarceration($state, $actorRole),
             'buoyant-spirit' => self::relicActionDelta($state, $actorRole, 2),
             'lost-in-thought' => self::relicActionDelta($state, $actorRole, -1),
@@ -2418,7 +2459,7 @@ final class GameEngine
 
         // A Wanderer could in principle hold more than one Burn across
         // different slots — repeat while any remain.
-        while (in_array('burn_token', $state->wanderers[$targetRole]['equipped'], true)) {
+        while ($state->wanderers[$targetRole]['burned_slots'] !== []) {
             [$state, $e] = self::removeBurn($state, $targetRole);
             $events = [...$events, ...$e];
         }
@@ -3051,7 +3092,7 @@ final class GameEngine
             $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
             $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
 
-            while (in_array('burn_token', $state->wanderers[$role]['equipped'], true)) {
+            while ($state->wanderers[$role]['burned_slots'] !== []) {
                 [$state, $e] = self::removeBurn($state, $role);
                 $events = [...$events, ...$e];
             }
@@ -5314,6 +5355,37 @@ final class GameEngine
             }
         }
 
+        // Paradox rift: "If you have this equipped at the end of the
+        // game, and you are exhausted, you have created a paradox.
+        // Gain 📜." Equip-time restriction (only the former Emperor
+        // may equip it) already guarantees whoever has it on is the
+        // former Emperor by the time this runs.
+        foreach ($state->wanderers as $role => $wanderer) {
+            if (in_array('paradox-rift', $wanderer['equipped'], true) && $wanderer['hp'] === 0) {
+                $state = $state->with(['prophecy' => $state->prophecy + 1]);
+                $events[] = ['type' => 'prophecy_gained', 'role_key' => $role, 'payload' => ['amount' => 1, 'reason' => 'paradox-rift']];
+            }
+        }
+
+        // Cabalist medallion: "If you have 5 Burn Tokens on your mat
+        // when the game ends, gain 📜." Implemented literally — note
+        // this Relic itself occupies 1 of the mat's 5 slots, so as
+        // printed the condition can only ever reach 4 Burns alongside
+        // it equipped; not fixing that here, just not guessing a
+        // different threshold than what's written.
+        foreach ($state->wanderers as $role => $wanderer) {
+            if (! in_array('cabalist-medallion', $wanderer['equipped'], true)) {
+                continue;
+            }
+
+            $burnCount = count($wanderer['burned_slots']);
+
+            if ($burnCount >= 5) {
+                $state = $state->with(['prophecy' => $state->prophecy + 1]);
+                $events[] = ['type' => 'prophecy_gained', 'role_key' => $role, 'payload' => ['amount' => 1, 'reason' => 'cabalist-medallion']];
+            }
+        }
+
         // Pen: "End of game: If the Golem's mat contains 3+ Glyphs that
         // are not 👺 Glyphs, gain 📜📜📜." Counts non-👺 Glyphs among
         // whatever's active (up to GOLEM_MAX_GLYPHS) — a 👺 Glyph can
@@ -5994,6 +6066,11 @@ final class GameEngine
 
             case 'health-inversion':
                 [$state, $e] = self::golemHealthInversion($state);
+                $events = [...$events, ...$e];
+                break;
+
+            case 'torrential-rains':
+                [$state, $e] = self::golemTorrentialRains($state);
                 $events = [...$events, ...$e];
                 break;
         }
@@ -6869,6 +6946,33 @@ final class GameEngine
     }
 
     /**
+     * Torrential rains: "Trash all 🔥 Relics equipped by Wanderers."
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemTorrentialRains(GameState $state): array
+    {
+        $events = [];
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            foreach ($state->wanderers[$role]['equipped'] as $relicKey) {
+                if (! is_string($relicKey) || self::isStatusToken($relicKey)) {
+                    continue;
+                }
+
+                if (RelicCatalog::find($relicKey)?->symbol !== '🔥') {
+                    continue;
+                }
+
+                $state = self::trashEquippedRelic($state, $role, $relicKey);
+                $events[] = ['type' => 'relic_trashed', 'role_key' => $role, 'payload' => ['relic_key' => $relicKey]];
+            }
+        }
+
+        return [$state, $events];
+    }
+
+    /**
      * Dark swell: "All Wanderers on spaces that produce 🌑 or 🔥 lose
      * 5HP and gain a Burn token."
      *
@@ -7202,6 +7306,17 @@ final class GameEngine
             $modifiers[] = "Dark sacrifice (-{$darkCount})";
         }
         $damage = max(0, $damage - $darkCount);
+
+        // Calloused hands: "For each Burn token on your mat, reduce
+        // incoming damage by 1."
+        if (in_array('calloused-hands', $equipped, true)) {
+            $burnCount = count($state->wanderers[$role]['burned_slots']);
+
+            if ($burnCount > 0) {
+                $modifiers[] = "Calloused hands (-{$burnCount})";
+                $damage = max(0, $damage - $burnCount);
+            }
+        }
 
         // Garbage barricade: "When the Golem attacks Wanderers in this
         // space, reduce damage by 1 for every 2 Relics tucked here."
@@ -8249,7 +8364,7 @@ final class GameEngine
             $events = [...$events, ...$e];
         }
 
-        if (in_array('burn_token', $state->wanderers[$actorRole]['equipped'], true)) {
+        if ($state->wanderers[$actorRole]['burned_slots'] !== []) {
             [$state, $e] = self::removeBurn($state, $actorRole);
             $events = [...$events, ...$e];
         }
@@ -8611,7 +8726,8 @@ final class GameEngine
     private static function applyBurn(GameState $state, string $targetRole): array
     {
         $equipped = $state->wanderers[$targetRole]['equipped'];
-        $legalSlots = array_keys(array_filter($equipped, fn (mixed $v) => $v !== 'burn_token'));
+        $burnedSlots = $state->wanderers[$targetRole]['burned_slots'];
+        $legalSlots = array_values(array_diff(array_keys($equipped), $burnedSlots));
 
         if ($legalSlots === []) {
             return [$state, []];
@@ -8632,7 +8748,10 @@ final class GameEngine
     /**
      * The actual slot assignment, shared by applyBurn()'s single-
      * legal-slot case and resolveStatusTokenChoice()'s real choice. Any
-     * Relic already in $slot is dropped face-up first.
+     * Relic already in $slot is dropped face-up first — unless the
+     * Wanderer has Calloused/Inflamed will equipped ("you may equip
+     * relics in slots where you have Scars"), in which case the Relic
+     * stays put and the slot is simply burned underneath it.
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
@@ -8642,7 +8761,7 @@ final class GameEngine
         $displaced = $equipped[$slot];
         $events = [];
 
-        if (is_string($displaced)) {
+        if (is_string($displaced) && ! in_array('calloused', $equipped, true)) {
             $cell = $state->wanderers[$targetRole]['cell'];
             if ($cell !== null) {
                 $cellKey = Board::key($cell);
@@ -8651,10 +8770,12 @@ final class GameEngine
                 $state = $state->with(['board' => $board]);
             }
             $events[] = ['type' => 'relic_dropped', 'role_key' => $targetRole, 'payload' => ['relic_key' => $displaced, 'reason' => 'burn']];
+            $equipped[$slot] = null;
+            $state = $state->with(['wanderers' => $state->wanderersWith($targetRole, ['equipped' => $equipped])]);
         }
 
-        $equipped[$slot] = 'burn_token';
-        $state = $state->with(['wanderers' => $state->wanderersWith($targetRole, ['equipped' => $equipped])]);
+        $burnedSlots = $state->wanderers[$targetRole]['burned_slots'];
+        $state = $state->with(['wanderers' => $state->wanderersWith($targetRole, ['burned_slots' => [...$burnedSlots, $slot]])]);
         $events[] = ['type' => 'wanderer_burned', 'role_key' => $targetRole, 'payload' => ['slot' => $slot]];
 
         return [$state, $events];
@@ -8686,8 +8807,9 @@ final class GameEngine
 
         $slot = (string) ($move['slot'] ?? '');
         $equipped = $state->wanderers[$actorRole]['equipped'];
+        $burnedSlots = $state->wanderers[$actorRole]['burned_slots'];
 
-        if (! array_key_exists($slot, $equipped) || $equipped[$slot] === 'burn_token') {
+        if (! array_key_exists($slot, $equipped) || in_array($slot, $burnedSlots, true)) {
             return [$state, []];
         }
 
@@ -8696,23 +8818,24 @@ final class GameEngine
 
     /**
      * Heals one Burn from $targetRole's mat (whichever slot it's in —
-     * the slot becomes equippable again), if they have one. Used by
-     * Holy water (either type, caster's choice), Hands of forgiveness,
-     * and Purification pools.
+     * the slot becomes equippable again, unless Calloused already let a
+     * Relic sit there, which stays exactly as it was), if they have
+     * one. Used by Holy water (either type, caster's choice), Hands of
+     * forgiveness, and Purification pools.
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
     private static function removeBurn(GameState $state, string $targetRole): array
     {
-        $equipped = $state->wanderers[$targetRole]['equipped'];
-        $slot = array_search('burn_token', $equipped, true);
+        $burnedSlots = $state->wanderers[$targetRole]['burned_slots'];
 
-        if ($slot === false) {
+        if ($burnedSlots === []) {
             return [$state, []];
         }
 
-        $equipped[$slot] = null;
-        $state = $state->with(['wanderers' => $state->wanderersWith($targetRole, ['equipped' => $equipped])]);
+        $slot = $burnedSlots[0];
+        $remaining = array_values(array_slice($burnedSlots, 1));
+        $state = $state->with(['wanderers' => $state->wanderersWith($targetRole, ['burned_slots' => $remaining])]);
 
         return [$state, [['type' => 'wanderer_burn_removed', 'role_key' => $targetRole, 'payload' => ['slot' => $slot]]]];
     }

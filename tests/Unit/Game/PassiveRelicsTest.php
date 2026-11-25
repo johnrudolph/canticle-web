@@ -736,6 +736,61 @@ test('Emperor\'s Timepiece does nothing with fewer than all 5 Emperor\'s Relics 
         ->and(collect($events)->pluck('type'))->not->toContain('emperor_timepiece_swap');
 });
 
+test('Emperor\'s Timepiece marks the triggering Wanderer role as a former Emperor', function () {
+    $state = startedGame();
+    $equipped = [
+        'body' => 'emperors-robes', 'mind' => 'emperors-knowledge',
+        'hand_left' => 'emperors-diary', 'hand_right' => 'emperors-staff',
+        'bag' => 'emperors-timepiece',
+    ];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'emperors-timepiece']);
+
+    expect($state->formerEmperorRoles)->toBe(['wanderer_a']);
+});
+
+test('Paradox rift can only be equipped by a former Emperor', function () {
+    $state = startedGame();
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['holding' => ['paradox-rift']])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'equip_relic', 'relic_key' => 'paradox-rift', 'slot' => 'bag']))
+        ->toThrow(InvalidMoveException::class, 'Paradox rift');
+
+    $state = $state->with(['formerEmperorRoles' => ['wanderer_a']]);
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'equip_relic', 'relic_key' => 'paradox-rift', 'slot' => 'bag']);
+
+    expect($state->wanderers['wanderer_a']['equipped']['bag'])->toBe('paradox-rift');
+});
+
+test('Paradox rift grants Prophecy at end of game only if its former-Emperor holder is exhausted', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'bag' => 'paradox-rift'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 0])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyEndOfGameScoring');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state);
+
+    expect($state->prophecy)->toBe(1)
+        ->and(collect($events)->pluck('type'))->toContain('prophecy_gained');
+});
+
+test('Paradox rift grants no Prophecy at end of game if its holder is not exhausted', function () {
+    $state = startedGame();
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'bag' => 'paradox-rift'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 10])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'applyEndOfGameScoring');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state);
+
+    expect($state->prophecy)->toBe(0)
+        ->and($events)->toBe([]);
+});
+
 test('finding Rift in time parks the choice on pendingRiftInTime instead of resolving immediately', function () {
     $state = startedGame();
     $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['inverted']])]);
@@ -1109,8 +1164,7 @@ test('Aura eruption heals all Wanderers 15 (including exhausted ones), clears Bu
         $board[$key] = [...$board[$key], 'infrastructure' => ['monolith_shard']];
     }
     $state = $state->with(['board' => $board]);
-    $burnEquipped = [...$state->wanderers['wanderer_a']['equipped'], 'body' => 'burn_token'];
-    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 0, 'shame' => 2, 'equipped' => $burnEquipped])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 0, 'shame' => 2, 'burned_slots' => ['body']])]);
     $equipped = [...$state->wanderers['wanderer_b']['equipped'], 'hand_left' => 'aura-eruption'];
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['hp' => 10, 'equipped' => $equipped])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
@@ -1121,7 +1175,7 @@ test('Aura eruption heals all Wanderers 15 (including exhausted ones), clears Bu
 
     expect($state->wanderers['wanderer_a']['hp'])->toBe(15) // exhausted (0 HP) wanderer healed too
         ->and($state->wanderers['wanderer_a']['shame'])->toBe(0)
-        ->and($state->wanderers['wanderer_a']['equipped']['body'])->toBeNull()
+        ->and($state->wanderers['wanderer_a']['burned_slots'])->toBe([])
         ->and($state->wanderers['wanderer_b']['hp'])->toBe(15) // capped at max HP
         ->and($state->wanderers['wanderer_b']['equipped']['hand_left'])->toBeNull()
         ->and($state->prophecy)->toBe($prophecyBefore + 1)

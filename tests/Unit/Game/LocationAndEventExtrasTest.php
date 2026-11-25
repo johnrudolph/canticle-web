@@ -187,10 +187,10 @@ test('Purification pools removes exactly 1 Shame, 1 Burn, and 1 Bound Relic from
     $board['1,0'] = [...$board['1,0'], 'location_key' => 'purification-pools'];
     $state = $state->with(['board' => $board]);
     $equipped = [
-        'body' => 'burn_token', 'mind' => null,
+        'body' => null, 'mind' => null,
         'hand_left' => 'burial-robes', 'hand_right' => 'golem-whistle', 'bag' => null,
     ];
-    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'shame' => 2])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'shame' => 2, 'burned_slots' => ['body']])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
     [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'cleanse_at_purification_pools']);
@@ -198,6 +198,7 @@ test('Purification pools removes exactly 1 Shame, 1 Burn, and 1 Bound Relic from
     expect($state->wanderers['wanderer_a']['equipped'])->toBe([
         'body' => null, 'mind' => null, 'hand_left' => null, 'hand_right' => 'golem-whistle', 'bag' => null,
     ])
+        ->and($state->wanderers['wanderer_a']['burned_slots'])->toBe([])
         ->and($state->wanderers['wanderer_a']['shame'])->toBe(1) // only 1 removed, not all
         ->and($state->trashedRelics)->toBe(['burial-robes'])
         ->and(collect($events)->pluck('type'))->toContain('wanderer_shame_removed')

@@ -29,20 +29,24 @@ const STATUS_TOKEN_LABELS: Record<string, string> = {
 function RelicRow({
     relicKey,
     entry,
+    isBurned = false,
 }: {
     relicKey: string;
     entry: RelicCatalogEntry | undefined;
+    isBurned?: boolean;
 }) {
-    const statusLabel = STATUS_TOKEN_LABELS[relicKey];
-
     return (
         <div className="min-w-0 rounded-md border p-2">
             <p className="font-medium break-words">
-                {statusLabel ??
-                    (entry ? `${entry.slot_emoji} ${entry.name}` : relicKey)}
+                {entry ? `${entry.slot_emoji} ${entry.name}` : relicKey}
                 {entry?.is_bound && (
                     <span className="ml-2 text-[10px] font-normal text-muted-foreground">
                         🪡 Bound
+                    </span>
+                )}
+                {isBurned && (
+                    <span className="ml-2 text-[10px] font-normal text-muted-foreground">
+                        {STATUS_TOKEN_LABELS.burn_token}
                     </span>
                 )}
             </p>
@@ -75,9 +79,17 @@ export function WandererDetailDialog({
     onSubmit: (move: Record<string, unknown>) => void;
 }) {
     const label = `Wanderer ${role.replace('wanderer_', '').toUpperCase()}`;
+    // Burn is tracked independently of `equipped` now — Calloused/
+    // Inflamed will lets a slot be Burned AND hold a Relic at once, so
+    // a burned-but-empty slot needs its own row rather than relying on
+    // a sentinel value inside `equipped`.
     const equippedEntries = (Object.keys(SLOT_LABELS) as EquipSlot[])
-        .map((slot) => ({ slot, relicKey: wanderer.equipped[slot] }))
-        .filter((e) => e.relicKey);
+        .map((slot) => ({
+            slot,
+            relicKey: wanderer.equipped[slot],
+            isBurned: wanderer.burned_slots.includes(slot),
+        }))
+        .filter((e) => e.relicKey || e.isBurned);
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -125,13 +137,23 @@ export function WandererDetailDialog({
                             </p>
                         )}
                         <div className="flex flex-col gap-2">
-                            {equippedEntries.map(({ slot, relicKey }) => (
-                                <RelicRow
-                                    key={slot}
-                                    relicKey={relicKey as string}
-                                    entry={relicCatalog[relicKey as string]}
-                                />
-                            ))}
+                            {equippedEntries.map(
+                                ({ slot, relicKey, isBurned }) => (
+                                    <RelicRow
+                                        key={slot}
+                                        relicKey={
+                                            relicKey ??
+                                            STATUS_TOKEN_LABELS.burn_token
+                                        }
+                                        entry={
+                                            relicKey
+                                                ? relicCatalog[relicKey]
+                                                : undefined
+                                        }
+                                        isBurned={isBurned && !!relicKey}
+                                    />
+                                ),
+                            )}
                         </div>
                     </div>
 

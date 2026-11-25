@@ -491,11 +491,9 @@ export default function GameShow({ game }: { game: GameSummary }) {
         switch (base) {
             case 'holy-water': {
                 const targetRole = allyRole ?? role;
-                const targetEquipped = Object.values(
-                    state.wanderers[targetRole].equipped,
-                );
                 const hasShame = state.wanderers[targetRole].shame > 0;
-                const hasBurn = targetEquipped.includes('burn_token');
+                const hasBurn =
+                    state.wanderers[targetRole].burned_slots.length > 0;
 
                 if (hasShame && hasBurn) {
                     setRelicPrompt({
@@ -744,13 +742,11 @@ export default function GameShow({ game }: { game: GameSummary }) {
                     setWandererPrompt(null);
                     const myRelics = Object.values(wanderer.equipped).filter(
                         (k): k is string =>
-                            !!k &&
-                            k !== 'burn_token' &&
-                            k.replace(/-\d+$/, '') !== 'warlocks-robes',
+                            !!k && k.replace(/-\d+$/, '') !== 'warlocks-robes',
                     );
                     const theirRelics = Object.values(
                         state.wanderers[targetRole].equipped,
-                    ).filter((k): k is string => !!k && !k.endsWith('_token'));
+                    ).filter((k): k is string => !!k);
                     setRelicPrompt({
                         title: 'Warlock’s robes',
                         description:
@@ -2564,6 +2560,17 @@ export default function GameShow({ game }: { game: GameSummary }) {
                 equipped={
                     newRelic ? state.wanderers[newRelic.role].equipped : null
                 }
+                burnedSlots={
+                    newRelic
+                        ? state.wanderers[newRelic.role].burned_slots
+                        : []
+                }
+                hasCalloused={
+                    !!newRelic &&
+                    Object.values(
+                        state.wanderers[newRelic.role].equipped,
+                    ).includes('calloused')
+                }
                 relicCatalog={game.relic_catalog}
                 processing={processing}
                 onSubmit={(move) => newRelic && submitMove(newRelic.role, move)}
@@ -2701,8 +2708,9 @@ export default function GameShow({ game }: { game: GameSummary }) {
                           )
                               .filter(
                                   (slot) =>
-                                      state.wanderers[statusTokenChoice.role]
-                                          .equipped[slot] !== 'burn_token',
+                                      !state.wanderers[
+                                          statusTokenChoice.role
+                                      ].burned_slots.includes(slot),
                               )
                               .map((slot) => {
                                   const occupant =

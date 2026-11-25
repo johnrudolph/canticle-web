@@ -49,7 +49,7 @@ test('Sharp objects grants 1 Burn token', function () {
     // rather than auto-applied.
     [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_status_token_choice', 'slot' => 'body']);
 
-    expect($state->wanderers['wanderer_a']['equipped'])->toContain('burn_token');
+    expect($state->wanderers['wanderer_a']['burned_slots'])->toBe(['body']);
 });
 
 test('Incarceration blocks movement for the rest of the turn, then clears on the Wanderer\'s next turn', function () {
@@ -229,7 +229,7 @@ test('Finding an Event Relic via search resolves it immediately instead of holdi
     [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_status_token_choice', 'slot' => 'body']);
 
     expect($state->wanderers['wanderer_a']['holding'])->toBe([])
-        ->and($state->wanderers['wanderer_a']['equipped'])->toContain('burn_token')
+        ->and($state->wanderers['wanderer_a']['burned_slots'])->toBe(['body'])
         ->and(collect($events)->pluck('type'))->toContain('location_searched');
 });
 

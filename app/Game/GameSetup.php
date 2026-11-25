@@ -103,10 +103,20 @@ final class GameSetup
                 'equipped' => array_fill_keys(self::EQUIP_SLOTS, null),
                 'holding' => [],
                 // Shame Zone — a plain counter, mirroring golem['shame'].
-                // Burn still lives in an equip slot (see 'equipped'
-                // above); only Shame moved out of it (rules.md
-                // 2026-11-24 revision).
+                // Burn still lives on the mat (see 'equipped' above);
+                // only Shame moved out of it (rules.md 2026-11-24
+                // revision).
                 'shame' => 0,
+                // Burn's own occupancy is tracked here, separately from
+                // 'equipped' — Calloused/Inflamed will ("you may equip
+                // relics in slots where you have Scars") means a slot
+                // can be burned AND hold a Relic at once, which a single
+                // 'burn_token' sentinel value in 'equipped' can't
+                // represent. 'equipped[slot]' always reflects what's
+                // physically there (a Relic key or null); this list is
+                // the independent source of truth for which slots are
+                // burned.
+                'burned_slots' => [],
                 'move_blocked_this_turn' => false,
                 'has_moved_this_turn' => false,
                 'tucked_cards' => [],
