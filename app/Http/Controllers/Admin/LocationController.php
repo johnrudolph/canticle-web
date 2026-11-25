@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Admin;
 
 use App\Models\Cards\Location;
 use App\Models\Cards\Relic;
+use Inertia\Inertia;
+use Inertia\Response;
 
 class LocationController extends CardController
 {
@@ -48,6 +50,29 @@ class LocationController extends CardController
         return [
             'branchSummary' => $this->buildBranchSummary(),
         ];
+    }
+
+    /**
+     * The rare ⭐ location-locked Relics (Relic.location, matched by
+     * name) that point at this specific Location — same relation
+     * relic_names already summarizes as plain text, just also handed
+     * over as {id, name} pairs so the detail page can link each one
+     * straight to its own Relic admin page.
+     */
+    public function show(int $id): Response
+    {
+        $card = Location::query()->withTrashed()->with('comments')->findOrFail($id);
+
+        $linkedRelics = Relic::query()
+            ->where('location', $card->name)
+            ->orderBy('name')
+            ->get(['id', 'name']);
+
+        return Inertia::render($this->detailPageComponent(), [
+            'card' => $card,
+            'linkedRelics' => $linkedRelics,
+            ...$this->extraProps(),
+        ]);
     }
 
     /**

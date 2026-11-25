@@ -52,3 +52,9 @@ export interface BranchSummary {
     relicCounts: Record<string, number>;
     locationCounts: Record<string, number>;
 }
+
+/** A Relic location-locked to a given Location (Relic.location), for linking to its own admin page — see LocationController::show. */
+export interface LinkedRelic {
+    id: number;
+    name: string;
+}

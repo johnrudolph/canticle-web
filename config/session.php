@@ -32,7 +32,13 @@ return [
     |
     */
 
-    'lifetime' => (int) env('SESSION_LIFETIME', 120),
+    // 2 weeks — was 120 minutes, which combined with the admin login's
+    // lack of a "remember me" option made the admin card editor feel
+    // like it logged out "fast" after under an hour of inactivity. See
+    // ForgetStaleGuestIdentity for the other half of that bug (a stale
+    // guest-account remember cookie quietly taking over once the real
+    // session actually expired).
+    'lifetime' => (int) env('SESSION_LIFETIME', 20160),
 
     'expire_on_close' => env('SESSION_EXPIRE_ON_CLOSE', false),
 

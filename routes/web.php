@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\LobbyController;
 use App\Http\Middleware\EnsureGuestIdentity;
+use App\Http\Middleware\ForgetStaleGuestIdentity;
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Http\Controllers\AuthenticatedSessionController;
 
@@ -17,7 +18,7 @@ Route::middleware([EnsureGuestIdentity::class])->group(function () {
 // already-logged-in and bounce away from the form entirely).
 Route::get('login', [AuthenticatedSessionController::class, 'create'])->name('login');
 Route::post('login', [AuthenticatedSessionController::class, 'store'])
-    ->middleware('throttle:login')
+    ->middleware(['throttle:login', ForgetStaleGuestIdentity::class])
     ->name('login.store');
 Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
     ->middleware('auth')
