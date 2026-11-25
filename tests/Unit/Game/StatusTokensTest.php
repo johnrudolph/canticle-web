@@ -38,6 +38,35 @@ test('Holy water removes Shame if present, otherwise Burn', function () {
         ->and(collect($events)->pluck('type'))->toContain('wanderer_burn_removed');
 });
 
+test('Balm removes a Burn from yourself or an Ally on your space', function () {
+    $state = startedGame();
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    $equippedA = [...$state->wanderers['wanderer_a']['equipped'], 'mind' => 'balm'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equippedA])]);
+    $equippedB = [...$state->wanderers['wanderer_b']['equipped'], 'body' => 'burn_token'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['equipped' => $equippedB])]);
+
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', [
+        'type' => 'use_relic', 'relic_key' => 'balm', 'target_role' => 'wanderer_b',
+    ]);
+
+    expect($state->wanderers['wanderer_b']['equipped']['body'])->toBeNull()
+        ->and(collect($events)->pluck('type'))->toContain('wanderer_burn_removed');
+});
+
+test('Balm defaults to removing the caster\'s own Burn when no target is given', function () {
+    $state = startedGame();
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'mind' => 'balm', 'body' => 'burn_token'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['equipped' => $equipped])]);
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'balm']);
+
+    expect($state->wanderers['wanderer_a']['equipped']['body'])->toBeNull();
+});
+
 test('Hands of forgiveness removes every Shame and Burn token from the chosen Wanderer', function () {
     $state = startedGame();
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);

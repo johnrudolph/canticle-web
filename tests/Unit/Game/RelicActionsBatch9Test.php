@@ -259,6 +259,62 @@ test('Whirlwind redistributes all infrastructure tokens with no duplicate type p
     expect($allTokens)->toBe(['fruit_tree', 'monolith_shard', 'walls']);
 });
 
+test('Dark swell damages and Burns every Wanderer on a 🌑 or 🔥 space, leaves others untouched', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'cabalist-inferno']; // produces 🔥
+    $board['0,1'] = [...$board['0,1'], 'location_key' => 'artists-hovel']; // produces 🎨
+    $state = $state->with(['board' => $board]);
+    // 4 of 5 slots already Burned — exactly 1 legal slot left, so the
+    // new Burn lands immediately instead of queuing a
+    // pendingStatusTokenChoices pick (2+ legal slots would do that).
+    $equippedA = ['body' => 'burn_token', 'mind' => 'burn_token', 'hand_left' => 'burn_token', 'hand_right' => 'burn_token', 'bag' => null];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 15, 'cell' => [1, 0], 'equipped' => $equippedA])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['hp' => 15, 'cell' => [0, 1]])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'resolveGolemCard');
+    $reflection->setAccessible(true);
+    [$state] = $reflection->invoke(null, $state, 'dark-swell', false);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(10)
+        ->and($state->wanderers['wanderer_a']['equipped']['bag'])->toBe('burn_token')
+        ->and($state->wanderers['wanderer_b']['hp'])->toBe(15)
+        ->and(in_array('burn_token', $state->wanderers['wanderer_b']['equipped'], true))->toBeFalse();
+});
+
+test('Health inversion sets HP to (15 - current) only for Wanderers on a ⏳ space', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'sundial']; // produces ⏳
+    $board['0,1'] = [...$board['0,1'], 'location_key' => 'artists-hovel']; // produces 🎨
+    $state = $state->with(['board' => $board]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 4, 'cell' => [1, 0]])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['hp' => 4, 'cell' => [0, 1]])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'resolveGolemCard');
+    $reflection->setAccessible(true);
+    [$state, $events] = $reflection->invoke(null, $state, 'health-inversion', false);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(11) // 15 - 4
+        ->and($state->wanderers['wanderer_b']['hp'])->toBe(4) // untouched — not on a ⏳ space
+        ->and(collect($events)->pluck('type'))->toContain('wanderer_healed');
+});
+
+test('Health inversion exhausts a Wanderer whose inverted HP lands on 0', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'sundial'];
+    $state = $state->with(['board' => $board]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 15, 'cell' => [1, 0]])]);
+
+    $reflection = new ReflectionMethod(GameEngine::class, 'resolveGolemCard');
+    $reflection->setAccessible(true);
+    [$state] = $reflection->invoke(null, $state, 'health-inversion', false);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(0)
+        ->and($state->wanderers['wanderer_a']['was_ever_exhausted'])->toBeTrue();
+});
+
 test('Garbage barricade reduces Golem attack damage by 1 per 2 Relics tucked there', function () {
     $state = startedGame();
     $board = $state->board;

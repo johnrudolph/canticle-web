@@ -184,5 +184,17 @@
         "print": true,
         "name": "Whirlwind",
         "action": "Pick up all infrastructure tokens. Shuffle them, and redistribute them at random. Ensure no space has two of the same token as usual."
+    },
+    {
+        "key": "dark-swell",
+        "print": true,
+        "name": "Dark swell",
+        "action": "All Wanderers on spaces that produce 🌑 or 🔥 lose 5HP and gain a Burn token."
+    },
+    {
+        "key": "health-inversion",
+        "print": true,
+        "name": "Health inversion",
+        "action": "All Wanderers on spaces that produce ⏳ change their HP to X, where X = (15 - their current HP)."
     }
 ]

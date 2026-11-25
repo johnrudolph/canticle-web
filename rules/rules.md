@@ -79,7 +79,7 @@ Each turn you play 2 tokens on the mat. The rules of each are as follows:
 
 - Monolith Shard (12): There can only be 1 Shard per space. These have no intrinsic effect, but many magical Relics interact with Shards.
 - Fruit tree (3): When Wanderers start their turn on this space, they gain 1 action that they must use on this turn.
-- Road (10): It always costs 1 action to move. But when a Wanderer moves into a space containing a Road, they may continue to an adjacent space for free. If multiple contiguous spaces contain roads, the Wanderer may be able to traverse many spaces for just 1 action. A space that contains roads also produces the symbols of all other spaces with roads that connect to that spaces. Example: Spaces A, B, and C are contiguous and all contain roads. Space C proudces 🐾, and so thus all 3 spaces produce 🐾.
+- Road (10): It always costs 1 action to move. But when a Wanderer moves into a space containing a Road, they may continue to an adjacent space that also contains a road for free. If multiple contiguous spaces contain roads, the Wanderer may be able to traverse many spaces for just 1 action. A space that contains roads also produces the symbols of all other spaces with roads that connect to that spaces. Example: Spaces A, B, and C are contiguous and all contain roads. Space C proudces 🐾, and so thus all 3 spaces produce 🐾.
 - Walls (2): The Golem cannot enter spaces with Walls.  When placing Walls:  
 	1. You cannot place it on the Golem’s space
 	2. You cannot trap the Golem. The Golem must be able to reach all Locations that do not have Walls.

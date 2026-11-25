@@ -88,6 +88,7 @@ const PROMPTED_RELICS = new Set([
  */
 const ALLY_TARGETABLE_RELICS = new Set([
     'holy-water',
+    'balm',
     'quantum-robes',
     'teleportation-stone',
     'warlocks-robes',

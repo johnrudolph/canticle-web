@@ -1012,13 +1012,13 @@ final class GameEngine
 
     /**
      * Divine Icon: "All 🌿 Relics used in your space by you or your
-     * Allies get +3." Rather than special-casing every heal Relic
-     * individually, this diffs every Wanderer's HP across the whole
-     * use_relic call and adds +3 more to any positive gain — which
-     * only ever happens for a 🌿 effect in the first place, so the
-     * diff alone is enough to find them. Only triggers if the caster
-     * (not the target) shares a space with a Divine Icon holder,
-     * matching "used in your space."
+     * Allies get +3. If your space produces 📖, +6 instead." Rather
+     * than special-casing every heal Relic individually, this diffs
+     * every Wanderer's HP across the whole use_relic call and adds the
+     * boost to any positive gain — which only ever happens for a 🌿
+     * effect in the first place, so the diff alone is enough to find
+     * them. Only triggers if the caster (not the target) shares a space
+     * with a Divine Icon holder, matching "used in your space."
      *
      * @param  array<string, int>  $hpBefore
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
@@ -1040,6 +1040,8 @@ final class GameEngine
             return [$state, []];
         }
 
+        $casterLocation = $casterCell === null ? null : LocationCatalog::find($state->board[$casterCellKey]['location_key']);
+        $boost = $casterLocation?->producesEmoji === '📖' ? 6 : 3;
         $events = [];
 
         foreach ($state->wanderers as $role => $wanderer) {
@@ -1049,7 +1051,7 @@ final class GameEngine
                 continue;
             }
 
-            $hp = min(self::maxHpFor($state, $role), $wanderer['hp'] + 3);
+            $hp = min(self::maxHpFor($state, $role), $wanderer['hp'] + $boost);
             $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
             $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
         }
@@ -1340,12 +1342,13 @@ final class GameEngine
             'a-keen-eye' => [...self::relicSearchN($state, $actorRole, 2), false],
             'alms-for-the-poor' => [...self::relicHealBelowThreshold($state, 6), false],
             'burial-robes' => [...self::relicHealSharedCell($state, $actorRole, 15), false],
-            'divine-healing-oil' => [...self::relicHealSelfOrAlly($state, $actorRole, $move, 3), false],
+            'divine-healing-oil' => [...self::relicDivineHealingOil($state, $actorRole, $move), false],
             'golem-disguise' => [...self::relicDiscardGolemTopCard($state), false],
             'golem-whistle' => [...self::relicSummonGolem($state, $actorRole), false],
             'quantum-robes' => [...self::relicSwapWithAlly($state, $actorRole, $move), false],
             'last-rites' => [...self::relicHealAllyToMax($state, $actorRole, $move), true],
             'holy-water' => [...self::relicRemoveStatus($state, $actorRole, $move), false],
+            'balm' => [...self::relicBalm($state, $actorRole, $move), false],
             'hands-of-forgiveness' => [...self::relicRemoveAllStatus($state, $actorRole, $move), false],
             'whip-of-justice' => self::relicTapForGolemShame($state, $actorRole),
             'peacemakers-spirit' => [...self::relicTapGolemIfSharingCell($state, $actorRole, 2), false],
@@ -2245,6 +2248,22 @@ final class GameEngine
     }
 
     /**
+     * Divine healing oil: "🌿3 for yourself or an Ally on your space.
+     * If your space produces 📖, 🌿6 instead."
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicDivineHealingOil(GameState $state, string $actorRole, array $move): array
+    {
+        $casterCell = $state->wanderers[$actorRole]['cell'];
+        $location = LocationCatalog::find($state->board[Board::key($casterCell)]['location_key']);
+        $amount = $location?->producesEmoji === '📖' ? 6 : 3;
+
+        return self::relicHealSelfOrAlly($state, $actorRole, $move, $amount);
+    }
+
+    /**
      * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
@@ -2359,6 +2378,21 @@ final class GameEngine
         return $removeType === 'shame_token'
             ? self::removeShame($state, $targetRole)
             : self::removeBurn($state, $targetRole);
+    }
+
+    /**
+     * Balm: "Remove 1 Scar from yourself, or an Ally on your space."
+     * ("Scar" is leftover terminology from before the rules.md rename
+     * to Burn — same mechanic as Holy water's own Burn-removal.)
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicBalm(GameState $state, string $actorRole, array $move): array
+    {
+        $targetRole = self::resolveSameSpaceTarget($state, $actorRole, $move) ?? $actorRole;
+
+        return self::removeBurn($state, $targetRole);
     }
 
     /**
@@ -2520,11 +2554,12 @@ final class GameEngine
 
     /**
      * Blinding explosion: "All Wanderers on or adjacent to your space lose
-     * 5 Health. If the Golem is in your space, tap the next un-tapped 4
-     * cards from their draw pile. Then, trash this, and gain 📜." The
-     * damage always lands; the tap is conditional on the Golem sharing
-     * the caster's space; the trash (like every "gain 📜" clause) is
-     * unconditional, same as a normal one-shot Action Relic.
+     * 5 Health and gain a Burn token. If the Golem is in your space, tap
+     * the next un-tapped 4 cards from their draw pile. Then, trash this,
+     * and gain 📜." The damage and Burn always land; the tap is
+     * conditional on the Golem sharing the caster's space; the trash
+     * (like every "gain 📜" clause) is unconditional, same as a normal
+     * one-shot Action Relic.
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
      */
@@ -2532,8 +2567,22 @@ final class GameEngine
     {
         $casterCell = $state->wanderers[$actorRole]['cell'];
         $affected = [$casterCell, ...Board::occupiedNeighbors($casterCell, $state->board)];
+        $affectedKeys = array_map(Board::key(...), $affected);
+
+        // Captured before damage lands — a Wanderer this blast exhausts
+        // still gets their Burn token; activeWanderers() would silently
+        // drop them (it excludes 0 HP) if checked afterward instead.
+        $affectedRoles = array_filter(
+            array_keys(self::activeWanderers($state)),
+            fn (string $role) => in_array(Board::key($state->wanderers[$role]['cell']), $affectedKeys, true),
+        );
 
         [$state, $events] = self::damageWanderersAt($state, $affected, 5);
+
+        foreach ($affectedRoles as $role) {
+            [$state, $burnEvents] = self::applyBurn($state, $role);
+            $events = [...$events, ...$burnEvents];
+        }
 
         if (self::golemSharesCellWith($state, $actorRole)) {
             [$state, $tapEvents] = self::tapGolemDrawPile($state, 4);
@@ -2668,7 +2717,8 @@ final class GameEngine
 
     /**
      * Divine aura: "If you are on a space with a Monolith Shard, 🌿3 for
-     * all Wanderers on or adjacent to your space."
+     * all Wanderers on or adjacent to your space. If the space produces
+     * 📖, 🌿6 instead."
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
@@ -2681,6 +2731,8 @@ final class GameEngine
         }
 
         $cellKeys = [Board::key($casterCell), ...array_map(Board::key(...), Board::occupiedNeighbors($casterCell, $state->board))];
+        $casterLocation = LocationCatalog::find($state->board[Board::key($casterCell)]['location_key']);
+        $amount = $casterLocation?->producesEmoji === '📖' ? 6 : 3;
         $events = [];
 
         foreach (self::activeWanderers($state) as $role => $cell) {
@@ -2688,7 +2740,7 @@ final class GameEngine
                 continue;
             }
 
-            $hp = min(self::maxHpFor($state, $role), $state->wanderers[$role]['hp'] + 3);
+            $hp = min(self::maxHpFor($state, $role), $state->wanderers[$role]['hp'] + $amount);
             $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
             $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
         }
@@ -2698,9 +2750,12 @@ final class GameEngine
 
     /**
      * Emperor's Staff: "If your space does not have a Monolith Shard,
-     * create one." Draws from the Emperor's fixed Infrastructure pool
-     * like a normal placement would — a no-op if the pool is empty,
-     * since there's no other source of Monolith Shards in rules.md.
+     * create one. If you are on a space that produces ⏳, +1 action."
+     * Draws from the Emperor's fixed Infrastructure pool like a normal
+     * placement would — a no-op if the pool is empty, since there's no
+     * other source of Monolith Shards in rules.md. The +1 action is
+     * unconditional on the ⏳ space regardless of whether a Shard was
+     * actually created.
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
@@ -2708,22 +2763,26 @@ final class GameEngine
     {
         $cellKey = Board::key($state->wanderers[$actorRole]['cell']);
         $entry = $state->board[$cellKey];
+        $events = [];
 
-        if (in_array('monolith_shard', $entry['infrastructure'], true)) {
-            return [$state, []];
+        if (! in_array('monolith_shard', $entry['infrastructure'], true) && ($state->infrastructurePool['monolith_shard'] ?? 0) > 0) {
+            $board = $state->board;
+            $board[$cellKey] = [...$entry, 'infrastructure' => [...$entry['infrastructure'], 'monolith_shard']];
+            $pool = $state->infrastructurePool;
+            $pool['monolith_shard']--;
+            $state = $state->with(['board' => $board, 'infrastructurePool' => $pool]);
+            $events[] = ['type' => 'infrastructure_placed', 'role_key' => $actorRole, 'payload' => ['infrastructure' => 'monolith_shard', 'cell' => $state->wanderers[$actorRole]['cell']]];
         }
 
-        if (($state->infrastructurePool['monolith_shard'] ?? 0) <= 0) {
-            return [$state, []];
+        // "If you are on a space that produces ⏳, +1 action."
+        $location = LocationCatalog::find($entry['location_key']);
+
+        if ($location?->producesEmoji === '⏳') {
+            $wanderer = $state->wanderers[$actorRole];
+            $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['actions_remaining' => $wanderer['actions_remaining'] + 1])]);
         }
 
-        $board = $state->board;
-        $board[$cellKey] = [...$entry, 'infrastructure' => [...$entry['infrastructure'], 'monolith_shard']];
-        $pool = $state->infrastructurePool;
-        $pool['monolith_shard']--;
-        $state = $state->with(['board' => $board, 'infrastructurePool' => $pool]);
-
-        return [$state, [['type' => 'infrastructure_placed', 'role_key' => $actorRole, 'payload' => ['infrastructure' => 'monolith_shard', 'cell' => $state->wanderers[$actorRole]['cell']]]]];
+        return [$state, $events];
     }
 
     /**
@@ -2957,9 +3016,10 @@ final class GameEngine
     }
 
     /**
-     * Aura eruption: "If there are 7+ Monolith Shards on or adjacent
-     * to your space, all Wanderers: 🌿15, remove all Burns, remove
-     * all Shame. Trash this and gain 📜."
+     * Divine aura eruption: "If there are 7+ Monolith Shards on or
+     * adjacent to your space, and your space produces 📖, all
+     * Wanderers: 🌿15, remove all Burns, remove all Shame. Trash this
+     * and gain 📜."
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
      */
@@ -2968,6 +3028,12 @@ final class GameEngine
         $casterCell = $state->wanderers[$actorRole]['cell'];
 
         if ($casterCell === null || self::monolithShardsWithin($state, $casterCell, 1) < 7) {
+            return [$state, [], false];
+        }
+
+        $casterLocation = LocationCatalog::find($state->board[Board::key($casterCell)]['location_key']);
+
+        if ($casterLocation?->producesEmoji !== '📖') {
             return [$state, [], false];
         }
 
@@ -3032,10 +3098,10 @@ final class GameEngine
 
     /**
      * Divine solidarity: "If you are on a space with an Ally, 🌿4 for
-     * you and your Ally." Heals every Wanderer sharing the caster's
-     * space (including the caster) rather than requiring a single
-     * chosen target, since the printed text doesn't single one out when
-     * more than one Ally is present.
+     * you and your Ally. If your space produces 📖, 🌿8 instead." Heals
+     * every Wanderer sharing the caster's space (including the caster)
+     * rather than requiring a single chosen target, since the printed
+     * text doesn't single one out when more than one Ally is present.
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
@@ -3056,13 +3122,16 @@ final class GameEngine
             return [$state, []];
         }
 
+        $location = LocationCatalog::find($state->board[$casterCellKey]['location_key']);
+        $amount = $location?->producesEmoji === '📖' ? 8 : 4;
+
         $events = [];
         foreach (self::activeWanderers($state) as $role => $cell) {
             if (Board::key($cell) !== $casterCellKey) {
                 continue;
             }
 
-            $hp = min(self::maxHpFor($state, $role), $state->wanderers[$role]['hp'] + 4);
+            $hp = min(self::maxHpFor($state, $role), $state->wanderers[$role]['hp'] + $amount);
             $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
             $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
         }
@@ -3164,9 +3233,10 @@ final class GameEngine
 
     /**
      * Emperor's Robes: "🌿1 yourself or an Ally on your space, for each
-     * Relic you have equipped that starts with 'Emperor's __.'" Only
-     * equipped Relics count here (unlike Emperor's Diary, which also
-     * counts held ones) — that's what the card actually says.
+     * Relic you have equipped that starts with 'Emperor's __.' If you
+     * are on a space with a Monolith Shard, +2🌿." Only equipped Relics
+     * count here (unlike Emperor's Diary, which also counts held ones)
+     * — that's what the card actually says.
      *
      * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
@@ -3177,6 +3247,10 @@ final class GameEngine
 
         if ($amount === 0) {
             return [$state, []];
+        }
+
+        if (self::hasMonolithShardFor($state, $actorRole, $state->wanderers[$actorRole]['cell'])) {
+            $amount += 2;
         }
 
         $targetRole = self::resolveAllyTarget($state, $actorRole, $move) ?? $actorRole;
@@ -3423,9 +3497,10 @@ final class GameEngine
 
     /**
      * Divine Cabalist pyre: "Trash any number of face-up Relics on your
-     * space, and trash this. 🌿 yourself and Allies on your space 2 for
-     * each Relic you burned." $move['board_relic_keys'] picks which (any
-     * number, including zero) from the caster's own cell's face-up pile.
+     * space, and trash this. For you and any other Wanderers on your
+     * space: gain a Burn token, then 🌿2 for each Relic you trashed."
+     * $move['board_relic_keys'] picks which (any number, including
+     * zero) from the caster's own cell's face-up pile.
      *
      * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
@@ -3470,12 +3545,20 @@ final class GameEngine
 
         $healAmount = 2 * count($burned);
 
-        if ($healAmount > 0) {
-            foreach (self::activeWanderers($state) as $role => $cell) {
-                if (Board::key($cell) !== $cellKey) {
-                    continue;
-                }
+        // "For you and any other Wanderers on your space: gain a Burn
+        // token, then 🌿2 for each Relic you trashed." Every Wanderer
+        // sharing the caster's cell gets a Burn token unconditionally
+        // (even if 0 Relics were trashed); the heal itself is naturally
+        // 0 in that case, so no event is emitted for it.
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            if (Board::key($cell) !== $cellKey) {
+                continue;
+            }
 
+            [$state, $burnEvents] = self::applyBurn($state, $role);
+            $events = [...$events, ...$burnEvents];
+
+            if ($healAmount > 0) {
                 $hp = min(self::maxHpFor($state, $role), $state->wanderers[$role]['hp'] + $healAmount);
                 $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
                 $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
@@ -3575,12 +3658,12 @@ final class GameEngine
 
     /**
      * Cabalist brand: "If you are on the Golem's space, discard any
-     * Glyphs on its mat you choose, trash this, and gain 📜. Then, the
-     * Golem plays 3 cards." $move['glyph_keys'] picks which (any
-     * number, including zero) of the Golem's active Glyphs to discard
-     * before it plays. Reuses golemPlayCards so "plays 3 cards" is
-     * identical to 3 plays during a normal Golem phase — including
-     * Double Down/Time Paradox if drawn.
+     * Glyphs on its mat you choose, gain a Burn token, trash this, and
+     * gain 📜. Then, the Golem plays 3 cards." $move['glyph_keys'] picks
+     * which (any number, including zero) of the Golem's active Glyphs
+     * to discard before it plays. Reuses golemPlayCards so "plays 3
+     * cards" is identical to 3 plays during a normal Golem phase —
+     * including Double Down/Time Paradox if drawn.
      *
      * @param  array<string, mixed>  $move
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
@@ -3615,6 +3698,9 @@ final class GameEngine
 
             $state = $state->with(['golem' => $state->golemWith(['glyphs' => $glyphs])]);
         }
+
+        [$state, $burnEvents] = self::applyBurn($state, $actorRole);
+        $events = [...$events, ...$burnEvents];
 
         $state = $state->with(['prophecy' => $state->prophecy + 1]);
         $events[] = ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => 1]];
@@ -4585,17 +4671,33 @@ final class GameEngine
         $wanderer = $state->wanderers[$actorRole];
         $originInfrastructure = $state->board[Board::key($wanderer['cell'])]['infrastructure'];
 
+        $direction = (string) ($move['direction'] ?? '');
+        $to = Board::neighbor($wanderer['cell'], $direction);
+        $toKey = Board::key($to);
+
+        if (! array_key_exists($toKey, $state->board)) {
+            throw new InvalidMoveException('Wanderers must always be on a Location.');
+        }
+
+        $destinationInfrastructure = $state->board[$toKey]['infrastructure'];
+
         // Road: "It always costs 1 action to move. But when a Wanderer
         // moves into a space containing a Road, they may continue to an
-        // adjacent space for free. If multiple contiguous spaces
-        // contain Roads, the Wanderer may be able to traverse many
-        // spaces for just 1 action." The FIRST move of a turn always
-        // costs its action, even if the Wanderer is already standing on
-        // a Road when their turn starts — has_moved_this_turn gates
-        // that. Only moves after that first paid one can be free for
-        // stepping off a Road space. Earthquake Glyph: "Roads and
+        // adjacent space that also contains a road for free. If
+        // multiple contiguous spaces contain Roads, the Wanderer may be
+        // able to traverse many spaces for just 1 action." The FIRST
+        // move of a turn always costs its action, even if the Wanderer
+        // is already standing on a Road when their turn starts —
+        // has_moved_this_turn gates that. Only moves after that first
+        // paid one can be free, and only when BOTH the space being left
+        // and the space being entered have a Road — rules.md 2026-11-?:
+        // tightened from "any adjacent space" to require the
+        // destination to also have a Road. Earthquake Glyph: "Roads and
         // walls have no effect" — Roads simply stop granting this.
-        $freeMove = $wanderer['has_moved_this_turn'] && in_array('road', $originInfrastructure, true) && ! in_array('earthquake', $state->golem['glyphs'], true);
+        $freeMove = $wanderer['has_moved_this_turn']
+            && in_array('road', $originInfrastructure, true)
+            && in_array('road', $destinationInfrastructure, true)
+            && ! in_array('earthquake', $state->golem['glyphs'], true);
 
         if (! $freeMove && $wanderer['actions_remaining'] <= 0) {
             throw new InvalidMoveException('No actions remaining this turn.');
@@ -4605,14 +4707,6 @@ final class GameEngine
 
         if ($wanderer['move_blocked_this_turn']) {
             throw new InvalidMoveException('Incarceration: you cannot move for the rest of this turn.');
-        }
-
-        $direction = (string) ($move['direction'] ?? '');
-        $to = Board::neighbor($wanderer['cell'], $direction);
-        $toKey = Board::key($to);
-
-        if (! array_key_exists($toKey, $state->board)) {
-            throw new InvalidMoveException('Wanderers must always be on a Location.');
         }
 
         if (self::entryBlocked($state, $actorRole, $to)) {
@@ -4632,7 +4726,6 @@ final class GameEngine
             throw new InvalidMoveException('Barricading: Wanderers cannot move into the Golem\'s space.');
         }
 
-        $destinationInfrastructure = $state->board[$toKey]['infrastructure'];
         $actionsRemaining = $wanderer['actions_remaining'] - ($freeMove ? 0 : 1);
 
         // Emperor's Knowledge: "When moving, move an additional space for
@@ -5893,6 +5986,16 @@ final class GameEngine
                 [$state, $e] = self::golemWhirlwind($state);
                 $events = [...$events, ...$e];
                 break;
+
+            case 'dark-swell':
+                [$state, $e] = self::golemDarkSwell($state);
+                $events = [...$events, ...$e];
+                break;
+
+            case 'health-inversion':
+                [$state, $e] = self::golemHealthInversion($state);
+                $events = [...$events, ...$e];
+                break;
         }
 
         return [$state, $events, $effects];
@@ -6766,6 +6869,76 @@ final class GameEngine
     }
 
     /**
+     * Dark swell: "All Wanderers on spaces that produce 🌑 or 🔥 lose
+     * 5HP and gain a Burn token."
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemDarkSwell(GameState $state): array
+    {
+        $events = [];
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            $location = LocationCatalog::find($state->board[Board::key($cell)]['location_key']);
+
+            if (! in_array($location?->producesEmoji, ['🌑', '🔥'], true)) {
+                continue;
+            }
+
+            [$state, $damageEvents] = self::applyDamage($state, $role, 5, true);
+            $events = [...$events, ...$damageEvents];
+
+            [$state, $burnEvents] = self::applyBurn($state, $role);
+            $events = [...$events, ...$burnEvents];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Health inversion: "All Wanderers on spaces that produce ⏳ change
+     * their HP to X, where X = (15 - their current HP)." A direct HP
+     * set (like Cabalist's Gown's own "set to 5"), not routed through
+     * applyDamage — there's no 👊 wording here, so Golem-attack-scoped
+     * Glyphs/Relics (Cruel, Dark sacrifice, etc.) don't apply.
+     *
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function golemHealthInversion(GameState $state): array
+    {
+        $events = [];
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            $location = LocationCatalog::find($state->board[Board::key($cell)]['location_key']);
+
+            if ($location?->producesEmoji !== '⏳') {
+                continue;
+            }
+
+            $oldHp = $state->wanderers[$role]['hp'];
+            $newHp = max(0, min(self::maxHpFor($state, $role), 15 - $oldHp));
+
+            if ($newHp === $oldHp) {
+                continue;
+            }
+
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $newHp])]);
+
+            if ($newHp > $oldHp) {
+                $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $newHp]];
+            } else {
+                $events[] = ['type' => 'wanderer_damaged', 'role_key' => $role, 'payload' => ['amount' => $oldHp - $newHp]];
+
+                if ($newHp === 0) {
+                    $state = $state->with(['wanderers' => $state->wanderersWith($role, ['was_ever_exhausted' => true])]);
+                }
+            }
+        }
+
+        return [$state, $events];
+    }
+
+    /**
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
     private static function golemAttackHere(GameState $state, int $damage): array
@@ -7184,7 +7357,8 @@ final class GameEngine
     /**
      * Every passive Relic keyed off "when/after the Golem 👊 you":
      * Poison Blouse (tap its next draw pile card), Divine Poison
-     * Inversion (heal 2), inscribe-7 (add a 🌑 Glyph, then trash), and
+     * Inversion (heal 2, or 4 if the holder's space produces 📖),
+     * inscribe-7 (add a 🌑 Glyph, then trash), and
      * Buckler (immediately use the Action in your other 🖐️ Hand for
      * free — no action cost, no target_role, since there's no
      * decision UI to supply either).
@@ -7202,7 +7376,11 @@ final class GameEngine
         }
 
         if (in_array('divine-poison-inversion', $equipped, true)) {
-            $hp = min(self::maxHpFor($state, $role), $state->wanderers[$role]['hp'] + 2);
+            $cell = $state->wanderers[$role]['cell'];
+            $location = $cell === null ? null : LocationCatalog::find($state->board[Board::key($cell)]['location_key']);
+            $amount = $location?->producesEmoji === '📖' ? 4 : 2;
+
+            $hp = min(self::maxHpFor($state, $role), $state->wanderers[$role]['hp'] + $amount);
             $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
             $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
         }
@@ -8159,20 +8337,6 @@ final class GameEngine
         $wanderer = $state->wanderers[$actorRole];
         $originInfrastructure = $state->board[Board::key($wanderer['cell'])]['infrastructure'];
 
-        // Road: see moveWanderer()'s identical comment — the first move
-        // of a turn always costs its action, regardless of mechanism.
-        $freeMove = $wanderer['has_moved_this_turn'] && in_array('road', $originInfrastructure, true) && ! in_array('earthquake', $state->golem['glyphs'], true);
-
-        if (! $freeMove && $wanderer['actions_remaining'] <= 0) {
-            throw new InvalidMoveException('No actions remaining this turn.');
-        }
-
-        self::requireNotExhausted($wanderer);
-
-        if ($wanderer['move_blocked_this_turn']) {
-            throw new InvalidMoveException('Incarceration: you cannot move for the rest of this turn.');
-        }
-
         if (! in_array('telekenesis', $wanderer['equipped'], true)) {
             throw new InvalidMoveException('Telekinesis is not equipped.');
         }
@@ -8195,6 +8359,26 @@ final class GameEngine
         }
 
         $destinationLocationKey = $state->board[$toKey]['location_key'];
+        $destinationInfrastructure = $state->board[$toKey]['infrastructure'];
+
+        // Road: see moveWanderer()'s identical comment — the first move
+        // of a turn always costs its action regardless of mechanism,
+        // and (since the 2026-11-24 tightening) the destination must
+        // also have a Road, same as an ordinary move off a Road space.
+        $freeMove = $wanderer['has_moved_this_turn']
+            && in_array('road', $originInfrastructure, true)
+            && in_array('road', $destinationInfrastructure, true)
+            && ! in_array('earthquake', $state->golem['glyphs'], true);
+
+        if (! $freeMove && $wanderer['actions_remaining'] <= 0) {
+            throw new InvalidMoveException('No actions remaining this turn.');
+        }
+
+        self::requireNotExhausted($wanderer);
+
+        if ($wanderer['move_blocked_this_turn']) {
+            throw new InvalidMoveException('Incarceration: you cannot move for the rest of this turn.');
+        }
 
         if (self::entryBlocked($state, $actorRole, $toCell)) {
             throw new InvalidMoveException('Catacombs: only a Wanderer who has been exhausted before may enter.');

@@ -47,13 +47,19 @@ function startedGame(): GameState
     //     board, which would make any test asserting an exact
     //     infrastructurePool count nondeterministic depending on
     //     whether the shuffle happened to pick them.
+    //   - Cathedral/Purification pools/Fragile Chapel all produce 📖 —
+    //     several Divine-prefixed Relics double their effect on a 📖
+    //     space, which would make any test with a fixed expected amount
+    //     nondeterministic depending on whether one of these landed at
+    //     the hub (Catacombs is already excluded above for its own
+    //     reason, but also happens to produce 📖).
     // Swapping a cell's location_key alone doesn't undo a fixture it
     // already placed during GameSetup::create() — explicitly strip any
     // infrastructure on a swapped cell and restore it to the pool.
     $board = $state->board;
     $pool = $state->infrastructurePool;
     foreach ($board as $key => $entry) {
-        if (in_array($entry['location_key'], ['catacombs', 'exile', 'beds-of-poison', 'golem-sanctuary', 'house-of-cryptids', 'library', 'defenders-guild', 'monolith', 'field'], true)) {
+        if (in_array($entry['location_key'], ['catacombs', 'exile', 'beds-of-poison', 'golem-sanctuary', 'house-of-cryptids', 'library', 'defenders-guild', 'monolith', 'field', 'cathedral', 'purification-pools', 'fragile-chapel'], true)) {
             foreach ($entry['infrastructure'] as $fixtureType) {
                 $pool[$fixtureType]++;
             }
@@ -632,25 +638,44 @@ test('Walls cannot be placed on the Golem\'s own space', function () {
     GameEngine::apply($state, 'emperor', ['type' => 'place_infrastructure', 'infrastructure_type' => 'walls', 'cell' => [1, 0]]);
 })->throws(InvalidMoveException::class, "Cannot wall the Golem's own space.");
 
-test('moving FROM a Road space is free, and it chains through consecutive Roads', function () {
+test('moving FROM a Road space to another Road space is free, and it chains through consecutive Roads', function () {
     $state = startedGame();
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'place_infrastructure', 'infrastructure_type' => 'road', 'cell' => [1, 0]]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'place_infrastructure', 'infrastructure_type' => 'road', 'cell' => [0, 1]]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 
-    // Moving onto the Road costs the normal action — the origin [1,0]
-    // has no Road, so this move isn't free.
+    // The first move of a turn always costs its action, even starting
+    // on a Road — has_moved_this_turn gates that, not the destination.
     $toRoad = Board::directionBetween([1, 0], [0, 1]);
     [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $toRoad]);
     expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe(2)
         ->and($events[0]['payload']['free'])->toBeFalse();
 
-    // Moving FROM the Road space back to the hub is free — the move's
-    // own origin, not its destination, is what matters now.
+    // Moving FROM the Road space back to the hub (also a Road) is free
+    // — rules.md 2026-11-24: both the space being left AND the space
+    // being entered must have a Road.
     $backToHub = Board::directionBetween([0, 1], [1, 0]);
     [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $backToHub]);
 
     expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe(2) // unchanged — free move
         ->and($events[0]['payload']['free'])->toBeTrue();
+});
+
+test('moving FROM a Road space to a space without a Road costs the normal action', function () {
+    $state = startedGame();
+    // Only the origin has a Road — the destination [0,1] doesn't.
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'place_infrastructure', 'infrastructure_type' => 'road', 'cell' => [1, 0]]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    $direction = Board::directionBetween([1, 0], [1, 1]);
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $direction]);
+    $actionsAfterFirstMove = $state->wanderers['wanderer_a']['actions_remaining'];
+
+    $backToHub = Board::directionBetween([1, 1], [1, 0]);
+    [$state, $events] = GameEngine::apply($state, 'wanderer_a', ['type' => 'move_wanderer', 'direction' => $backToHub]);
+
+    expect($state->wanderers['wanderer_a']['actions_remaining'])->toBe($actionsAfterFirstMove - 1)
+        ->and($events[0]['payload']['free'])->toBeFalse();
 });
 
 test('starting a turn already on a Road still costs the first move its action', function () {

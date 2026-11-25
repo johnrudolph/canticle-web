@@ -271,6 +271,12 @@ test('inscribe-7 adds a 🌑 Glyph and trashes itself when the Golem attacks its
 
 test('Buckler uses the Action in the other Hand slot for free when the Golem attacks its holder', function () {
     $state = startedGame(); // wanderer_a shares the Golem's own cell, so the attack actually lands
+    // Divine healing oil's heal doubles on a 📖 space — force a
+    // non-📖 Location at the hub so this test's fixed +3 expectation
+    // stays deterministic regardless of what's randomly dealt there.
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'artists-hovel'];
+    $state = $state->with(['board' => $board]);
     $equipped = [
         ...$state->wanderers['wanderer_a']['equipped'],
         'hand_left' => 'buckler', 'hand_right' => 'divine-healing-oil',
@@ -1096,7 +1102,9 @@ test('Aura eruption heals all Wanderers 15 (including exhausted ones), clears Bu
     $state = startedGame();
     $board = $state->board;
     $neighborKeys = array_map(Board::key(...), Board::occupiedNeighbors([1, 0], $board));
-    $board['1,0'] = [...$board['1,0'], 'infrastructure' => ['monolith_shard', 'monolith_shard']];
+    // Divine aura eruption now also requires the caster's own space to
+    // produce 📖.
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'cathedral', 'infrastructure' => ['monolith_shard', 'monolith_shard']];
     foreach (array_slice($neighborKeys, 0, 5) as $key) {
         $board[$key] = [...$board[$key], 'infrastructure' => ['monolith_shard']];
     }

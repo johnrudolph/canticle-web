@@ -42,6 +42,12 @@ test('Divine robes is rejected outright off a 📖 space', function () {
 
 test('Divine solidarity heals the caster and every Ally sharing their space by 4', function () {
     $state = startedGame();
+    // Divine solidarity's heal doubles on a 📖 space — force a non-📖
+    // Location at the hub so this test's fixed +4 expectation stays
+    // deterministic regardless of what's randomly dealt there.
+    $board = $state->board;
+    $board['1,0'] = [...$board['1,0'], 'location_key' => 'artists-hovel'];
+    $state = $state->with(['board' => $board]);
     $equipped = [...$state->wanderers['wanderer_a']['equipped'], 'mind' => 'divine-solidarity'];
     $wanderers = $state->wanderersWith('wanderer_a', ['equipped' => $equipped, 'hp' => 10]);
     $wanderers = [...$wanderers, 'wanderer_b' => [...$wanderers['wanderer_b'], 'hp' => 10]];
