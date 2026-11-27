@@ -1411,6 +1411,7 @@ final class GameEngine
             'alms-for-the-poor' => [...self::relicHealBelowThreshold($state, 6), false],
             'burial-robes' => [...self::relicHealSharedCell($state, $actorRole, 15), false],
             'divine-healing-oil' => [...self::relicDivineHealingOil($state, $actorRole, $move), false],
+            'hands-of-pity' => [...self::relicHandsOfPity($state, $actorRole, $move), false],
             'golem-disguise' => [...self::relicDiscardGolemTopCard($state), false],
             'golem-whistle' => [...self::relicSummonGolem($state, $actorRole), false],
             'quantum-robes' => [...self::relicSwapWithAlly($state, $actorRole, $move), false],
@@ -1423,6 +1424,8 @@ final class GameEngine
             'blinding-explosion' => self::relicBlindingExplosion($state, $actorRole),
             'soothing-lullaby' => self::relicSoothingLullaby($state, $actorRole),
             'golem-prod' => [...self::relicGolemProd($state, $actorRole, $move), false],
+            'degenerate-jig' => [...self::relicDegenerateJig($state, $actorRole, $move), false],
+            'timeless-waltz' => [...self::relicTimelessWaltz($state, $actorRole, $move), false],
             'golem-intuition' => [...self::relicGolemIntuition($state, $actorRole), false],
             'golem-anthropology' => [...self::relicSearchN($state, $actorRole, self::golemSharesCellWith($state, $actorRole) ? 3 : 1), false],
             'pointed-finger' => self::relicPointedFinger($state, $actorRole),
@@ -2330,6 +2333,22 @@ final class GameEngine
     }
 
     /**
+     * Hands of pity: "🌿X yourself or an Ally, where X = (number of
+     * Shame tokens they have + number of Burn tokens they have)."
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicHandsOfPity(GameState $state, string $actorRole, array $move): array
+    {
+        $targetRole = self::resolveAllyTarget($state, $actorRole, $move) ?? $actorRole;
+        $target = $state->wanderers[$targetRole];
+        $amount = $target['shame'] + count($target['burned_slots']);
+
+        return self::relicHealSelfOrAlly($state, $actorRole, $move, $amount);
+    }
+
+    /**
      * Last rites: "🌿 an Ally on your space to their maximum Health,
      * then trash this. If you healed 10+ Health, gain 📜." The
      * Prophecy clause was missing entirely — confirmed in prod: used
@@ -2718,6 +2737,134 @@ final class GameEngine
 
         [$state, $e] = self::moveDarkShacklesWanderers($state, $golemCell, $destination);
         $events = [...$events, ...$e];
+
+        return [$state, $events];
+    }
+
+    /**
+     * Degenerate jig: "Each Wanderer with a 🥁/🪈/🪕 Relic may
+     * immediately take an extra action in any order they choose. If
+     * they do, they gain a Shame Token." $move['roles'] lists who's
+     * opting in — anyone listed who isn't actually equipped with an
+     * instrument is silently skipped rather than failing the move,
+     * same "skip, don't reject" convention as Laborer's Jacket.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicDegenerateJig(GameState $state, string $actorRole, array $move): array
+    {
+        $instruments = ['lute', 'pipe', 'tabor-drum'];
+        $opted = $move['roles'] ?? [];
+        $events = [];
+
+        if (! is_array($opted)) {
+            return [$state, []];
+        }
+
+        foreach (self::activeWanderers($state) as $role => $cell) {
+            if (! in_array($role, $opted, true)) {
+                continue;
+            }
+
+            if (count(array_intersect($instruments, $state->wanderers[$role]['equipped'])) === 0) {
+                continue;
+            }
+
+            $wanderer = $state->wanderers[$role];
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['actions_remaining' => $wanderer['actions_remaining'] + 1])]);
+            $events[] = ['type' => 'wanderer_action_granted', 'role_key' => $role, 'payload' => ['amount' => 1]];
+
+            [$state, $e] = self::applyShame($state, $role);
+            $events = [...$events, ...$e];
+        }
+
+        return [$state, $events];
+    }
+
+    /**
+     * Timeless waltz: "Each Wanderer with 🥁/🪈/🪕 equipped who is on a
+     * space that produces ⏳ may move to any space. If the Golem is on
+     * a space that produces ⏳, you may move it to any space."
+     * $move['destinations'] maps role => destination cell for the
+     * Wanderer part (same shape as Laborer's Jacket); $move['golem_cell']
+     * is the optional Golem destination. Ineligible Wanderers, invalid
+     * cells, and an ineligible Golem are all silently skipped.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function relicTimelessWaltz(GameState $state, string $actorRole, array $move): array
+    {
+        $instruments = ['lute', 'pipe', 'tabor-drum'];
+        $destinations = $move['destinations'] ?? [];
+        $events = [];
+
+        if (is_array($destinations)) {
+            foreach (self::activeWanderers($state) as $role => $cell) {
+                if (! array_key_exists($role, $destinations)) {
+                    continue;
+                }
+
+                if (count(array_intersect($instruments, $state->wanderers[$role]['equipped'])) === 0) {
+                    continue;
+                }
+
+                $location = LocationCatalog::find($state->board[Board::key($cell)]['location_key']);
+
+                if ($location?->producesEmoji !== '⏳') {
+                    continue;
+                }
+
+                $toCell = $destinations[$role];
+
+                if (! is_array($toCell) || count($toCell) !== 2) {
+                    continue;
+                }
+
+                $toCell = [(int) $toCell[0], (int) $toCell[1]];
+                $toKey = Board::key($toCell);
+
+                if (! array_key_exists($toKey, $state->board) || self::entryBlocked($state, $role, $toCell)) {
+                    continue;
+                }
+
+                $state = $state->with(['wanderers' => $state->wanderersWith($role, ['cell' => $toCell])]);
+                $events[] = ['type' => 'wanderer_moved', 'role_key' => $role, 'payload' => ['to' => $toCell, 'free' => true]];
+
+                [$state, $e] = self::moveDarkShacklesGolem($state, $role, $cell, $toCell);
+                $events = [...$events, ...$e];
+
+                if (self::hasMonolithShardFor($state, $role, $toCell) && in_array('rejuvenation-gown', $state->wanderers[$role]['equipped'], true)) {
+                    $hp = min(self::maxHpFor($state, $role), $state->wanderers[$role]['hp'] + 2);
+                    $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $hp])]);
+                    $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $hp]];
+                }
+
+                [$state, $tiesEvents] = self::applyTiesThatBindOnMove($state, $role, $toCell);
+                $events = [...$events, ...$tiesEvents];
+            }
+        }
+
+        $golemCell = $state->golem['cell'];
+        $golemDestination = $move['golem_cell'] ?? null;
+
+        if ($golemCell !== null && is_array($golemDestination) && count($golemDestination) === 2) {
+            $golemLocation = LocationCatalog::find($state->board[Board::key($golemCell)]['location_key']);
+
+            if ($golemLocation?->producesEmoji === '⏳') {
+                $golemDestination = [(int) $golemDestination[0], (int) $golemDestination[1]];
+                $destKey = Board::key($golemDestination);
+
+                if (array_key_exists($destKey, $state->board) && ! in_array($destKey, $state->wallKeys(), true)) {
+                    $state = $state->with(['golem' => $state->golemWith(['cell' => $golemDestination])]);
+                    $events[] = ['type' => 'golem_moved', 'role_key' => $actorRole, 'payload' => ['to' => $golemDestination]];
+
+                    [$state, $e] = self::moveDarkShacklesWanderers($state, $golemCell, $golemDestination);
+                    $events = [...$events, ...$e];
+                }
+            }
+        }
 
         return [$state, $events];
     }

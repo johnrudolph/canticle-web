@@ -1007,6 +1007,239 @@ export default function GameShow({ game }: { game: GameSummary }) {
                 return;
             }
 
+            case 'rod': {
+                setRelicPrompt({
+                    title: 'Rod',
+                    description: "Discard which active Glyph from the Golem's mat?",
+                    candidates: state.golem.glyphs.map((key, i) => ({
+                        key: `${key}:${i}`,
+                        label: game.glyph_catalog[key]?.name ?? key,
+                    })),
+                    onConfirm: (keys) => {
+                        setRelicPrompt(null);
+                        const chosen = keys[0]?.split(':')[0];
+                        if (!chosen) return;
+                        submitMove(role, {
+                            type: 'use_relic',
+                            relic_key: relicKey,
+                            glyph_key: chosen,
+                        });
+                    },
+                });
+                return;
+            }
+
+            case 'shear': {
+                setRelicPrompt({
+                    title: 'Shear',
+                    description:
+                        'Trash any number of the face-up prepared Golem cards.',
+                    multiple: true,
+                    confirmLabel: 'Trash',
+                    candidates: state.golem.revealed.map(({ key }, i) => ({
+                        key: `${key}:${i}`,
+                        label: game.golem_card_catalog[key]?.name ?? key,
+                    })),
+                    onConfirm: (keys) => {
+                        setRelicPrompt(null);
+                        submitMove(role, {
+                            type: 'use_relic',
+                            relic_key: relicKey,
+                            card_keys: [
+                                ...new Set(keys.map((k) => k.split(':')[0])),
+                            ],
+                        });
+                    },
+                });
+                return;
+            }
+
+            case 'degenerate-jig': {
+                const instruments = ['lute', 'pipe', 'tabor-drum'];
+                const eligible = Object.entries(state.wanderers)
+                    .filter(
+                        ([, w]) =>
+                            w.cell !== null &&
+                            w.hp > 0 &&
+                            Object.values(w.equipped).some(
+                                (k) => !!k && instruments.includes(k),
+                            ),
+                    )
+                    .map(([r]) => r);
+                setRelicPrompt({
+                    title: 'Degenerate jig',
+                    description:
+                        'Who takes an extra action (and gains a Shame token)?',
+                    multiple: true,
+                    confirmLabel: 'Confirm',
+                    candidates: eligible.map((r) => ({
+                        key: r,
+                        label: wandererLabelFor(r),
+                    })),
+                    onConfirm: (keys) => {
+                        setRelicPrompt(null);
+                        submitMove(role, {
+                            type: 'use_relic',
+                            relic_key: relicKey,
+                            roles: keys,
+                        });
+                    },
+                });
+                return;
+            }
+
+            case 'timeless-waltz': {
+                const instruments = ['lute', 'pipe', 'tabor-drum'];
+                const eligible = Object.entries(state.wanderers)
+                    .filter(([, w]) => {
+                        if (!w.cell || w.hp <= 0) return false;
+                        if (
+                            !Object.values(w.equipped).some(
+                                (k) => !!k && instruments.includes(k),
+                            )
+                        ) {
+                            return false;
+                        }
+                        const loc =
+                            locationCatalog[
+                                state.board[cellKey(w.cell)]?.location_key
+                            ];
+                        return loc?.produces_emoji === '⏳';
+                    })
+                    .map(([r]) => r);
+
+                const golemLoc = state.golem.cell
+                    ? locationCatalog[
+                          state.board[cellKey(state.golem.cell)]
+                              ?.location_key
+                      ]
+                    : undefined;
+                const golemEligible = golemLoc?.produces_emoji === '⏳';
+
+                const pickGolemThenSubmit = (
+                    destinations: Record<string, Cell>,
+                ) => {
+                    if (!golemEligible) {
+                        submitMove(role, {
+                            type: 'use_relic',
+                            relic_key: relicKey,
+                            destinations,
+                        });
+                        return;
+                    }
+                    setRelicPrompt({
+                        title: 'Timeless waltz',
+                        description: "Move the Golem too?",
+                        candidates: [
+                            { key: 'move', label: 'Move the Golem' },
+                            { key: 'skip', label: "Don't move the Golem" },
+                        ],
+                        onConfirm: (keys) => {
+                            setRelicPrompt(null);
+                            if (keys[0] === 'move') {
+                                setBoardPick({
+                                    description:
+                                        'Timeless waltz: move the Golem to which space?',
+                                    eligible: new Set(
+                                        Object.keys(state.board),
+                                    ),
+                                    onPick: (cell) => {
+                                        setBoardPick(null);
+                                        submitMove(role, {
+                                            type: 'use_relic',
+                                            relic_key: relicKey,
+                                            destinations,
+                                            golem_cell: cell,
+                                        });
+                                    },
+                                });
+                            } else {
+                                submitMove(role, {
+                                    type: 'use_relic',
+                                    relic_key: relicKey,
+                                    destinations,
+                                });
+                            }
+                        },
+                    });
+                };
+
+                const pickWandererDestinations = (
+                    remaining: string[],
+                    destinations: Record<string, Cell>,
+                ) => {
+                    if (remaining.length === 0) {
+                        pickGolemThenSubmit(destinations);
+                        return;
+                    }
+                    const [next, ...rest] = remaining;
+                    setBoardPick({
+                        description: `Timeless waltz: move ${wandererLabelFor(next)} to which space?`,
+                        eligible: new Set(Object.keys(state.board)),
+                        onPick: (cell) => {
+                            setBoardPick(null);
+                            pickWandererDestinations(rest, {
+                                ...destinations,
+                                [next]: cell,
+                            });
+                        },
+                    });
+                };
+
+                if (eligible.length === 0) {
+                    pickGolemThenSubmit({});
+                    return;
+                }
+
+                setRelicPrompt({
+                    title: 'Timeless waltz',
+                    description:
+                        'Who moves (each may go to any space)?',
+                    multiple: true,
+                    confirmLabel: 'Confirm',
+                    candidates: eligible.map((r) => ({
+                        key: r,
+                        label: wandererLabelFor(r),
+                    })),
+                    onConfirm: (keys) => {
+                        setRelicPrompt(null);
+                        pickWandererDestinations(keys, {});
+                    },
+                });
+                return;
+            }
+
+            case 'golem-intuition': {
+                submitMove(role, {
+                    type: 'use_relic',
+                    relic_key: relicKey,
+                }).then((response) => {
+                    if (!response) return;
+                    const revealed = [...response.events]
+                        .reverse()
+                        .find((e) => e.type === 'golem_draw_pile_revealed');
+                    const cardKeys = revealed?.payload.card_keys as
+                        | string[]
+                        | undefined;
+                    if (cardKeys && cardKeys.length > 0) {
+                        setRelicPrompt({
+                            title: 'Golem intuition',
+                            description:
+                                "Top of the Golem's draw pile, left to right.",
+                            multiple: true,
+                            confirmLabel: 'Close',
+                            candidates: cardKeys.map((key, i) => ({
+                                key: `${key}:${i}`,
+                                label:
+                                    game.golem_card_catalog[key]?.name ?? key,
+                            })),
+                            onConfirm: () => setRelicPrompt(null),
+                        });
+                    }
+                });
+                return;
+            }
+
             case 'golem-log': {
                 submitMove(role, {
                     type: 'use_relic',

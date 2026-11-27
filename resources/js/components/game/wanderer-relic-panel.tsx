@@ -75,6 +75,11 @@ const PROMPTED_RELICS = new Set([
     'golem-log',
     'merchants-gloves',
     'golem-prod',
+    'rod',
+    'shear',
+    'golem-intuition',
+    'degenerate-jig',
+    'timeless-waltz',
 ]);
 
 /**
@@ -96,6 +101,7 @@ const ALLY_TARGETABLE_RELICS = new Set([
     'last-rites',
     'emperors-robes',
     'hands-of-forgiveness',
+    'hands-of-pity',
 ]);
 
 /**
