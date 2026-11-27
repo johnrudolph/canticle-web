@@ -8,6 +8,17 @@ import {
 } from '@/components/ui/dialog';
 import type { LocationCatalogEntry } from '@/types/game';
 
+/** Branch name (e.g. "Art") -> the emoji whichever Location produces it uses. */
+function branchEmoji(
+    branch: string,
+    locationCatalog: Record<string, LocationCatalogEntry>,
+): string | null {
+    const match = Object.values(locationCatalog).find(
+        (l) => l.produces === branch,
+    );
+    return match?.produces_emoji ?? null;
+}
+
 /**
  * An insight from the future: "Search the Emperor's draw pile, and
  * place one card into the Emperor's hand." The deck is normally
@@ -62,13 +73,36 @@ export function InsightFromTheFutureDialog({
                                 key={`${key}-${n}`}
                                 variant="outline"
                                 size="sm"
-                                className="h-auto justify-start py-2 text-left"
+                                className="h-auto flex-col items-start justify-start gap-1 py-2 text-left whitespace-normal"
                                 disabled={processing}
                                 onClick={() => onChoose(key)}
                             >
                                 <span>
                                     {loc?.produces_emoji} {loc?.name ?? key}
                                 </span>
+                                {loc && (
+                                    <span className="text-xs text-muted-foreground">
+                                        {loc.costs.length === 0
+                                            ? 'Adjacency: none'
+                                            : `Adjacency: ${loc.costs
+                                                  .map((c) => {
+                                                      const emoji =
+                                                          branchEmoji(
+                                                              c,
+                                                              locationCatalog,
+                                                          );
+                                                      return emoji
+                                                          ? `${emoji} ${c}`
+                                                          : c;
+                                                  })
+                                                  .join(', ')}`}
+                                    </span>
+                                )}
+                                {loc?.back_text && (
+                                    <span className="text-xs text-muted-foreground whitespace-pre-wrap">
+                                        {loc.back_text}
+                                    </span>
+                                )}
                             </Button>
                         );
                     })}
