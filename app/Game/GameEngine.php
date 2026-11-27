@@ -5109,10 +5109,16 @@ final class GameEngine
         }
 
         $golemCellKey = Board::key($golemCell);
+        $anyWandererOnGolem = false;
         foreach (self::activeWanderers($state) as $cell) {
-            if (Board::key($cell) !== $golemCellKey) {
-                return [$state, []];
+            if (Board::key($cell) === $golemCellKey) {
+                $anyWandererOnGolem = true;
+                break;
             }
+        }
+
+        if (! $anyWandererOnGolem) {
+            return [$state, []];
         }
 
         $drawPile = $state->golem['draw_pile'];
@@ -5747,16 +5753,10 @@ final class GameEngine
                 // skips past the slot that would otherwise re-pop it.
                 //
                 // This card is popped and discarded immediately rather than
-                // left in `revealed` for the loop's NEXT iteration to find
-                // naturally — refillGolemRevealed() below appends freshly
-                // drawn cards to the END of `revealed`, so leaving it in
-                // place let a brand new card jump the queue ahead of it on
-                // the next pop, and the doubled card itself sat stranded in
-                // `revealed` instead of ever being discarded (confirmed via
-                // playtest confusion in game 2j3gwq, then reproduced: with
-                // revealed = [pound, double-down] and count = 2, the second
-                // iteration popped a freshly-drawn third card instead of
-                // Pound, and Pound never left `revealed` at all).
+                // left for the loop's NEXT iteration to find naturally,
+                // because the loop only resolves one card per iteration —
+                // "perform the next card twice" needs both resolutions to
+                // happen right here, within this same iteration.
                 $golem = $state->golem;
                 if ($golem['revealed'] !== []) {
                     $nextEntry = array_pop($golem['revealed']);
@@ -5999,7 +5999,12 @@ final class GameEngine
                 $golem['discard_pile'] = [];
             }
 
-            $golem['revealed'][] = array_shift($golem['draw_pile']);
+            // Cards resolve from the END of `revealed` (array_pop at the
+            // top of golemPlayCards), so a freshly drawn card must go to
+            // the FRONT — appending it here instead would cut it in line
+            // ahead of whatever's already queued, which is what let a
+            // leftmost card sit unresolved all game.
+            array_unshift($golem['revealed'], array_shift($golem['draw_pile']));
         }
 
         return $state->with(['golem' => $golem]);
