@@ -284,11 +284,27 @@ test('House of Cryptids returns its 4 tucked cards to the Golem discard pile on 
         ->and(collect($events)->pluck('type'))->toContain('house_of_cryptids_cards_returned');
 });
 
-test('House of Cryptids does nothing if any Wanderer is off the Golem\'s space', function () {
+test('House of Cryptids tucks a Golem card even if only one Wanderer is on the Golem\'s space', function () {
     $state = startedGame();
     $board = $state->board;
     $board['0,0'] = [...$board['0,0'], 'location_key' => 'house-of-cryptids'];
     $state = $state->with(['board' => $board, 'golemSkipped' => true]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['cell' => [2, 0]])]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'end_wanderer_turn']);
+    [$state, $events] = GameEngine::apply($state, 'wanderer_b', ['type' => 'end_wanderer_turn']);
+
+    expect($state->board['0,0']['tucked'])->toHaveCount(1)
+        ->and(collect($events)->pluck('type'))->toContain('golem_card_tucked');
+});
+
+test('House of Cryptids does nothing if no Wanderer is on the Golem\'s space', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['0,0'] = [...$board['0,0'], 'location_key' => 'house-of-cryptids'];
+    $state = $state->with(['board' => $board, 'golemSkipped' => true]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['cell' => [0, 0]])]);
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['cell' => [2, 0]])]);
     [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
 

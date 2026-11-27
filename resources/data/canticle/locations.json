@@ -255,7 +255,7 @@
         "name": "House of Cryptids",
         "Relics": "7 🐾",
         "lore": "Only the most daring warriors can defang and control the Golem",
-        "rule": "Ongoing: If all Wanderers are on the Golem's space when the Wanderer phase ends, tuck the top card of the Golem deck here. When 4 cards are tucked here, return them to the Golem discard pile and gain 📜📜.",
+        "rule": "Ongoing: If at least 1 Wanderer is on the Golem's space when the Wanderer phase ends, tuck the top card of the Golem deck here. When 4 cards are tucked here, return them to the Golem discard pile and gain 📜📜.",
         "cost_1": "Golem",
         "cost_2": "Magic",
         "cost_3": "",
@@ -439,15 +439,15 @@
         "has_shard": "Hide",
         "has_tree": "Hide",
         "has_back_text": "Show",
-        "Relic_names": "Holy water",
+        "Relic_names": "",
         "has_relics": "Hide",
-        "has_specific_relics": "Show",
+        "has_specific_relics": "Hide",
         "produces_anything": "Show",
         "produces_emoji": "📖",
         "has_cost": "Hide",
         "cost_emoji": "",
         "is_starter": "Show",
-        "is_advanced": "Hide"
+        "is_advanced": "Show"
     },
     {
         "key": "exile",
