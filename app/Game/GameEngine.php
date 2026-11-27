@@ -5079,12 +5079,12 @@ final class GameEngine
     }
 
     /**
-     * House of Cryptids: "Ongoing: If all Wanderers are on the Golem's
-     * space when the Wanderer phase ends, tuck a Golem card here. When
-     * 4 cards are tucked here, return them to the Golem discard pile
-     * and gain 📜📜." Checked right as the Wanderer phase actually
-     * ends (the last Wanderer's endWandererTurn, before the Golem
-     * phase resolves). Tucks from the top of the draw pile.
+     * House of Cryptids: "Ongoing: If at least 1 Wanderer is on the
+     * Golem's space when the Wanderer phase ends, tuck a Golem card
+     * here. When 4 cards are tucked here, return them to the Golem
+     * discard pile and gain 📜📜." Checked right as the Wanderer phase
+     * actually ends (the last Wanderer's endWandererTurn, before the
+     * Golem phase resolves). Tucks from the top of the draw pile.
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
