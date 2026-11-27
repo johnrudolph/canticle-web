@@ -55,6 +55,12 @@ final class GameEngine
             throw new InvalidMoveException('A Burn token slot choice is waiting before anything else can happen.');
         }
 
+        // A rush of companionship's "may move" choice: every active
+        // Wanderer answers (move-or-skip) before the heal resolves.
+        if ($state->pendingRushOfCompanionship !== null && ($move['type'] ?? null) !== 'resolve_rush_of_companionship') {
+            throw new InvalidMoveException('A rush of companionship is waiting on everyone to decide whether to move.');
+        }
+
         [$state, $events] = match ($move['type'] ?? null) {
             'choose_starting_cell' => self::chooseStartingCell($state, $actorRole, $move),
             'choose_golem_cell' => self::chooseGolemCell($state, $actorRole, $move),
@@ -87,6 +93,7 @@ final class GameEngine
             'resolve_golem_log' => self::resolveGolemLog($state, $actorRole, $move),
             'resolve_golem_card_choice' => self::resolveGolemCardChoice($state, $actorRole, $move),
             'resolve_status_token_choice' => self::resolveStatusTokenChoice($state, $actorRole, $move),
+            'resolve_rush_of_companionship' => self::resolveRushOfCompanionship($state, $actorRole, $move),
             'end_wanderer_turn' => self::endWandererTurn($state, $actorRole),
             default => throw new InvalidMoveException('Unknown move type.'),
         };
@@ -1875,7 +1882,7 @@ final class GameEngine
             'epiphany' => self::offerEpiphany($state, $actorRole),
             'golem-avarice' => self::relicGolemAvarice($state, $actorRole),
             'magic-explosion' => self::relicMagicExplosion($state, $actorRole),
-            'a-rush-of-companionship' => self::relicRushOfCompanionship($state),
+            'a-rush-of-companionship' => self::offerRushOfCompanionship($state),
             'invigoration' => self::offerInvigoration($state, $actorRole),
             'rift-in-time' => self::offerRiftInTime($state, $actorRole),
             default => [$state, []],
@@ -2179,30 +2186,97 @@ final class GameEngine
     /**
      * A rush of companionship: "All Wanderers may move to spaces with
      * other Wanderers. Then, all Wanderers on or adjacent to spaces
-     * with other Wanderers 🌿5." The "may move" half is an optional,
-     * per-Wanderer choice with no decision UI yet, so this resolves
-     * only the heal, based on wherever everyone already happens to be
-     * — the same kind of simplification as every other "Emperor/
-     * Wanderer chooses" clause without a mid-phase pause system.
+     * with other Wanderers 🌿5." The "may move" half is a real
+     * per-Wanderer choice — can't be decided in the same move that
+     * drew this Event (nobody but the drawer even knows it fired yet),
+     * so it parks on pendingRushOfCompanionship the same way
+     * Invigoration/Rift in time/Epiphany park their own single-
+     * Wanderer choices, except this one awaits every active Wanderer
+     * (not just the drawer) before the heal actually resolves.
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
      */
-    private static function relicRushOfCompanionship(GameState $state): array
+    private static function offerRushOfCompanionship(GameState $state): array
     {
+        $awaiting = array_keys(self::activeWanderers($state));
+
+        if ($awaiting === []) {
+            return [$state, []];
+        }
+
+        $state = $state->with(['pendingRushOfCompanionship' => ['awaiting' => $awaiting]]);
+
+        return [$state, [['type' => 'rush_of_companionship_offered', 'role_key' => null, 'payload' => ['awaiting' => $awaiting]]]];
+    }
+
+    /**
+     * $move['cell'], if given, must be a built, unblocked space
+     * already occupied by another active Wanderer — "move to spaces
+     * with other Wanderers." Omitting it (or giving an invalid one)
+     * just skips that Wanderer's move, same "skip, don't reject"
+     * convention as every other optional per-Wanderer choice. Once
+     * every awaiting Wanderer has answered, resolves the heal based
+     * on final positions.
+     *
+     * @param  array<string, mixed>  $move
+     * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>}
+     */
+    private static function resolveRushOfCompanionship(GameState $state, string $actorRole, array $move): array
+    {
+        $pending = $state->pendingRushOfCompanionship;
+
+        if ($pending === null || ! in_array($actorRole, $pending['awaiting'], true)) {
+            throw new InvalidMoveException('A rush of companionship is not waiting on you.');
+        }
+
+        $events = [];
+        $cell = $state->wanderers[$actorRole]['cell'] ?? null;
+        $destination = $move['cell'] ?? null;
+
+        if ($cell !== null && is_array($destination) && count($destination) === 2) {
+            $destination = [(int) $destination[0], (int) $destination[1]];
+            $destKey = Board::key($destination);
+
+            $occupiedByOther = false;
+            foreach (self::activeWanderers($state) as $role => $otherCell) {
+                if ($role !== $actorRole && Board::key($otherCell) === $destKey) {
+                    $occupiedByOther = true;
+                    break;
+                }
+            }
+
+            if ($occupiedByOther && array_key_exists($destKey, $state->board) && ! self::entryBlocked($state, $actorRole, $destination)) {
+                $state = $state->with(['wanderers' => $state->wanderersWith($actorRole, ['cell' => $destination])]);
+                $events[] = ['type' => 'wanderer_moved', 'role_key' => $actorRole, 'payload' => ['to' => $destination, 'free' => true]];
+
+                [$state, $e] = self::moveDarkShacklesGolem($state, $actorRole, $cell, $destination);
+                $events = [...$events, ...$e];
+            }
+        }
+
+        $awaiting = array_values(array_filter($pending['awaiting'], fn (string $r) => $r !== $actorRole));
+
+        if ($awaiting !== []) {
+            $state = $state->with(['pendingRushOfCompanionship' => ['awaiting' => $awaiting]]);
+
+            return [$state, $events];
+        }
+
+        $state = $state->with(['pendingRushOfCompanionship' => null]);
+
         $cells = self::activeWanderers($state);
         $sharedCellKeys = [];
 
-        foreach ($cells as $role => $cell) {
-            $cellKey = Board::key($cell);
+        foreach ($cells as $role => $wandererCell) {
+            $cellKey = Board::key($wandererCell);
             $sharedCellKeys[$cellKey] = ($sharedCellKeys[$cellKey] ?? 0) + 1;
         }
         $sharedCellKeys = array_keys(array_filter($sharedCellKeys, fn (int $n) => $n >= 2));
 
-        $events = [];
-        foreach ($cells as $role => $cell) {
-            $onShared = in_array(Board::key($cell), $sharedCellKeys, true);
+        foreach ($cells as $role => $wandererCell) {
+            $onShared = in_array(Board::key($wandererCell), $sharedCellKeys, true);
             $adjacentToShared = ! $onShared && array_intersect(
-                array_map(Board::key(...), Board::occupiedNeighbors($cell, $state->board)),
+                array_map(Board::key(...), Board::occupiedNeighbors($wandererCell, $state->board)),
                 $sharedCellKeys
             ) !== [];
 
@@ -2670,7 +2744,7 @@ final class GameEngine
     /**
      * Soothing Lullaby: "If you are in the Golem's space and all 3 🎶
      * Relics [Lute, Pipe, Tabor drum] are equipped by Wanderers in your
-     * space: tap the next 3 un-tapped cards of its draw pile. Then trash
+     * space: tap the next 4 un-tapped cards of its draw pile. Then trash
      * this and gain 📜."
      *
      * @return array{0: GameState, 1: list<array{type: string, role_key: ?string, payload: array<string, mixed>}>, 2: bool}
@@ -2697,7 +2771,7 @@ final class GameEngine
             return [$state, [], false];
         }
 
-        [$state, $events] = self::tapGolemDrawPile($state, 3);
+        [$state, $events] = self::tapGolemDrawPile($state, 4);
 
         $state = $state->with(['prophecy' => $state->prophecy + 1]);
         $events[] = ['type' => 'prophecy_gained', 'role_key' => $actorRole, 'payload' => ['amount' => 1]];
@@ -3577,8 +3651,9 @@ final class GameEngine
 
         $events = [];
         foreach (self::activeWanderers($state) as $role => $cell) {
-            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => 15])]);
-            $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => 15]];
+            $maxHp = self::maxHpFor($state, $role);
+            $state = $state->with(['wanderers' => $state->wanderersWith($role, ['hp' => $maxHp])]);
+            $events[] = ['type' => 'wanderer_healed', 'role_key' => $role, 'payload' => ['hp' => $maxHp]];
         }
 
         $state = $state->with(['prophecy' => $state->prophecy + 1]);
@@ -5779,6 +5854,181 @@ final class GameEngine
             }
         }
 
+        // Music academy: "End of game: if all Wanderers have a 🎶
+        // Relic equipped, gain 📜."
+        $musicAcademyBuilt = false;
+        foreach ($state->board as $entry) {
+            if ($entry['location_key'] === 'music-academy') {
+                $musicAcademyBuilt = true;
+                break;
+            }
+        }
+
+        if ($musicAcademyBuilt) {
+            $instruments = ['lute', 'pipe', 'tabor-drum'];
+            $allHaveInstrument = true;
+            foreach ($state->wanderers as $wanderer) {
+                if (count(array_intersect($instruments, $wanderer['equipped'])) === 0) {
+                    $allHaveInstrument = false;
+                    break;
+                }
+            }
+
+            if ($allHaveInstrument) {
+                $state = $state->with(['prophecy' => $state->prophecy + 1]);
+                $events[] = ['type' => 'prophecy_gained', 'role_key' => null, 'payload' => ['amount' => 1, 'reason' => 'music-academy']];
+            }
+        }
+
+        // Cursed Tomb: "End of game: If all Wanderers are exhausted,
+        // gain 📜📜📜."
+        $cursedTombBuilt = false;
+        foreach ($state->board as $entry) {
+            if ($entry['location_key'] === 'cursed-tomb') {
+                $cursedTombBuilt = true;
+                break;
+            }
+        }
+
+        if ($cursedTombBuilt) {
+            $allExhausted = true;
+            foreach ($state->wanderers as $wanderer) {
+                if ($wanderer['hp'] > 0) {
+                    $allExhausted = false;
+                    break;
+                }
+            }
+
+            if ($allExhausted) {
+                $state = $state->with(['prophecy' => $state->prophecy + 3]);
+                $events[] = ['type' => 'prophecy_gained', 'role_key' => null, 'payload' => ['amount' => 3, 'reason' => 'cursed-tomb']];
+            }
+        }
+
+        // Haunted Clocktower: "End of game: If a Wanderer who was
+        // former Emperor is exhausted, you have created a paradox, and
+        // gain 📜📜."
+        $hauntedClocktowerBuilt = false;
+        foreach ($state->board as $entry) {
+            if ($entry['location_key'] === 'haunted-clocktower') {
+                $hauntedClocktowerBuilt = true;
+                break;
+            }
+        }
+
+        if ($hauntedClocktowerBuilt) {
+            $formerEmperorExhausted = false;
+            foreach ($state->formerEmperorRoles as $formerEmperorRole) {
+                if (($state->wanderers[$formerEmperorRole]['hp'] ?? 1) === 0) {
+                    $formerEmperorExhausted = true;
+                    break;
+                }
+            }
+
+            if ($formerEmperorExhausted) {
+                $state = $state->with(['prophecy' => $state->prophecy + 2]);
+                $events[] = ['type' => 'prophecy_gained', 'role_key' => null, 'payload' => ['amount' => 2, 'reason' => 'haunted-clocktower']];
+            }
+        }
+
+        // Scriptorium: "End of game: If all Shards are on the board,
+        // gain 📜📜." I.e. the fixed Monolith Shard pool is empty.
+        $scriptoriumBuilt = false;
+        foreach ($state->board as $entry) {
+            if ($entry['location_key'] === 'scriptorium') {
+                $scriptoriumBuilt = true;
+                break;
+            }
+        }
+
+        if ($scriptoriumBuilt && ($state->infrastructurePool['monolith_shard'] ?? 0) === 0) {
+            $state = $state->with(['prophecy' => $state->prophecy + 2]);
+            $events[] = ['type' => 'prophecy_gained', 'role_key' => null, 'payload' => ['amount' => 2, 'reason' => 'scriptorium']];
+        }
+
+        // Purification pools: "End of game: If all Wanderers have 0
+        // Shame tokens, and 0 Burn tokens, gain 📜."
+        $purificationPoolsBuilt = false;
+        foreach ($state->board as $entry) {
+            if ($entry['location_key'] === 'purification-pools') {
+                $purificationPoolsBuilt = true;
+                break;
+            }
+        }
+
+        if ($purificationPoolsBuilt) {
+            $allClean = true;
+            foreach ($state->wanderers as $wanderer) {
+                if ($wanderer['shame'] > 0 || $wanderer['burned_slots'] !== []) {
+                    $allClean = false;
+                    break;
+                }
+            }
+
+            if ($allClean) {
+                $state = $state->with(['prophecy' => $state->prophecy + 1]);
+                $events[] = ['type' => 'prophecy_gained', 'role_key' => null, 'payload' => ['amount' => 1, 'reason' => 'purification-pools']];
+            }
+        }
+
+        // Prison: "End of game: If the Golem has 3+ Shame, gain 📜."
+        $prisonBuilt = false;
+        foreach ($state->board as $entry) {
+            if ($entry['location_key'] === 'prison') {
+                $prisonBuilt = true;
+                break;
+            }
+        }
+
+        if ($prisonBuilt && $state->golem['shame'] >= 3) {
+            $state = $state->with(['prophecy' => $state->prophecy + 1]);
+            $events[] = ['type' => 'prophecy_gained', 'role_key' => null, 'payload' => ['amount' => 1, 'reason' => 'prison']];
+        }
+
+        // Golem sanctuary: "Once 5 Relics are tucked here, gain 📜📜."
+        // The tuck itself happens immediately as it occurs (see
+        // relicRemoveStatus's sibling heal-at-sanctuary handling
+        // above); this is the threshold payout, checked once at
+        // end-of-game the same way Bazaar/Cathedral's per-tuck
+        // payouts are.
+        foreach ($state->board as $entry) {
+            if ($entry['location_key'] === 'golem-sanctuary') {
+                if (count($entry['tucked']) >= 5) {
+                    $state = $state->with(['prophecy' => $state->prophecy + 2]);
+                    $events[] = ['type' => 'prophecy_gained', 'role_key' => null, 'payload' => ['amount' => 2, 'reason' => 'golem-sanctuary']];
+                }
+
+                break;
+            }
+        }
+
+        // Exile: "If all Wanderers are on this location at the end of
+        // any round prior to the final round, the game ends
+        // immediately. Gain 📜📜📜." This runs exactly when that
+        // early end actually fired (endRound's exile branch calls
+        // this function only once everyone is confirmed there).
+        foreach ($state->board as $key => $entry) {
+            if ($entry['location_key'] !== 'exile') {
+                continue;
+            }
+
+            $everyoneInExile = self::activeWanderers($state) !== [];
+
+            foreach (self::activeWanderers($state) as $cell) {
+                if (Board::key($cell) !== $key) {
+                    $everyoneInExile = false;
+                    break;
+                }
+            }
+
+            if ($everyoneInExile) {
+                $state = $state->with(['prophecy' => $state->prophecy + 3]);
+                $events[] = ['type' => 'prophecy_gained', 'role_key' => null, 'payload' => ['amount' => 3, 'reason' => 'exile']];
+            }
+
+            break;
+        }
+
         return [$state, $events];
     }
 
@@ -7661,6 +7911,23 @@ final class GameEngine
             if (in_array('merciful', $golemGlyphs, true)) {
                 $damage = max(0, $damage - 1);
                 $modifiers[] = 'Merciful (-1)';
+            }
+
+            // Charmed: "Reduce damage by 1 for each 🎶 Relic equipped
+            // by Wanderers." Counts every instrument equipped across
+            // ALL Wanderers, not just the one being hit — same
+            // whole-board counting convention as Lilted's instrument
+            // count (GameState::golemCardsThisRound).
+            if (in_array('charmed', $golemGlyphs, true)) {
+                $instruments = ['lute', 'pipe', 'tabor-drum'];
+                $charmedCount = 0;
+                foreach ($state->wanderers as $wanderer) {
+                    $charmedCount += count(array_intersect($instruments, array_values($wanderer['equipped'])));
+                }
+                if ($charmedCount > 0) {
+                    $damage = max(0, $damage - $charmedCount);
+                    $modifiers[] = "Charmed (-{$charmedCount})";
+                }
             }
 
             // Enchanted: "-2👊 if the Golem is on a space with a

@@ -182,7 +182,7 @@ test('Soothing Lullaby requires the Golem\'s space and all 3 instruments equippe
 
     $tappedCount = count(array_filter($state->golem['draw_pile'], fn ($c) => $c['tapped']));
 
-    expect($tappedCount)->toBe(3)
+    expect($tappedCount)->toBe(4)
         ->and($state->wanderers['wanderer_a']['equipped']['hand_left'])->toBeNull()
         ->and(collect($events)->pluck('type'))->toContain('relic_trashed')
         ->and($state->prophecy)->toBe(1);

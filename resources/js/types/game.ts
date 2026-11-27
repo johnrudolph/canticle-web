@@ -101,6 +101,9 @@ export interface GameStateDto {
         role: RoleKey;
         token: 'burn_token';
     }[];
+    pending_rush_of_companionship: {
+        awaiting: RoleKey[];
+    } | null;
     location_just_built_cell: [number, number] | null;
     parallel_used_this_round: boolean;
     outcome: 'elite_victory' | 'simple_victory' | 'defeat' | null;

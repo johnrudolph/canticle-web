@@ -1577,6 +1577,11 @@ export default function GameShow({ game }: { game: GameSummary }) {
                 ).map((d) => ({ key: d, label: d }))
               : [];
 
+    const rushOfCompanionshipRole =
+        state.pending_rush_of_companionship?.awaiting.find((role) =>
+            myRoles.includes(role),
+        ) ?? null;
+
     let highlightedCells = new Set<string>();
     let onCellClick: ((cell: Cell) => void) | undefined;
 
@@ -3151,6 +3156,48 @@ export default function GameShow({ game }: { game: GameSummary }) {
                                   direction: key,
                               },
                     );
+                }}
+            />
+
+            <RelicPickerDialog
+                open={!!rushOfCompanionshipRole && !boardPick}
+                title="A rush of companionship"
+                description="You may move to a space with another Wanderer before everyone heals."
+                candidates={[
+                    { key: 'move', label: 'Move to another Wanderer' },
+                    { key: 'skip', label: "Don't move" },
+                ]}
+                relicCatalog={{}}
+                processing={processing}
+                onConfirm={(keys) => {
+                    if (!rushOfCompanionshipRole) return;
+                    if (keys[0] === 'move') {
+                        const occupiedKeys = new Set(
+                            Object.entries(state.wanderers)
+                                .filter(
+                                    ([r, w]) =>
+                                        r !== rushOfCompanionshipRole &&
+                                        w.cell !== null,
+                                )
+                                .map(([, w]) => cellKey(w.cell as Cell)),
+                        );
+                        setBoardPick({
+                            description:
+                                'A rush of companionship: move to which Wanderer\'s space?',
+                            eligible: occupiedKeys,
+                            onPick: (cell) => {
+                                setBoardPick(null);
+                                submitMove(rushOfCompanionshipRole, {
+                                    type: 'resolve_rush_of_companionship',
+                                    cell,
+                                });
+                            },
+                        });
+                    } else {
+                        submitMove(rushOfCompanionshipRole, {
+                            type: 'resolve_rush_of_companionship',
+                        });
+                    }
                 }}
             />
 

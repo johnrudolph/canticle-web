@@ -194,15 +194,31 @@ test('Magic explosion spreads the caster\'s Relics evenly to neighbors and place
         ->and(collect($events)->pluck('type'))->toContain('infrastructure_placed');
 });
 
-test('A rush of companionship heals Wanderers on or adjacent to a shared space by 5', function () {
+test('A rush of companionship offers every active Wanderer a move-or-skip choice before healing', function () {
+    $state = startedGame(); // both Wanderers already share the hub cell
+    $wanderers = $state->wanderersWith('wanderer_a', ['hp' => 5]);
+    $wanderers['wanderer_b']['hp'] = 5;
+    $state = $state->with(['wanderers' => $wanderers]);
+
+    [$state, $events] = resolveEventRelicForTest($state, 'wanderer_a', 'a-rush-of-companionship');
+
+    expect($state->pendingRushOfCompanionship)->toBe(['awaiting' => ['wanderer_a', 'wanderer_b']])
+        ->and(collect($events)->pluck('type'))->toContain('rush_of_companionship_offered')
+        ->and($state->wanderers['wanderer_a']['hp'])->toBe(5);
+});
+
+test('A rush of companionship heals Wanderers on or adjacent to a shared space by 5 once everyone answers', function () {
     $state = startedGame(); // both Wanderers already share the hub cell
     $wanderers = $state->wanderersWith('wanderer_a', ['hp' => 5]);
     $wanderers['wanderer_b']['hp'] = 5;
     $state = $state->with(['wanderers' => $wanderers]);
 
     [$state] = resolveEventRelicForTest($state, 'wanderer_a', 'a-rush-of-companionship');
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_rush_of_companionship']);
+    [$state] = GameEngine::apply($state, 'wanderer_b', ['type' => 'resolve_rush_of_companionship']);
 
-    expect($state->wanderers['wanderer_a']['hp'])->toBe(10)
+    expect($state->pendingRushOfCompanionship)->toBeNull()
+        ->and($state->wanderers['wanderer_a']['hp'])->toBe(10)
         ->and($state->wanderers['wanderer_b']['hp'])->toBe(10);
 });
 
@@ -213,9 +229,33 @@ test('A rush of companionship does not heal a lone Wanderer with no one nearby',
     $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['cell' => [2, 0], 'hp' => 5])]);
 
     [$state] = resolveEventRelicForTest($state, 'wanderer_a', 'a-rush-of-companionship');
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_rush_of_companionship']);
+    [$state] = GameEngine::apply($state, 'wanderer_b', ['type' => 'resolve_rush_of_companionship']);
 
     expect($state->wanderers['wanderer_a']['hp'])->toBe(5)
         ->and($state->wanderers['wanderer_b']['hp'])->toBe(5);
+});
+
+test('A rush of companionship lets a Wanderer move to another Wanderer\'s space before the heal', function () {
+    $state = startedGame();
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['cell' => [0, 0], 'hp' => 5])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['cell' => [2, 0], 'hp' => 5])]);
+
+    [$state] = resolveEventRelicForTest($state, 'wanderer_a', 'a-rush-of-companionship');
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'resolve_rush_of_companionship', 'cell' => [0, 0]]);
+    [$state] = GameEngine::apply($state, 'wanderer_b', ['type' => 'resolve_rush_of_companionship']);
+
+    expect($state->wanderers['wanderer_a']['cell'])->toBe([0, 0])
+        ->and($state->wanderers['wanderer_a']['hp'])->toBe(10)
+        ->and($state->wanderers['wanderer_b']['hp'])->toBe(10);
+});
+
+test('A rush of companionship rejects any other move type while awaiting answers', function () {
+    $state = startedGame();
+    [$state] = resolveEventRelicForTest($state, 'wanderer_a', 'a-rush-of-companionship');
+
+    expect(fn () => GameEngine::apply($state, 'wanderer_a', ['type' => 'rest']))
+        ->toThrow(InvalidMoveException::class);
 });
 
 test('Finding an Event Relic via search resolves it immediately instead of holding it', function () {

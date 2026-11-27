@@ -121,6 +121,27 @@ test('Divine Chant requires the Cathedral, the Golem 2+ away, and all 3 instrume
         ->and($state->prophecy)->toBe(1);
 });
 
+test('Divine Chant heals to each Wanderer\'s own max Health, not a flat 15', function () {
+    $state = startedGame();
+    $board = $state->board;
+    $board['3,0'] = ['location_key' => 'cathedral', 'placed_round' => 2, 'relics' => [], 'infrastructure' => []];
+    $state = $state->with(['board' => $board]);
+    $equipped = [
+        ...$state->wanderers['wanderer_a']['equipped'],
+        'hand_left' => 'lute', 'hand_right' => 'pipe', 'bag' => 'tabor-drum', 'mind' => 'divine-chant',
+    ];
+    $wanderers = $state->wanderersWith('wanderer_a', ['cell' => [3, 0], 'equipped' => $equipped, 'hp' => 5]);
+    $wanderers['wanderer_b']['hp'] = 3;
+    $wanderers['wanderer_b']['equipped']['body'] = 'cabalists-gown';
+    $state = $state->with(['wanderers' => $wanderers]);
+    [$state] = GameEngine::apply($state, 'emperor', ['type' => 'end_emperor_phase', 'discard' => []]);
+
+    [$state] = GameEngine::apply($state, 'wanderer_a', ['type' => 'use_relic', 'relic_key' => 'divine-chant']);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(15)
+        ->and($state->wanderers['wanderer_b']['hp'])->toBe(5);
+});
+
 test('Divine Chant works on any space that produces 📖, not just literally the Cathedral', function () {
     $state = startedGame();
     $board = $state->board;

@@ -41,6 +41,18 @@ test('Merciful subtracts 1 from every Golem attack, floored at 0', function () {
     expect($state->wanderers['wanderer_a']['hp'])->toBe(10); // 1 - 1 = 0 damage
 });
 
+test('Charmed subtracts 1 Golem attack damage per 🎶 Relic equipped by any Wanderer', function () {
+    $state = startedGame();
+    $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['charmed']])]);
+    $equipped = [...$state->wanderers['wanderer_b']['equipped'], 'hand_left' => 'lute', 'hand_right' => 'pipe'];
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_b', ['equipped' => $equipped])]);
+    $state = $state->with(['wanderers' => $state->wanderersWith('wanderer_a', ['hp' => 10])]);
+
+    [$state] = (applyDamageForTest('wanderer_a', 5, true))($state);
+
+    expect($state->wanderers['wanderer_a']['hp'])->toBe(7); // 10 - (5-2)
+});
+
 test('Legalistic adds +1 Golem attack damage per Shame the target has', function () {
     $state = startedGame();
     $state = $state->with(['golem' => $state->golemWith(['glyphs' => ['legalistic']])]);
